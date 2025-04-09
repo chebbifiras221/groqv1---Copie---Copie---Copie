@@ -13,6 +13,7 @@ import { Button, LoadingSVG } from "@/components/ui/button";
 import { MicrophoneButton } from "@/components/microphone-button";
 import { useMultibandTrackVolume } from "@/hooks/use-track-volume";
 import { Typewriter } from "./typewriter";
+import { TextInput } from "./text-input";
 
 export interface PlaygroundProps {
   onConnect: (connect: boolean) => void;
@@ -143,12 +144,19 @@ export function Playground({ onConnect }: PlaygroundProps) {
     return visualizerContent;
   }, [localMultibandVolume, roomState, onConnect]);
 
+  const isConnected = roomState === ConnectionState.Connected;
+
   return (
     <>
       <div className="relative flex-col grow basis-1/2 gap-4 h-full w-full">
         <Typewriter typingSpeed={25} />
-        <div className="absolute left-0 bottom-0 w-full bg-accent-bg border-t border-white/20 pt-2">
-          {audioTileContent}
+        <div className="absolute left-0 bottom-0 w-full bg-accent-bg border-t border-white/20">
+          <div className="pt-2">
+            {audioTileContent}
+          </div>
+          <div className="mt-2 border-t border-white/20">
+            <TextInput isConnected={isConnected} />
+          </div>
         </div>
       </div>
     </>

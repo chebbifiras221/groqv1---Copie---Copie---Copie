@@ -16,30 +16,47 @@ logger = logging.getLogger("groq-whisper-stt-transcriber")
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions"
 
+# Track conversation history
+conversation_history = []
+
 
 def generate_ai_response(text):
     """Generate an AI response using Groq API"""
+    global conversation_history
+
     if not GROQ_API_KEY:
         logger.error("GROQ_API_KEY is not set in the environment")
         return "Error: API key not configured. Please set GROQ_API_KEY in .env.local file."
-    
+
+    # Add user message to conversation history
+    conversation_history.append({"role": "user", "content": text})
+
+    # Keep only the last 10 messages to avoid token limits
+    if len(conversation_history) > 10:
+        conversation_history = conversation_history[-10:]
+
     headers = {
         "Authorization": f"Bearer {GROQ_API_KEY}",
         "Content-Type": "application/json"
     }
-    
+
     data = {
         "model": "llama3-8b-8192",
-        "messages": [{"role": "user", "content": text}],
+        "messages": conversation_history,
         "temperature": 0.7,
         "max_tokens": 1024
     }
-    
+
     try:
         response = requests.post(GROQ_API_URL, headers=headers, json=data)
         response.raise_for_status()
         result = response.json()
-        return result["choices"][0]["message"]["content"]
+        ai_response = result["choices"][0]["message"]["content"]
+
+        # Add AI response to conversation history
+        conversation_history.append({"role": "assistant", "content": ai_response})
+
+        return ai_response
     except Exception as e:
         logger.error(f"Error calling Groq API: {e}")
         return f"Error generating response: {str(e)}"
@@ -55,11 +72,11 @@ async def _forward_transcription(
         elif ev.type == stt.SpeechEventType.FINAL_TRANSCRIPT:
             transcribed_text = ev.alternatives[0].text
             logger.debug(f" ~> {transcribed_text}")
-            
+
             # Generate AI response
             ai_response = generate_ai_response(transcribed_text)
             logger.info(f"AI Response: {ai_response}")
-            
+
             # Send AI response to all participants
             data_message = {
                 "type": "ai_response",
@@ -67,7 +84,7 @@ async def _forward_transcription(
             }
             # The publish_data method only takes one argument (the data)
             await room.local_participant.publish_data(json.dumps(data_message).encode())
-            
+
         elif ev.type == stt.SpeechEventType.RECOGNITION_USAGE:
             logger.debug(f"metrics: {ev.recognition_usage}")
 
@@ -76,7 +93,7 @@ async def _forward_transcription(
 
 async def entrypoint(ctx: JobContext):
     logger.info(f"starting transcriber (speech to text) example, room: {ctx.room.name}")
-    # uses "whisper-large-v3-turbo" model by default 
+    # uses "whisper-large-v3-turbo" model by default
     stt_impl = plugin.STT.with_groq()
 
     if not stt_impl.capabilities.streaming:
@@ -87,6 +104,34 @@ async def entrypoint(ctx: JobContext):
                 min_silence_duration=0.2,
             ),
         )
+
+    # Handler for text input messages
+    async def process_text_input(data: rtc.DataPacket):
+        try:
+            message_str = data.data.decode('utf-8')
+            message = json.loads(message_str)
+
+            if message.get('type') == 'text_input':
+                text_input = message.get('text')
+                logger.info(f"Received text input: {text_input}")
+
+                # Generate AI response
+                ai_response = generate_ai_response(text_input)
+                logger.info(f"AI Response to text input: {ai_response}")
+
+                # Send AI response to all participants
+                response_message = {
+                    "type": "ai_response",
+                    "text": ai_response
+                }
+                await ctx.room.local_participant.publish_data(json.dumps(response_message).encode())
+        except Exception as e:
+            logger.error(f"Error handling data message: {e}")
+
+    # Non-async wrapper for the data received event
+    def handle_data_received(data: rtc.DataPacket):
+        # Create a task to process the data asynchronously
+        asyncio.create_task(process_text_input(data))
 
     async def transcribe_track(participant: rtc.RemoteParticipant, track: rtc.Track):
         audio_stream = rtc.AudioStream(track)
@@ -99,6 +144,9 @@ async def entrypoint(ctx: JobContext):
 
         async for ev in audio_stream:
             stt_stream.push_frame(ev.frame)
+
+    # Register data received handler with a synchronous function
+    ctx.room.on("data_received", handle_data_received)
 
     @ctx.room.on("track_subscribed")
     def on_track_subscribed(
