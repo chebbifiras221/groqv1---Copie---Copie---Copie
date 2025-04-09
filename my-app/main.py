@@ -93,6 +93,12 @@ async def _forward_transcription(
 
 async def entrypoint(ctx: JobContext):
     logger.info(f"starting transcriber (speech to text) example, room: {ctx.room.name}")
+
+    # Clear conversation history on startup
+    global conversation_history
+    conversation_history = []
+    logger.info("Conversation history cleared on startup")
+
     # uses "whisper-large-v3-turbo" model by default
     stt_impl = plugin.STT.with_groq()
 
@@ -114,6 +120,13 @@ async def entrypoint(ctx: JobContext):
             if message.get('type') == 'text_input':
                 text_input = message.get('text')
                 logger.info(f"Received text input: {text_input}")
+
+                # Echo back the user's message to ensure it appears in the UI
+                echo_message = {
+                    "type": "user_message_echo",
+                    "text": text_input
+                }
+                await ctx.room.local_participant.publish_data(json.dumps(echo_message).encode())
 
                 # Generate AI response
                 ai_response = generate_ai_response(text_input)

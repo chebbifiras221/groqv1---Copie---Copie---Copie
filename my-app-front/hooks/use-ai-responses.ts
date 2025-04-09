@@ -39,35 +39,40 @@ export function useAIResponses() {
       try {
         const dataString = new TextDecoder().decode(payload);
         const data = JSON.parse(dataString);
-        
+
         if (data.type === "ai_response") {
           const newResponse = {
             id: Date.now().toString(),
             text: data.text,
             receivedTime: Date.now(),
           };
-          
+
           setResponses((prev) => [...prev, newResponse]);
-          
+
           // Speak the response using TTS
           if (speechSynthesis && SpeechSynthesisUtterance) {
             // Cancel any ongoing speech
             speechSynthesis.cancel();
-            
+
             // Create and configure a new utterance
             const utterance = new SpeechSynthesisUtterance(data.text);
             utterance.rate = 1.0;
             utterance.pitch = 1.0;
             utterance.volume = 1.0;
-            
+
             // Set event listeners
             utterance.onstart = () => setIsTtsSpeaking(true);
             utterance.onend = () => setIsTtsSpeaking(false);
             utterance.onerror = () => setIsTtsSpeaking(false);
-            
+
             // Start speaking
             speechSynthesis.speak(utterance);
           }
+        }
+        // Handle user message echo
+        else if (data.type === "user_message_echo") {
+          console.log("Received user message echo:", data.text);
+          // We'll handle this in the useConversation hook
         }
       } catch (e) {
         console.error("Error parsing data message:", e);
@@ -93,31 +98,31 @@ export function useAIResponses() {
     if (speechSynthesis && SpeechSynthesisUtterance && responses.length > 0) {
       // Cancel any ongoing speech
       speechSynthesis.cancel();
-      
+
       // Get the most recent response
       const lastResponse = responses[responses.length - 1];
-      
+
       // Create and configure a new utterance
       const utterance = new SpeechSynthesisUtterance(lastResponse.text);
       utterance.rate = 1.0;
       utterance.pitch = 1.0;
       utterance.volume = 1.0;
-      
+
       // Set event listeners
       utterance.onstart = () => setIsTtsSpeaking(true);
       utterance.onend = () => setIsTtsSpeaking(false);
       utterance.onerror = () => setIsTtsSpeaking(false);
-      
+
       // Start speaking
       speechSynthesis.speak(utterance);
     }
   }, [responses]);
 
-  return { 
-    state, 
-    responses, 
+  return {
+    state,
+    responses,
     isTtsSpeaking,
     stopSpeaking,
-    speakLastResponse 
+    speakLastResponse
   };
 }
