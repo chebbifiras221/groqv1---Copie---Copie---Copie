@@ -8,18 +8,13 @@ import { Playground } from "@/components/playground";
 import { useConnection } from "@/hooks/use-connection";
 
 export function RoomComponent() {
-  const { shouldConnect, wsUrl, token, connect, disconnect } = useConnection();
+  const { shouldConnect, wsUrl, token, disconnect } = useConnection();
 
-  const handleConnect = useCallback(
-    async (c: boolean) => {
-      if (c) {
-        connect();
-      } else {
-        disconnect();
-      }
-    },
-    [connect, disconnect],
-  );
+  const handleDisconnect = () => {
+    if (confirm('Are you sure you want to disconnect?')) {
+      disconnect();
+    }
+  };
 
   const room = useMemo(() => {
     const r = new Room();
@@ -49,16 +44,26 @@ export function RoomComponent() {
   }, []);
 
   return (
-    <LiveKitRoom
-      className="overflow-y-hidden w-full"
-      serverUrl={wsUrl}
-      token={token}
-      room={room}
-      connect={shouldConnect}
-      onError={console.error}
-    >
-      <Playground onConnect={handleConnect} />
-      <RoomAudioRenderer />
-    </LiveKitRoom>
+    <>
+      <div className="absolute top-4 right-4 z-10">
+        <button
+          onClick={handleDisconnect}
+          className="text-white/50 hover:text-white transition-colors flex items-center gap-1 text-sm"
+        >
+          <span>Disconnect</span>
+        </button>
+      </div>
+      <LiveKitRoom
+        className="overflow-y-hidden w-full"
+        serverUrl={wsUrl}
+        token={token}
+        room={room}
+        connect={shouldConnect}
+        onError={console.error}
+      >
+        <Playground />
+        <RoomAudioRenderer />
+      </LiveKitRoom>
+    </>
   );
 }

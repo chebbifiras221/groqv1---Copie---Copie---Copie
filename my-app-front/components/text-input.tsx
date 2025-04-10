@@ -2,8 +2,9 @@
 
 import { useState, KeyboardEvent } from "react";
 import { Button } from "@/components/ui/button";
-import { Send, Trash2 } from "lucide-react";
+import { Send, Trash2, Plus } from "lucide-react";
 import { useConversation } from "@/hooks/use-conversation";
+import { useMaybeRoomContext } from "@livekit/components-react";
 
 export interface TextInputProps {
   isConnected: boolean;
@@ -13,6 +14,7 @@ export function TextInput({ isConnected }: TextInputProps) {
   const [inputText, setInputText] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const { addUserMessage, clearMessages } = useConversation();
+  const room = useMaybeRoomContext();
 
   const handleSubmit = async () => {
     if (!inputText.trim() || !isConnected) return;
@@ -46,9 +48,35 @@ export function TextInput({ isConnected }: TextInputProps) {
     }
   };
 
+  const createNewConversation = async () => {
+    if (!room || !isConnected) return;
+
+    try {
+      const message = {
+        type: "new_conversation",
+        title: `Conversation-${new Date().toISOString()}`
+      };
+      await room.localParticipant.publishData(
+        new TextEncoder().encode(JSON.stringify(message))
+      );
+    } catch (error) {
+      console.error("Error creating new conversation:", error);
+    }
+  };
+
   return (
     <div className="flex flex-col w-full px-2 py-2 gap-2">
-      <div className="flex justify-end">
+      <div className="flex justify-between">
+        <Button
+          onClick={createNewConversation}
+          variant="ghost"
+          size="sm"
+          disabled={!isConnected}
+          className="text-white/50 hover:text-white hover:bg-white/10 flex items-center gap-1"
+        >
+          <Plus size={14} />
+          <span>New Conversation</span>
+        </Button>
         <Button
           onClick={handleClearMessages}
           variant="ghost"
