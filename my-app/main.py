@@ -117,6 +117,14 @@ async def _forward_transcription(
             # The publish_data method only takes one argument (the data)
             await room.local_participant.publish_data(json.dumps(data_message).encode())
 
+            # Also send updated conversation data to ensure UI is in sync
+            conversation = database.get_conversation(current_conversation_id)
+            conversation_data = {
+                "type": "conversation_data",
+                "conversation": conversation
+            }
+            await room.local_participant.publish_data(json.dumps(conversation_data).encode())
+
         elif ev.type == stt.SpeechEventType.RECOGNITION_USAGE:
             logger.debug(f"metrics: {ev.recognition_usage}")
 
@@ -211,10 +219,16 @@ async def entrypoint(ctx: JobContext):
                                 current_conversation_id = database.create_conversation(f"New Conversation")
                                 logger.info(f"Created new conversation with ID: {current_conversation_id}")
 
+                        # If we deleted the current conversation, we need to send the new conversation ID
+                        # Otherwise, we don't need to send a new conversation ID
+                        new_conversation_id = None
+                        if current_conversation_id == conversation_id:
+                            new_conversation_id = current_conversation_id
+
                         response_message = {
                             "type": "conversation_deleted",
                             "conversation_id": conversation_id,
-                            "new_conversation_id": current_conversation_id if current_conversation_id != conversation_id else None
+                            "new_conversation_id": new_conversation_id
                         }
                         await ctx.room.local_participant.publish_data(json.dumps(response_message).encode())
             elif message.get('type') == 'list_conversations':
@@ -276,6 +290,14 @@ async def entrypoint(ctx: JobContext):
                     "conversation_id": current_conversation_id
                 }
                 await ctx.room.local_participant.publish_data(json.dumps(response_message).encode())
+
+                # Also send updated conversation data to ensure UI is in sync
+                conversation = database.get_conversation(current_conversation_id)
+                conversation_data = {
+                    "type": "conversation_data",
+                    "conversation": conversation
+                }
+                await ctx.room.local_participant.publish_data(json.dumps(conversation_data).encode())
         except Exception as e:
             logger.error(f"Error handling data message: {e}")
 

@@ -92,7 +92,7 @@ def get_conversation(conversation_id: str) -> Optional[Dict[str, Any]]:
     conn.close()
     return result
 
-def list_conversations(limit: int = 10, offset: int = 0) -> List[Dict[str, Any]]:
+def list_conversations(limit: int = 10, offset: int = 0, include_messages: bool = True) -> List[Dict[str, Any]]:
     """List conversations with pagination"""
     conn = get_db_connection()
     cursor = conn.cursor()
@@ -104,14 +104,36 @@ def list_conversations(limit: int = 10, offset: int = 0) -> List[Dict[str, Any]]
 
     conversations = [dict(row) for row in cursor.fetchall()]
 
-    # Get message counts for each conversation
+    # Get message counts and last message for each conversation
     for conv in conversations:
+        # Get message count
         cursor.execute(
             "SELECT COUNT(*) as count FROM messages WHERE conversation_id = ?",
             (conv["id"],)
         )
         count = cursor.fetchone()["count"]
         conv["message_count"] = count
+
+        # Get last message
+        cursor.execute(
+            "SELECT type, content FROM messages WHERE conversation_id = ? ORDER BY timestamp DESC LIMIT 1",
+            (conv["id"],)
+        )
+        last_message = cursor.fetchone()
+        if last_message:
+            conv["last_message"] = {
+                "type": last_message["type"],
+                "content": last_message["content"]
+            }
+
+        # Include all messages if requested
+        if include_messages:
+            cursor.execute(
+                "SELECT id, type, content, timestamp FROM messages WHERE conversation_id = ? ORDER BY timestamp",
+                (conv["id"],)
+            )
+            messages = [dict(row) for row in cursor.fetchall()]
+            conv["messages"] = messages
 
     conn.close()
     return conversations

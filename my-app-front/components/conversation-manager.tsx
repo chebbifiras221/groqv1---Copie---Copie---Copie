@@ -5,7 +5,7 @@ import { useMaybeRoomContext } from "@livekit/components-react";
 import { ConnectionState } from "livekit-client";
 import { useConnectionState } from "@livekit/components-react";
 import { Button } from "./ui/button";
-import { Trash2, Edit, Check, X } from "lucide-react";
+import { Trash2, Edit, Check, X, Plus } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 
 interface Conversation {
@@ -14,6 +14,16 @@ interface Conversation {
   created_at: string;
   updated_at: string;
   message_count?: number;
+  last_message?: {
+    type: string;
+    content: string;
+  };
+  messages?: Array<{
+    id: string;
+    type: string;
+    content: string;
+    timestamp: string;
+  }>;
 }
 
 interface ConversationMessage {
@@ -280,39 +290,40 @@ export function ConversationManager() {
   }
 
   return (
-    <div className="w-64 bg-accent-bg border-r border-white/10 h-full flex flex-col">
+    <div className="w-72 bg-accent-bg border-r border-white/10 h-full flex flex-col">
       <div className="p-4 border-b border-white/10">
-        <div className="flex justify-between items-center mb-2">
+        <div className="flex justify-between items-center mb-3">
           <h2 className="text-lg font-semibold">Conversations</h2>
           <Button
             onClick={clearAllConversations}
             variant="ghost"
             size="sm"
-            className="text-white/50 hover:text-white hover:bg-white/10 h-7 w-7 p-0"
+            className="text-white/50 hover:text-white hover:bg-white/10 h-10 w-10 p-0 rounded-full hover:bg-red-500/20 hover:text-red-400"
             title="Clear All Conversations"
             disabled={isLoading || conversations.length === 0}
           >
-            <Trash2 size={14} />
+            <Trash2 size={22} />
           </Button>
         </div>
         <Button
           onClick={createNewConversation}
-          className="w-full"
+          className="w-full py-2 flex items-center justify-center gap-2"
           disabled={isLoading}
         >
-          New Conversation
+          <Plus size={16} />
+          <span>New Conversation</span>
         </Button>
       </div>
 
       <div className="flex-1 overflow-y-auto">
-        <div className="p-2">
+        <div className="p-3">
           {conversations.length === 0 ? (
-            <div className="text-white/50 text-sm p-2">No conversations yet</div>
+            <div className="text-white/50 text-sm p-3 text-center">No conversations yet</div>
           ) : (
             conversations.map((conversation) => (
               <motion.div
                 key={conversation.id}
-                className={`p-3 rounded-md mb-2 hover:bg-white/5 transition-colors border border-transparent ${
+                className={`p-4 rounded-md mb-3 hover:bg-white/5 transition-colors border border-transparent ${
                   currentConversation?.id === conversation.id ? "bg-white/10 border-white/20" : "hover:border-white/10"
                 }`}
                 initial={{ opacity: 0, y: 10 }}
@@ -321,31 +332,40 @@ export function ConversationManager() {
                 onClick={() => fetchConversation(conversation.id)}
               >
                 {editingId === conversation.id ? (
-                  <div className="flex flex-col gap-1">
+                  <div className="flex flex-col gap-2">
                     <input
                       type="text"
                       value={editTitle}
                       onChange={(e) => setEditTitle(e.target.value)}
-                      className="w-full bg-black/30 border border-white/20 rounded-sm px-2 py-1 text-sm"
+                      className="w-full bg-black/30 border border-white/20 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-white/50"
                       autoFocus
+                      onClick={(e) => e.stopPropagation()}
                     />
-                    <div className="flex justify-end gap-1">
+                    <div className="flex justify-end gap-2">
                       <Button
-                        onClick={() => saveTitle(conversation.id)}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          saveTitle(conversation.id);
+                        }}
                         variant="ghost"
                         size="sm"
-                        className="h-6 w-6 p-0"
+                        className="h-8 w-8 p-0 hover:text-green-400 hover:bg-white/10 rounded-full"
                         disabled={!editTitle.trim()}
+                        title="Save"
                       >
-                        <Check size={12} />
+                        <Check size={16} />
                       </Button>
                       <Button
-                        onClick={cancelEditing}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          cancelEditing();
+                        }}
                         variant="ghost"
                         size="sm"
-                        className="h-6 w-6 p-0"
+                        className="h-8 w-8 p-0 hover:text-red-400 hover:bg-white/10 rounded-full"
+                        title="Cancel"
                       >
-                        <X size={12} />
+                        <X size={16} />
                       </Button>
                     </div>
                   </div>
@@ -361,7 +381,36 @@ export function ConversationManager() {
                         {conversation.title}
                       </motion.span>
                     </div>
-                    <div className="flex justify-between items-center mt-1">
+
+                    {/* Add a preview of the conversation content */}
+                    {/* Show last message from current conversation data if available */}
+                    {currentConversation?.id === conversation.id && currentConversation.messages && currentConversation.messages.length > 0 ? (
+                      <div className="mt-1 text-xs text-white/60 truncate">
+                        <span className="font-medium">
+                          {currentConversation.messages[currentConversation.messages.length - 1].type === 'user' ? 'You: ' : 'AI: '}
+                        </span>
+                        {currentConversation.messages[currentConversation.messages.length - 1].content.substring(0, 40)}
+                        {currentConversation.messages[currentConversation.messages.length - 1].content.length > 40 ? '...' : ''}
+                      </div>
+                    ) : conversation.messages && conversation.messages.length > 0 ? (
+                      <div className="mt-1 text-xs text-white/60 truncate">
+                        <span className="font-medium">
+                          {conversation.messages[conversation.messages.length - 1].type === 'user' ? 'You: ' : 'AI: '}
+                        </span>
+                        {conversation.messages[conversation.messages.length - 1].content.substring(0, 40)}
+                        {conversation.messages[conversation.messages.length - 1].content.length > 40 ? '...' : ''}
+                      </div>
+                    ) : conversation.last_message ? (
+                      <div className="mt-1 text-xs text-white/60 truncate">
+                        <span className="font-medium">
+                          {conversation.last_message.type === 'user' ? 'You: ' : 'AI: '}
+                        </span>
+                        {conversation.last_message.content.substring(0, 40)}
+                        {conversation.last_message.content.length > 40 ? '...' : ''}
+                      </div>
+                    ) : null}
+
+                    <div className="flex justify-between items-center mt-2">
                       <span className="text-xs text-white/50">{formatDate(conversation.updated_at)}</span>
                       <div className="flex gap-2">
                         <button
@@ -369,20 +418,20 @@ export function ConversationManager() {
                             e.stopPropagation();
                             startEditingTitle(conversation);
                           }}
-                          className="text-white/50 hover:text-white transition-colors p-1 rounded-full hover:bg-white/10"
+                          className="text-white/50 hover:text-white transition-colors p-1.5 rounded-full hover:bg-white/10"
                           title="Rename"
                         >
-                          <Edit size={14} />
+                          <Edit size={18} />
                         </button>
                         <button
                           onClick={(e) => {
                             e.stopPropagation();
                             deleteConversation(conversation.id);
                           }}
-                          className="text-white/50 hover:text-white transition-colors p-1 rounded-full hover:bg-white/10 hover:text-red-400"
+                          className="text-white/50 hover:text-white transition-colors p-1.5 rounded-full hover:bg-white/10 hover:text-red-400"
                           title="Delete"
                         >
-                          <Trash2 size={14} />
+                          <Trash2 size={18} />
                         </button>
                       </div>
                     </div>

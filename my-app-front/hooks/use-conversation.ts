@@ -12,31 +12,11 @@ export interface Message {
   type: MessageType;
   text: string;
   timestamp: number;
+  conversation_id?: string; // Optional to maintain compatibility with existing code
 }
 
-// Helper to get messages from localStorage
-const getStoredMessages = (): Message[] => {
-  if (typeof window === 'undefined') return [];
-
-  try {
-    const stored = localStorage.getItem('conversation-messages');
-    return stored ? JSON.parse(stored) : [];
-  } catch (e) {
-    console.error('Error reading messages from localStorage:', e);
-    return [];
-  }
-};
-
-// Helper to store messages in localStorage
-const storeMessages = (messages: Message[]) => {
-  if (typeof window === 'undefined') return;
-
-  try {
-    localStorage.setItem('conversation-messages', JSON.stringify(messages));
-  } catch (e) {
-    console.error('Error storing messages in localStorage:', e);
-  }
-};
+// We're not using localStorage for messages anymore as we clear on startup
+// and rely on the backend for conversation storage
 
 export function useConversation() {
   // Clear localStorage on component mount
@@ -46,6 +26,24 @@ export function useConversation() {
       console.log('Cleared conversation history from localStorage on startup');
     }
   }, []);
+
+  // Track the current conversation ID
+  const [currentConversationId, setCurrentConversationId] = useState<string | null>(null);
+
+  // Update the current conversation ID when it changes in localStorage
+  useEffect(() => {
+    const checkForConversationChanges = () => {
+      const newId = localStorage.getItem('current-conversation-id');
+      if (newId !== currentConversationId) {
+        setCurrentConversationId(newId);
+      }
+    };
+
+    // Check for changes every 500ms
+    const interval = setInterval(checkForConversationChanges, 500);
+
+    return () => clearInterval(interval);
+  }, [currentConversationId]);
 
   const [messages, setMessages] = useState<Message[]>([]);
   const room = useMaybeRoomContext();
@@ -65,21 +63,66 @@ export function useConversation() {
         const dataString = new TextDecoder().decode(payload);
         const data = JSON.parse(dataString);
 
-        if (data.type === "user_message_echo") {
+        if (data.type === "conversation_data") {
+          console.log("Received conversation data in conversation hook", data.conversation.id);
+
+          // Clear existing messages and load the conversation messages
+          const conversationMessages: Message[] = data.conversation.messages.map((msg: any) => ({
+            id: msg.id,
+            type: msg.type as MessageType,
+            text: msg.content,
+            timestamp: new Date(msg.timestamp).getTime(),
+            conversation_id: data.conversation.id // Add conversation_id to track which conversation this message belongs to
+          }));
+
+          // Replace all messages with the ones from the selected conversation
+          setMessages(conversationMessages);
+
+          // Reset tracking variables
+          setLastProcessedTranscription('');
+          setLastProcessedResponseId('');
+
+          // Store the current conversation ID
+          localStorage.setItem('current-conversation-id', data.conversation.id);
+        } else if (data.type === "user_message_echo") {
           console.log("Received user message echo in conversation hook:", data.text);
+
+          // Get the current conversation ID
+          const currentConversationId = localStorage.getItem('current-conversation-id') || data.conversation_id;
 
           // Add the echoed message to the conversation
           const newMessage: Message = {
             id: `user-echo-${Date.now()}`,
             type: 'user',
             text: data.text,
-            timestamp: Date.now()
+            timestamp: Date.now(),
+            conversation_id: currentConversationId
           };
 
           // Always add the message - we're clearing history on startup so no need to check for duplicates
           setMessages(prev => {
             const newMessages = [...prev, newMessage];
             // No need to store in localStorage as we're clearing it on startup
+            return newMessages;
+          });
+        } else if (data.type === "ai_response") {
+          console.log("Received AI response in conversation hook:", data.text.substring(0, 30) + '...');
+
+          // Get the current conversation ID
+          const currentConversationId = localStorage.getItem('current-conversation-id') || data.conversation_id;
+
+          // Add the AI response to the conversation
+          const newMessage: Message = {
+            id: `ai-response-${Date.now()}`,
+            type: 'ai',
+            text: data.text,
+            timestamp: Date.now(),
+            conversation_id: currentConversationId
+          };
+
+          // Add the AI response to the messages
+          setMessages(prev => {
+            const newMessages = [...prev, newMessage];
             return newMessages;
           });
         }
@@ -104,17 +147,23 @@ export function useConversation() {
     if (transcriptionText && transcriptionText !== lastProcessedTranscription) {
       setLastProcessedTranscription(transcriptionText);
 
-      // Add user message to conversation history
-      setMessages(prev => {
-        const newMessages = [...prev, {
-          type: 'user',
-          text: transcriptionText,
-          id: `user-voice-${Date.now()}`,
-          timestamp: Date.now()
-        }];
+      // Get the current conversation ID
+      const currentConversationId = localStorage.getItem('current-conversation-id');
 
-        return newMessages;
-      });
+      if (currentConversationId) {
+        // Add user message to conversation history
+        setMessages(prev => {
+          const newMessages = [...prev, {
+            type: 'user',
+            text: transcriptionText,
+            id: `user-voice-${Date.now()}`,
+            timestamp: Date.now(),
+            conversation_id: currentConversationId
+          }];
+
+          return newMessages;
+        });
+      }
     }
   }, [transcriptions, lastProcessedTranscription]);
 
@@ -126,20 +175,28 @@ export function useConversation() {
       if (lastResponse.id !== lastProcessedResponseId) {
         setLastProcessedResponseId(lastResponse.id);
 
-        setMessages(prev => {
-          // Always add the message - we're clearing history on startup
-          const newMessages = [...prev, {
-            type: 'ai',
+        // Get the current conversation ID
+        const currentConversationId = localStorage.getItem('current-conversation-id');
+
+        if (currentConversationId) {
+          // Create the new message object
+          const newMessage = {
+            type: 'ai' as MessageType,
             text: lastResponse.text,
             id: `ai-${lastResponse.id}`,
-            timestamp: lastResponse.receivedTime
-          }];
+            timestamp: lastResponse.receivedTime,
+            conversation_id: currentConversationId
+          };
 
-          return newMessages;
-        });
+          // Update messages state immediately
+          setMessages(prev => [...prev, newMessage]);
+
+          // Log for debugging
+          console.log('Added AI response to messages:', newMessage.text.substring(0, 30) + '...');
+        }
       }
     }
-  }, [responses, lastProcessedResponseId]);
+  }, [responses]);  // Removed lastProcessedResponseId from dependencies to ensure updates
 
   // Add a user message to the conversation
   const addUserMessage = useCallback(async (text: string) => {
@@ -158,12 +215,16 @@ export function useConversation() {
         // We'll wait for the echo from the server to add the message to the conversation
         await room.localParticipant.publishData(new TextEncoder().encode(JSON.stringify(message)));
 
+        // Get the current conversation ID
+        const currentConversationId = localStorage.getItem('current-conversation-id');
+
         // For better UX, we can still return a message object, but it won't be added to the state yet
         return {
           id: `user-pending-${Date.now()}`,
           type: 'user' as MessageType,
           text: text.trim(),
-          timestamp: Date.now()
+          timestamp: Date.now(),
+          conversation_id: currentConversationId || undefined
         };
       } catch (error) {
         console.error("Error sending text input:", error);
@@ -183,11 +244,21 @@ export function useConversation() {
     if (typeof window !== 'undefined') {
       localStorage.removeItem('conversation-messages');
     }
-  }, []);
+
+    // Create a new conversation
+    if (room) {
+      const message = {
+        type: "new_conversation",
+        title: `New Conversation`
+      };
+      room.localParticipant.publishData(new TextEncoder().encode(JSON.stringify(message)));
+    }
+  }, [room]);
 
   return {
     messages,
     addUserMessage,
-    clearMessages
+    clearMessages,
+    currentConversationId
   };
 }

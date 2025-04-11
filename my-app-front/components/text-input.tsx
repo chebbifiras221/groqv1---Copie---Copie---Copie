@@ -2,7 +2,7 @@
 
 import { useState, KeyboardEvent } from "react";
 import { Button } from "@/components/ui/button";
-import { Send, Trash2, Plus } from "lucide-react";
+import { Send, Trash2 } from "lucide-react";
 import { useConversation } from "@/hooks/use-conversation";
 import { useMaybeRoomContext } from "@livekit/components-react";
 
@@ -48,46 +48,22 @@ export function TextInput({ isConnected }: TextInputProps) {
     }
   };
 
-  const createNewConversation = async () => {
-    if (!room || !isConnected) return;
-
-    try {
-      const message = {
-        type: "new_conversation",
-        title: `Conversation-${new Date().toISOString()}`
-      };
-      await room.localParticipant.publishData(
-        new TextEncoder().encode(JSON.stringify(message))
-      );
-    } catch (error) {
-      console.error("Error creating new conversation:", error);
-    }
-  };
+  // Removed createNewConversation function as it's already in ConversationManager
 
   return (
-    <div className="flex flex-col w-full px-2 py-2 gap-2">
-      <div className="flex justify-between">
-        <Button
-          onClick={createNewConversation}
-          variant="ghost"
-          size="sm"
-          disabled={!isConnected}
-          className="text-white/50 hover:text-white hover:bg-white/10 flex items-center gap-1"
-        >
-          <Plus size={14} />
-          <span>New Conversation</span>
-        </Button>
+    <div className="flex flex-col w-full px-4 py-3 gap-3">
+      <div className="flex justify-end">
         <Button
           onClick={handleClearMessages}
           variant="ghost"
           size="sm"
-          className="text-white/50 hover:text-white hover:bg-white/10 flex items-center gap-1"
+          className="text-white/50 hover:text-white hover:bg-white/10 flex items-center gap-2 px-3 py-2 rounded-md"
         >
-          <Trash2 size={14} />
+          <Trash2 size={20} />
           <span>Clear Chat</span>
         </Button>
       </div>
-      <div className="flex items-center gap-2 w-full">
+      <div className="flex items-center gap-3 w-full">
         <input
           type="text"
           value={inputText}
@@ -95,14 +71,15 @@ export function TextInput({ isConnected }: TextInputProps) {
           onKeyDown={handleKeyDown}
           placeholder={isConnected ? "Type your message here..." : "Connect to start chatting"}
           disabled={!isConnected || isSubmitting}
-          className="flex-1 bg-black/30 border border-white/20 rounded-md px-3 py-2 text-white placeholder:text-white/50 focus:outline-none focus:ring-1 focus:ring-white/50"
+          className="flex-1 bg-black/30 border border-white/20 rounded-md px-4 py-3 text-white placeholder:text-white/50 focus:outline-none focus:ring-1 focus:ring-white/50"
         />
         <Button
           onClick={handleSubmit}
           disabled={!isConnected || !inputText.trim() || isSubmitting}
-          className="bg-black border border-white/30 text-white hover:bg-white/10 rounded-md p-2 transition-colors"
+          className="bg-black border border-white/30 text-white hover:bg-white/10 rounded-md p-3 transition-colors"
+          title="Send message"
         >
-          <Send size={18} />
+          <Send size={20} />
         </Button>
       </div>
     </div>
