@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   useConnectionState,
   useLocalParticipant,
@@ -9,12 +9,14 @@ import {
 import { AnimatePresence, motion } from "framer-motion";
 import { ConnectionState, LocalParticipant, Track } from "livekit-client";
 
-import { Button, LoadingSVG } from "@/components/ui/button";
+import { Button } from "@/components/ui/button";
+import { Header } from "@/components/ui/header";
 import { MicrophoneButton } from "@/components/microphone-button";
 import { useMultibandTrackVolume } from "@/hooks/use-track-volume";
 import { Typewriter } from "./typewriter";
 import { TextInput } from "./text-input";
 import { ConversationManager } from "./conversation-manager";
+import { StatusIndicator, ConnectionToast } from "./ui/status-indicator";
 
 export interface PlaygroundProps {
   onConnect?: (connect: boolean) => void;
@@ -22,9 +24,23 @@ export interface PlaygroundProps {
 
 export function Playground({ onConnect }: PlaygroundProps) {
   const { localParticipant } = useLocalParticipant();
-
   const roomState = useConnectionState();
   const tracks = useTracks();
+  const [showConnectionToast, setShowConnectionToast] = useState(false);
+  const [lastConnectionState, setLastConnectionState] = useState<ConnectionState | null>(null);
+
+  // Show connection toast when connection state changes
+  useEffect(() => {
+    if (lastConnectionState !== roomState &&
+        (roomState === ConnectionState.Connected ||
+         roomState === ConnectionState.Disconnected ||
+         roomState === ConnectionState.Reconnecting)) {
+      setShowConnectionToast(true);
+      const timer = setTimeout(() => setShowConnectionToast(false), 3000);
+      return () => clearTimeout(timer);
+    }
+    setLastConnectionState(roomState);
+  }, [roomState, lastConnectionState]);
 
   useEffect(() => {
     if (roomState === ConnectionState.Connected) {
@@ -88,16 +104,35 @@ export function Playground({ onConnect }: PlaygroundProps) {
   const isConnected = roomState === ConnectionState.Connected;
 
   return (
-    <div className="flex h-full w-full">
-      {isConnected && <ConversationManager />}
-      <div className="relative flex-col grow gap-4 h-full">
-        <Typewriter typingSpeed={25} />
-        <div className="absolute left-0 bottom-0 w-full bg-accent-bg border-t border-white/20">
-          <div className="pt-2">
-            {audioTileContent}
+    <div className="flex flex-col h-full w-full">
+      <Header title="AI Teacher Assistant" />
+
+      <AnimatePresence>
+        {showConnectionToast && (
+          <ConnectionToast
+            state={roomState}
+            onClose={() => setShowConnectionToast(false)}
+          />
+        )}
+      </AnimatePresence>
+
+      <div className="flex flex-1 overflow-hidden">
+        {isConnected && (
+          <div className="hidden md:block w-80 lg:w-96 border-r border-border-DEFAULT">
+            <ConversationManager />
           </div>
-          <div className="mt-2 border-t border-white/20">
-            <TextInput isConnected={isConnected} />
+        )}
+        <div className="relative flex-col grow h-full bg-bg-primary">
+          <div className="h-full pb-48 overflow-hidden">
+            <Typewriter typingSpeed={25} />
+          </div>
+          <div className="absolute left-0 bottom-0 w-full bg-bg-secondary border-t border-border-DEFAULT shadow-lg">
+            <div className="pt-4 pb-2 px-4">
+              {audioTileContent}
+            </div>
+            <div className="border-t border-border-DEFAULT">
+              <TextInput isConnected={isConnected} />
+            </div>
           </div>
         </div>
       </div>

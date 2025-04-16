@@ -5,7 +5,7 @@ import { useMaybeRoomContext } from "@livekit/components-react";
 import { ConnectionState } from "livekit-client";
 import { useConnectionState } from "@livekit/components-react";
 import { Button } from "./ui/button";
-import { Trash2, Edit, Check, X, Plus } from "lucide-react";
+import { Trash2, Edit, Check, X, Plus, MessageSquare, Calendar, Clock } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 
 interface Conversation {
@@ -304,23 +304,23 @@ export function ConversationManager() {
   }
 
   return (
-    <div className="w-72 bg-accent-bg border-r border-white/10 h-full flex flex-col">
-      <div className="p-4 border-b border-white/10">
+    <div className="w-full h-full flex flex-col">
+      <div className="p-4">
         <div className="flex justify-between items-center mb-3">
-          <h2 className="text-lg font-semibold">Conversations</h2>
           <Button
             onClick={clearAllConversations}
             variant="ghost"
-            size="sm"
-            className="text-white/50 hover:text-white hover:bg-white/10 h-10 w-10 p-0 rounded-full hover:bg-red-500/20 hover:text-red-400"
+            size="icon"
+            className="text-danger-DEFAULT hover:text-danger-hover"
             title="Clear All Conversations"
             disabled={isLoading || conversations.length === 0}
           >
-            <Trash2 size={22} />
+            <Trash2 size={18} />
           </Button>
         </div>
         <Button
           onClick={createNewConversation}
+          variant="default"
           className="w-full py-2 flex items-center justify-center gap-2"
           disabled={isLoading}
         >
@@ -331,128 +331,148 @@ export function ConversationManager() {
 
       <div className="flex-1 overflow-y-auto">
         <div className="p-3">
-          {conversations.length === 0 ? (
-            <div className="text-white/50 text-sm p-3 text-center">No conversations yet</div>
-          ) : (
-            conversations.map((conversation) => (
-              <motion.div
-                key={conversation.id}
-                className={`p-4 rounded-md mb-3 hover:bg-white/5 transition-colors border border-transparent ${
-                  currentConversation?.id === conversation.id ? "bg-white/10 border-white/20" : "hover:border-white/10"
-                }`}
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.2 }}
-                onClick={() => fetchConversation(conversation.id)}
-              >
-                {editingId === conversation.id ? (
-                  <div className="flex flex-col gap-2">
-                    <input
-                      type="text"
-                      value={editTitle}
-                      onChange={(e) => setEditTitle(e.target.value)}
-                      className="w-full bg-black/30 border border-white/20 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-white/50"
-                      autoFocus
-                      onClick={(e) => e.stopPropagation()}
-                    />
-                    <div className="flex justify-end gap-2">
-                      <Button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          saveTitle(conversation.id);
-                        }}
-                        variant="ghost"
-                        size="sm"
-                        className="h-8 w-8 p-0 hover:text-green-400 hover:bg-white/10 rounded-full"
-                        disabled={!editTitle.trim()}
-                        title="Save"
-                      >
-                        <Check size={16} />
-                      </Button>
-                      <Button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          cancelEditing();
-                        }}
-                        variant="ghost"
-                        size="sm"
-                        className="h-8 w-8 p-0 hover:text-red-400 hover:bg-white/10 rounded-full"
-                        title="Cancel"
-                      >
-                        <X size={16} />
-                      </Button>
-                    </div>
-                  </div>
-                ) : (
-                  <>
-                    <div className="text-sm font-medium truncate">
-                      <motion.span
-                        key={conversation.title}
-                        initial={{ opacity: 0 }}
-                        animate={{ opacity: 1 }}
-                        transition={{ duration: 0.3 }}
-                      >
-                        {conversation.title}
-                      </motion.span>
-                    </div>
+          {isLoading && conversations.length === 0 && (
+            <div className="flex flex-col items-center justify-center py-8 gap-4">
+              <div className="w-10 h-10 rounded-full bg-bg-tertiary flex items-center justify-center animate-pulse">
+                <MessageSquare className="w-5 h-5 text-text-secondary" />
+              </div>
+              <p className="text-text-secondary text-sm">Loading conversations...</p>
+            </div>
+          )}
 
-                    {/* Add a preview of the conversation content */}
-                    {/* Show last message from current conversation data if available */}
-                    {currentConversation?.id === conversation.id && currentConversation.messages && currentConversation.messages.length > 0 ? (
-                      <div className="mt-1 text-xs text-white/60 truncate">
-                        <span className="font-medium">
-                          {currentConversation.messages[currentConversation.messages.length - 1].type === 'user' ? 'You: ' : 'AI: '}
-                        </span>
-                        {currentConversation.messages[currentConversation.messages.length - 1].content.substring(0, 40)}
-                        {currentConversation.messages[currentConversation.messages.length - 1].content.length > 40 ? '...' : ''}
-                      </div>
-                    ) : conversation.messages && conversation.messages.length > 0 ? (
-                      <div className="mt-1 text-xs text-white/60 truncate">
-                        <span className="font-medium">
-                          {conversation.messages[conversation.messages.length - 1].type === 'user' ? 'You: ' : 'AI: '}
-                        </span>
-                        {conversation.messages[conversation.messages.length - 1].content.substring(0, 40)}
-                        {conversation.messages[conversation.messages.length - 1].content.length > 40 ? '...' : ''}
-                      </div>
-                    ) : conversation.last_message ? (
-                      <div className="mt-1 text-xs text-white/60 truncate">
-                        <span className="font-medium">
-                          {conversation.last_message.type === 'user' ? 'You: ' : 'AI: '}
-                        </span>
-                        {conversation.last_message.content.substring(0, 40)}
-                        {conversation.last_message.content.length > 40 ? '...' : ''}
-                      </div>
-                    ) : null}
+          {!isLoading && conversations.length === 0 && (
+            <div className="flex flex-col items-center justify-center py-8 gap-4">
+              <div className="w-16 h-16 rounded-full bg-bg-tertiary flex items-center justify-center">
+                <MessageSquare className="w-8 h-8 text-text-secondary" />
+              </div>
+              <div className="text-center">
+                <p className="text-text-secondary text-sm mb-2">No conversations yet</p>
+                <p className="text-text-tertiary text-xs">Start a new conversation to begin</p>
+              </div>
+            </div>
+          )}
 
-                    <div className="flex justify-between items-center mt-2">
-                      <span className="text-xs text-white/50">{formatDate(conversation.updated_at)}</span>
-                      <div className="flex gap-2">
-                        <button
+          {conversations.length > 0 && (
+            <div className="space-y-2">
+              {conversations.map((conversation) => (
+                <motion.div
+                  key={conversation.id}
+                  className={`p-3 rounded-md hover:bg-bg-tertiary transition-colors border ${currentConversation?.id === conversation.id
+                    ? "border-border-DEFAULT bg-bg-tertiary"
+                    : "border-transparent hover:border-border-muted"}`}
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.2 }}
+                  onClick={() => fetchConversation(conversation.id)}
+                >
+                  {editingId === conversation.id ? (
+                    <div className="flex flex-col gap-2">
+                      <input
+                        type="text"
+                        value={editTitle}
+                        onChange={(e) => setEditTitle(e.target.value)}
+                        className="bg-bg-primary border border-border-DEFAULT focus:border-primary-DEFAULT rounded-md px-2 py-1 text-text-primary w-full text-sm"
+                        autoFocus
+                        onClick={(e) => e.stopPropagation()}
+                      />
+                      <div className="flex justify-end gap-2">
+                        <Button
                           onClick={(e) => {
                             e.stopPropagation();
-                            startEditingTitle(conversation);
+                            cancelEditing();
                           }}
-                          className="text-white/50 hover:text-white transition-colors p-1.5 rounded-full hover:bg-white/10"
-                          title="Rename"
+                          variant="ghost"
+                          size="icon"
+                          className="h-7 w-7"
                         >
-                          <Edit size={18} />
-                        </button>
-                        <button
+                          <X size={14} />
+                        </Button>
+                        <Button
                           onClick={(e) => {
                             e.stopPropagation();
-                            deleteConversation(conversation.id);
+                            saveTitle(conversation.id);
                           }}
-                          className="text-white/50 hover:text-white transition-colors p-1.5 rounded-full hover:bg-white/10 hover:text-red-400"
-                          title="Delete"
+                          variant="primary"
+                          size="icon"
+                          className="h-7 w-7"
+                          disabled={!editTitle.trim()}
                         >
-                          <Trash2 size={18} />
-                        </button>
+                          <Check size={14} />
+                        </Button>
                       </div>
                     </div>
-                  </>
-                )}
-              </motion.div>
-            ))
+                  ) : (
+                    <div>
+                      <div className="flex justify-between items-start mb-2">
+                        <h3 className="font-medium text-text-primary break-words pr-2 text-sm">{conversation.title}</h3>
+                        <div className="flex gap-1">
+                          <Button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              startEditingTitle(conversation);
+                            }}
+                            variant="ghost"
+                            size="icon"
+                            className="h-6 w-6 text-text-tertiary hover:text-text-primary"
+                          >
+                            <Edit size={12} />
+                          </Button>
+                          <Button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              deleteConversation(conversation.id);
+                            }}
+                            variant="ghost"
+                            size="icon"
+                            className="h-6 w-6 text-danger-DEFAULT hover:text-danger-hover"
+                          >
+                            <Trash2 size={12} />
+                          </Button>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-1 text-xs text-text-tertiary mb-2">
+                        <Clock size={12} />
+                        <span>{formatDate(conversation.updated_at)}</span>
+                      </div>
+
+                      {/* Message preview */}
+                      {(currentConversation?.id === conversation.id && currentConversation.messages && currentConversation.messages.length > 0) ? (
+                        <div className="mt-1 text-xs text-text-secondary bg-bg-primary p-2 rounded-md">
+                          <span className="font-medium">
+                            {currentConversation.messages[currentConversation.messages.length - 1].type === 'user' ? 'You: ' : 'AI: '}
+                          </span>
+                          <span className="line-clamp-2">
+                            {currentConversation.messages[currentConversation.messages.length - 1].content.substring(0, 80)}
+                            {currentConversation.messages[currentConversation.messages.length - 1].content.length > 80 ? '...' : ''}
+                          </span>
+                        </div>
+                      ) : conversation.messages && conversation.messages.length > 0 ? (
+                        <div className="mt-1 text-xs text-text-secondary bg-bg-primary p-2 rounded-md">
+                          <span className="font-medium">
+                            {conversation.messages[conversation.messages.length - 1].type === 'user' ? 'You: ' : 'AI: '}
+                          </span>
+                          <span className="line-clamp-2">
+                            {conversation.messages[conversation.messages.length - 1].content.substring(0, 80)}
+                            {conversation.messages[conversation.messages.length - 1].content.length > 80 ? '...' : ''}
+                          </span>
+                        </div>
+                      ) : conversation.last_message ? (
+                        <div className="mt-1 text-xs text-text-secondary bg-bg-primary p-2 rounded-md">
+                          <span className="font-medium">
+                            {conversation.last_message.type === 'user' ? 'You: ' : 'AI: '}
+                          </span>
+                          <span className="line-clamp-2">
+                            {conversation.last_message.content.substring(0, 80)}
+                            {conversation.last_message.content.length > 80 ? '...' : ''}
+                          </span>
+                        </div>
+                      ) : null}
+                    </div>
+                  )}
+                </motion.div>
+              ))}
+            </div>
           )}
         </div>
       </div>

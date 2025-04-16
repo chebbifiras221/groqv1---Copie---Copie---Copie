@@ -3,6 +3,7 @@
 import { useEffect, useState, useRef } from "react";
 import { motion } from "framer-motion";
 import { ConnectionState } from "livekit-client";
+import { MessageSquare } from "lucide-react";
 import { useTranscriber } from "@/hooks/use-transcriber";
 import { useAIResponses } from "@/hooks/use-ai-responses";
 import { useConversation } from "@/hooks/use-conversation";
@@ -129,59 +130,76 @@ export function Typewriter({ typingSpeed = 50 }: TypewriterProps) {
   });
 
   return (
-    <div className="relative h-full text-lg font-mono pl-4 pr-4 relative pt-4 pb-20">
-      <div className="pointer-events-none h-1/4 absolute top-0 left-0 w-full bg-gradient-to-b from-accent-bg to-transparent z-10"></div>
+    <div className="relative h-full text-lg font-mono px-4 md:px-8 pt-6 pb-20 overflow-hidden">
+      <div className="pointer-events-none h-24 absolute top-0 left-0 w-full bg-gradient-to-b from-bg-primary to-transparent z-10"></div>
       {state === ConnectionState.Disconnected && (
-        <div className="text-white/40 h-full items-center pb-16 max-w-md flex">
+        <div className="text-text-secondary h-full flex items-center justify-center pb-16 max-w-md mx-auto">
           <p>{emptyTextAnimation}</p>
         </div>
       )}
       {state !== ConnectionState.Disconnected && (
         <div className="h-full overflow-y-auto" ref={conversationContainerRef}>
-          <div className="h-48" />
+          <div className="h-12" />
           {/* Conversation History */}
-          <div className="flex flex-col gap-4">
+          <div className="flex flex-col gap-8 max-w-4xl mx-auto">
             {messages.length === 0 || !currentConversationId ? (
-              <div className="text-white/50">No messages yet</div>
+              <div className="text-text-secondary text-center py-12">
+                <div className="mb-4">
+                  <MessageSquare className="w-12 h-12 mx-auto text-text-tertiary opacity-50" />
+                </div>
+                <p className="text-xl">No messages yet</p>
+                <p className="text-sm mt-2 text-text-tertiary">Start a conversation by typing a message or using your microphone</p>
+              </div>
             ) : (
               messages
                 .filter(item => !item.conversation_id || item.conversation_id === currentConversationId)
                 .map((item) => (
                 <motion.div
                   key={item.id}
-                  className={`mb-6 whitespace-pre-wrap ${item.type === "ai" ? "p-4 bg-white/5 rounded-lg" : ""}`}
+                  className={`mb-8 whitespace-pre-wrap ${item.type === "ai" ? "p-6 bg-bg-secondary rounded-lg border border-border-muted shadow-sm" : "px-2"}`}
                   initial={{ opacity: 0, y: 10 }}
                   animate={{ opacity: 1, y: 0 }}
-                  transition={{ duration: 0.2 }}
+                  transition={{ duration: 0.3 }}
                 >
-                  <div className="text-sm text-white/50 mb-2 font-semibold">{item.type === "user" ? "You:" : "AI:"}</div>
+                  <div className="flex items-center gap-2 mb-3">
+                    <div className={`w-8 h-8 rounded-full flex items-center justify-center ${item.type === "user" ? "bg-primary-DEFAULT" : "bg-secondary-DEFAULT"}`}>
+                      <span className="text-white font-bold text-xs">{item.type === "user" ? "You" : "AI"}</span>
+                    </div>
+                    <div className="text-sm text-text-secondary font-medium">
+                      {item.type === "user" ? "You" : "AI Teacher Assistant"}
+                    </div>
+                  </div>
+
                   {item.type === "user" ? (
-                    <p className="leading-relaxed">{item.text}</p>
+                    <div className="leading-relaxed pl-10 text-text-primary">{item.text}</div>
                   ) : (
-                    <div className="leading-relaxed">
+                    <div className="leading-relaxed text-text-primary">
                       {renderAIResponseWithCodeBlocks(item.text)}
                     </div>
                   )}
+
                   {item.type === "ai" && (
-                    <div className="flex justify-end mt-3">
+                    <div className="flex justify-end mt-4">
                       {isTtsSpeaking ? (
                         <button
                           onClick={stopSpeaking}
-                          className="text-xs text-white/50 hover:text-white/80 transition-colors px-2 py-1 rounded hover:bg-white/10"
+                          className="text-xs bg-danger-DEFAULT text-white px-3 py-1.5 rounded-md hover:bg-danger-hover transition-colors flex items-center gap-1"
                         >
+                          <span className="w-2 h-2 bg-white rounded-full animate-pulse"></span>
                           Stop TTS
                         </button>
                       ) : isProcessingTTS ? (
                         <button
                           disabled
-                          className="text-xs text-white/30 px-2 py-1 rounded bg-white/5 cursor-wait"
+                          className="text-xs bg-bg-tertiary text-text-secondary px-3 py-1.5 rounded-md cursor-wait flex items-center gap-1"
                         >
+                          <span className="w-2 h-2 bg-text-tertiary rounded-full animate-pulse"></span>
                           Loading...
                         </button>
                       ) : (
                         <button
                           onClick={speakLastResponse}
-                          className="text-xs text-white/50 hover:text-white/80 transition-colors px-2 py-1 rounded hover:bg-white/10"
+                          className="text-xs bg-primary-DEFAULT text-white px-3 py-1.5 rounded-md hover:bg-primary-hover transition-colors"
                         >
                           Speak
                         </button>

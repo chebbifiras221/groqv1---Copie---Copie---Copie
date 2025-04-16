@@ -10,8 +10,8 @@ interface CodeEditorProps {
   onChange?: (code: string) => void;
 }
 
-export function CodeEditor({ 
-  initialCode = '', 
+export function CodeEditor({
+  initialCode = '',
   language = 'javascript',
   placeholder = 'Type your code here...',
   onChange
@@ -31,17 +31,39 @@ export function CodeEditor({
   // Generate line numbers
   const lineNumbers = Array.from({ length: Math.max(1, lineCount) }, (_, i) => i + 1);
 
+  // Get language-specific colors
+  const getLanguageColors = (lang: string) => {
+    const colors = {
+      javascript: { primary: '#f7df1e', secondary: '#323330', text: '#323330' },
+      typescript: { primary: '#3178c6', secondary: '#235a97', text: '#ffffff' },
+      python: { primary: '#3776ab', secondary: '#ffd343', text: '#ffffff' },
+      html: { primary: '#e34c26', secondary: '#f06529', text: '#ffffff' },
+      css: { primary: '#264de4', secondary: '#2965f1', text: '#ffffff' },
+      jsx: { primary: '#61dafb', secondary: '#282c34', text: '#ffffff' },
+      tsx: { primary: '#3178c6', secondary: '#61dafb', text: '#ffffff' },
+      json: { primary: '#000000', secondary: '#8bc34a', text: '#ffffff' },
+      default: { primary: '#6e40c9', secondary: '#5a32a3', text: '#ffffff' }
+    };
+
+    return colors[lang as keyof typeof colors] || colors.default;
+  };
+
+  const langColors = getLanguageColors(language);
+
   return (
-    <motion.div 
+    <motion.div
       className="code-editor-container"
       initial={{ opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.3 }}
     >
       <div className="code-editor-header">
-        <div className="language-tag">{language}</div>
+        <div className="language-indicator">
+          <div className="language-dot" style={{ backgroundColor: langColors.primary }}></div>
+          <div className="language-tag">{language}</div>
+        </div>
         <div className="editor-actions">
-          <button className="run-button">Run</button>
+          <button className="format-button">Format</button>
         </div>
       </div>
       <div className="code-editor-content">
@@ -60,78 +82,109 @@ export function CodeEditor({
       </div>
       <style jsx>{`
         .code-editor-container {
-          margin: 1rem 0;
-          border-radius: 6px;
+          margin: 0;
+          border-radius: 8px;
           overflow: hidden;
-          background-color: #1e1e1e;
-          border: 1px solid #333;
-          font-family: 'Consolas', 'Monaco', 'Andale Mono', monospace;
+          background-color: #0d1117;
+          border: 1px solid #30363d;
+          font-family: var(--font-geist-mono), 'Consolas', 'Monaco', 'Andale Mono', monospace;
           font-size: 14px;
-          line-height: 1.5;
+          line-height: 1.6;
+          box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+          transition: all 0.3s ease;
         }
-        
+
+        .code-editor-container:focus-within {
+          border-color: ${langColors.primary}80;
+          box-shadow: 0 0 0 2px ${langColors.primary}20;
+        }
+
         .code-editor-header {
           display: flex;
           justify-content: space-between;
           align-items: center;
-          padding: 8px 16px;
-          background-color: #252526;
-          border-bottom: 1px solid #333;
+          padding: 12px 16px;
+          background: linear-gradient(to right, #161b22, #0d1117);
+          border-bottom: 1px solid #21262d;
         }
-        
+
+        .language-indicator {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+        }
+
+        .language-dot {
+          width: 10px;
+          height: 10px;
+          border-radius: 50%;
+          background-color: ${langColors.primary};
+          box-shadow: 0 0 8px ${langColors.primary}80;
+        }
+
         .language-tag {
-          color: #d4d4d4;
+          color: #e6edf3;
           font-size: 12px;
+          font-weight: 500;
           text-transform: uppercase;
+          letter-spacing: 0.5px;
         }
-        
+
         .editor-actions {
           display: flex;
           gap: 8px;
         }
-        
-        .run-button {
-          background-color: #3c873a;
+
+        .format-button {
+          background: linear-gradient(to right, #6e40c9, #5a32a3);
           color: white;
           border: none;
           border-radius: 4px;
-          padding: 4px 8px;
+          padding: 6px 12px;
           font-size: 12px;
+          font-weight: 500;
           cursor: pointer;
-          transition: background-color 0.2s;
+          transition: all 0.2s ease;
         }
-        
-        .run-button:hover {
-          background-color: #4cae4c;
+
+        .format-button:hover {
+          background: linear-gradient(to right, #5a32a3, #4c2889);
+          transform: translateY(-1px);
+          box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
         }
-        
+
+        .format-button:active {
+          transform: translateY(1px);
+        }
+
         .code-editor-content {
           display: flex;
-          height: 200px;
+          height: 250px;
         }
-        
+
         .line-numbers {
           display: flex;
           flex-direction: column;
-          padding: 8px 8px 8px 16px;
-          border-right: 1px solid #333;
-          color: #858585;
+          padding: 12px 12px 12px 16px;
+          border-right: 1px solid #21262d;
+          color: #6e7681;
           user-select: none;
           text-align: right;
-          background-color: #1e1e1e;
+          background-color: #0d1117;
         }
-        
+
         .line-number {
           font-size: 14px;
-          line-height: 1.5;
+          line-height: 1.6;
+          min-width: 1.5em;
         }
-        
+
         .code-textarea {
           flex: 1;
-          background-color: #1e1e1e;
-          color: #d4d4d4;
+          background-color: #0d1117;
+          color: #e6edf3;
           border: none;
-          padding: 8px 16px;
+          padding: 12px 16px;
           font-family: inherit;
           font-size: inherit;
           line-height: inherit;
@@ -140,10 +193,30 @@ export function CodeEditor({
           width: 100%;
           height: 100%;
           tab-size: 2;
+          scrollbar-width: thin;
+          scrollbar-color: #30363d transparent;
         }
-        
+
+        .code-textarea::-webkit-scrollbar {
+          width: 8px;
+          height: 8px;
+        }
+
+        .code-textarea::-webkit-scrollbar-track {
+          background: transparent;
+        }
+
+        .code-textarea::-webkit-scrollbar-thumb {
+          background-color: #30363d;
+          border-radius: 4px;
+        }
+
+        .code-textarea::-webkit-scrollbar-thumb:hover {
+          background-color: #6e7681;
+        }
+
         .code-textarea::placeholder {
-          color: #6a9955;
+          color: #8b949e;
           opacity: 0.6;
         }
       `}</style>

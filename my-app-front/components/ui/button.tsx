@@ -1,60 +1,68 @@
 import React, { ButtonHTMLAttributes, ReactNode } from "react";
+import { cva, type VariantProps } from "class-variance-authority";
+import { cn } from "@/lib/utils";
+import { LoadingSVG } from "./loading-svg";
 
-export type ButtonProps = {
+const buttonVariants = cva(
+  "relative inline-flex items-center justify-center whitespace-nowrap rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary disabled:pointer-events-none disabled:opacity-50",
+  {
+    variants: {
+      variant: {
+        default: "bg-button-bg text-button-text hover:bg-button-hover-bg active:bg-button-active-bg",
+        primary: "bg-primary-DEFAULT text-white hover:bg-primary-hover active:bg-primary-focus",
+        secondary: "bg-secondary-DEFAULT text-white hover:bg-secondary-hover active:bg-secondary-focus",
+        success: "bg-success-DEFAULT text-white hover:bg-success-hover active:bg-success-focus",
+        danger: "bg-danger-DEFAULT text-white hover:bg-danger-hover active:bg-danger-focus",
+        warning: "bg-warning-DEFAULT text-text-inverse hover:bg-warning-hover active:bg-warning-focus",
+        outline: "border border-border-DEFAULT bg-transparent hover:bg-bg-tertiary hover:text-text-primary",
+        ghost: "bg-transparent text-text-secondary hover:bg-bg-tertiary hover:text-text-primary",
+        link: "bg-transparent text-primary-DEFAULT underline-offset-4 hover:underline",
+      },
+      size: {
+        default: "h-9 px-4 py-2",
+        sm: "h-8 rounded-md px-3 text-xs",
+        lg: "h-10 rounded-md px-8 text-base",
+        icon: "h-9 w-9 p-0",
+      },
+    },
+    defaultVariants: {
+      variant: "default",
+      size: "default",
+    },
+  }
+);
+
+export interface ButtonProps
+  extends ButtonHTMLAttributes<HTMLButtonElement>,
+    VariantProps<typeof buttonVariants> {
   children: ReactNode;
   className?: string;
-  disabled?: boolean;
-  state?: "primary" | "secondary" | "dropdown" | "destructive";
-  size?: "small" | "medium" | "large";
-} & ButtonHTMLAttributes<HTMLButtonElement>;
+  isLoading?: boolean;
+}
 
 export function Button({
   children,
   className,
+  variant,
+  size,
+  isLoading = false,
   disabled,
-  ...allProps
+  ...props
 }: ButtonProps) {
   return (
     <button
-      className={`flex flex-row ${
-        disabled ? "pointer-events-none" : ""
-      } bg-transparent hover:bg-white/10 text-white rounded-[4px] border active:translate-y-[2px] active:scale-[0.99] duration-250 border-white/20 text-base px-3 py-1 transition-all ease-out duration-250 ${className}`}
-      {...allProps}
+      className={cn(buttonVariants({ variant, size, className }))}
+      disabled={disabled || isLoading}
+      {...props}
     >
-      {children}
+      {isLoading && (
+        <span className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2">
+          <LoadingSVG size={size === 'sm' ? 14 : size === 'lg' ? 20 : 16} />
+        </span>
+      )}
+      <span className={isLoading ? "invisible" : ""}>{children}</span>
     </button>
   );
 }
 
-export function LoadingSVG({
-  diameter = 20,
-  strokeWidth = 4,
-}: {
-  diameter?: number;
-  strokeWidth?: number;
-}) {
-  return (
-    <svg
-      className="animate-spin"
-      fill="none"
-      viewBox="0 0 24 24"
-      style={{
-        width: `${diameter}px`,
-        height: `${diameter}px`,
-      }}
-    >
-      <circle
-        className="opacity-25"
-        cx="12"
-        cy="12"
-        r="10"
-        stroke="currentColor"
-        strokeWidth={strokeWidth}
-      ></circle>
-      <path
-        fill="currentColor"
-        d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-      ></path>
-    </svg>
-  );
-}
+
