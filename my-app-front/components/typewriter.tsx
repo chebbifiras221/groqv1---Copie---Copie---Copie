@@ -6,6 +6,8 @@ import { ConnectionState } from "livekit-client";
 import { useTranscriber } from "@/hooks/use-transcriber";
 import { useAIResponses } from "@/hooks/use-ai-responses";
 import { useConversation } from "@/hooks/use-conversation";
+import { CodeBlock } from "./code-block";
+import { CodeEditor } from "./code-editor";
 
 export interface TypewriterProps {
   typingSpeed?: number;
@@ -14,7 +16,74 @@ export interface TypewriterProps {
 const emptyText =
   "Voice transcription will appear after you connect and start talking";
 
+// Regular expression to detect code blocks in markdown format
+const codeBlockRegex = /```([\w-]*)?\n([\s\S]*?)\n```/g;
+
 export function Typewriter({ typingSpeed = 50 }: TypewriterProps) {
+  // Function to render AI responses with code blocks
+  const renderAIResponseWithCodeBlocks = (text: string) => {
+    if (!text) return null;
+
+    // Reset regex lastIndex to ensure we start from the beginning
+    codeBlockRegex.lastIndex = 0;
+
+    const segments = [];
+    let lastIndex = 0;
+    let match;
+    let segmentId = 0;
+
+    // Find all code blocks in the text
+    while ((match = codeBlockRegex.exec(text)) !== null) {
+      // Add text before the code block
+      if (match.index > lastIndex) {
+        segments.push({
+          type: 'text',
+          content: text.substring(lastIndex, match.index),
+          id: segmentId++
+        });
+      }
+
+      // Add the code block
+      segments.push({
+        type: 'code',
+        language: match[1]?.trim() || 'javascript',
+        content: match[2].trim(),
+        id: segmentId++
+      });
+
+      lastIndex = match.index + match[0].length;
+    }
+
+    // Add any remaining text after the last code block
+    if (lastIndex < text.length) {
+      segments.push({
+        type: 'text',
+        content: text.substring(lastIndex),
+        id: segmentId++
+      });
+    }
+
+    // If no code blocks were found, return the original text
+    if (segments.length === 0) {
+      return <p>{text}</p>;
+    }
+
+    // Render each segment
+    return segments.map(segment => {
+      if (segment.type === 'code') {
+        return (
+          <CodeBlock
+            key={segment.id}
+            code={segment.content}
+            language={segment.language}
+          />
+        );
+      } else {
+        return <p key={segment.id}>{segment.content}</p>;
+      }
+    });
+  };
+
   const { state } = useTranscriber();
   const { isTtsSpeaking, isProcessingTTS, stopSpeaking, speakLastResponse } = useAIResponses();
 
@@ -86,7 +155,13 @@ export function Typewriter({ typingSpeed = 50 }: TypewriterProps) {
                   transition={{ duration: 0.2 }}
                 >
                   <div className="text-sm text-white/50 mb-2 font-semibold">{item.type === "user" ? "You:" : "AI:"}</div>
-                  <p className="leading-relaxed">{item.text}</p>
+                  {item.type === "user" ? (
+                    <p className="leading-relaxed">{item.text}</p>
+                  ) : (
+                    <div className="leading-relaxed">
+                      {renderAIResponseWithCodeBlocks(item.text)}
+                    </div>
+                  )}
                   {item.type === "ai" && (
                     <div className="flex justify-end mt-3">
                       {isTtsSpeaking ? (
