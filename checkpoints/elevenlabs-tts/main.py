@@ -11,7 +11,7 @@ from livekit.plugins.openai import stt as plugin
 from livekit.plugins import silero
 from dotenv import load_dotenv
 import database
-from tts_web import WebTTS
+from tts_elevenlabs import ElevenLabsTTS
 
 load_dotenv(dotenv_path=".env.local")
 
@@ -19,7 +19,7 @@ logger = logging.getLogger("groq-whisper-stt-transcriber")
 
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions"
-# TTS provider will be configured later
+ELEVENLABS_API_KEY = os.getenv("ELEVENLABS_API_KEY")
 
 # Initialize the database
 database.init_db()
@@ -36,23 +36,25 @@ def initialize_tts():
     global tts_engine
 
     try:
-        # Initialize with Web TTS
-        tts_engine = WebTTS()
+        # Make sure we have a valid API key
+        if not ELEVENLABS_API_KEY or ELEVENLABS_API_KEY == "your_elevenlabs_api_key_here":
+            logger.warning("No valid ElevenLabs API key found")
+            raise ValueError("Invalid ElevenLabs API key")
 
-        # Test if the engine is working by synthesizing a short text
-        test_audio = tts_engine.synthesize("Test...")
+        # Pass the API key from environment variable
+        tts_engine = ElevenLabsTTS(api_key=ELEVENLABS_API_KEY)
+
+        # Test if the engine is working by synthesizing a short text with Daniel's voice
+        test_audio = tts_engine.synthesize("Test...", voice_name="Daniel")
 
         if test_audio:
-            if hasattr(tts_engine, 'use_fallback') and tts_engine.use_fallback:
-                logger.warning("Web TTS engine initialized but using fallback mechanism")
-            else:
-                logger.info("Web TTS engine initialized and tested successfully")
+            logger.info("ElevenLabs TTS engine initialized and tested successfully")
             return True
         else:
-            logger.warning("Web TTS engine initialized but test synthesis failed")
+            logger.warning("ElevenLabs TTS engine initialized but test synthesis failed")
             return False
     except Exception as e:
-        logger.error(f"Error initializing Web TTS engine: {e}")
+        logger.error(f"Error initializing ElevenLabs TTS engine: {e}")
         return False
 
 
@@ -85,21 +87,16 @@ async def synthesize_speech(text, room, voice_name=None):
         if not voice_name and hasattr(tts_engine, 'default_voice_name'):
             voice_name = tts_engine.default_voice_name
 
-        # Determine the provider based on whether we're using fallback
-        provider = "web"
-        if hasattr(tts_engine, 'use_fallback') and tts_engine.use_fallback:
-            provider = "fallback"
-
         # Create a data message to notify clients that TTS is starting
         tts_start_message = {
             "type": "tts_starting",
             "text": text[:100] + ("..." if len(text) > 100 else ""),
-            "provider": provider,
-            "voice": voice_name or (tts_engine.default_voice_name if hasattr(tts_engine, 'default_voice_name') else "Web Voice")
+            "provider": "elevenlabs",
+            "voice": voice_name
         }
         await room.local_participant.publish_data(json.dumps(tts_start_message).encode())
 
-        logger.info(f"Synthesizing speech with {provider.capitalize()} TTS: {text[:50]}...")
+        logger.info(f"Synthesizing speech with ElevenLabs using voice '{voice_name}': {text[:50]}...")
 
         # Generate audio using TTS engine with the specified voice (or Daniel by default)
         audio_data = tts_engine.synthesize(text, voice_name=voice_name)
@@ -118,38 +115,18 @@ async def synthesize_speech(text, room, voice_name=None):
 
                 # First send the audio info with a specific topic
                 try:
-                    # Determine the provider based on whether we're using fallback
-                    provider = "web"
-                    if hasattr(tts_engine, 'use_fallback') and tts_engine.use_fallback:
-                        provider = "fallback"
-
                     # Send a message about the voice being used
                     voice_info = {
                         "type": "voice_info",
-                        "voice": tts_engine.default_voice_name if hasattr(tts_engine, 'default_voice_name') else "Web Voice",
-                        "provider": provider
+                        "voice": tts_engine.default_voice_name if hasattr(tts_engine, 'default_voice_name') else "default",
+                        "provider": "elevenlabs"
                     }
                     await room.local_participant.publish_data(json.dumps(voice_info).encode())
                     logger.info("Published voice info message")
 
-                    # Check if this is a web TTS message
-                    try:
-                        # Try to decode and parse as JSON
-                        message_str = audio_data.decode('utf-8')
-                        message = json.loads(message_str)
-
-                        # If it's a web TTS message, publish it as is
-                        if message.get('type') == 'web_tts':
-                            logger.info(f"Publishing web TTS message for text: {message.get('text', '')[:50]}...")
-                            await room.local_participant.publish_data(audio_data)
-                        else:
-                            # Otherwise, publish as binary data
-                            await room.local_participant.publish_data(audio_data)
-                            logger.info(f"Published audio data, size: {len(audio_data)} bytes")
-                    except (UnicodeDecodeError, json.JSONDecodeError):
-                        # If it's not valid UTF-8 or JSON, it's binary audio data
-                        await room.local_participant.publish_data(audio_data)
-                        logger.info(f"Published binary audio data, size: {len(audio_data)} bytes")
+                    # Then publish the binary data
+                    await room.local_participant.publish_data(audio_data)
+                    logger.info(f"Published audio data, size: {len(audio_data)} bytes")
                 except Exception as e:
                     logger.error(f"Error publishing audio data: {e}")
                 logger.info("Successfully published audio data")
@@ -163,16 +140,11 @@ async def synthesize_speech(text, room, voice_name=None):
                 await room.local_participant.publish_data(json.dumps(error_message).encode())
                 return False
 
-            # Determine the provider based on whether we're using fallback
-            provider = "web"
-            if hasattr(tts_engine, 'use_fallback') and tts_engine.use_fallback:
-                provider = "fallback"
-
             # Create a data message to notify clients that TTS is complete
             tts_complete_message = {
                 "type": "tts_complete",
-                "provider": provider,
-                "voice": voice_name or (tts_engine.default_voice_name if hasattr(tts_engine, 'default_voice_name') else "Web Voice")
+                "provider": "elevenlabs",
+                "voice": voice_name or "default"
             }
             await room.local_participant.publish_data(json.dumps(tts_complete_message).encode())
 
@@ -231,169 +203,41 @@ def generate_ai_response(text, conversation_id=None):
 
     # Convert to format expected by Groq API
     conversation_history = []
-
-    # Add a system message to instruct the model to act like a teacher
-    teacher_system_prompt = {
-        "role": "system",
-        "content": """
-        You are an expert teacher with years of experience in education.
-
-        IMPORTANT: DO NOT introduce yourself or name yourself. Never refer to yourself as Professor Alex or any other name.
-        Just respond directly to questions without any self-introduction or greeting preamble.
-
-        Follow these principles in all your interactions:
-
-        1. TEACHING STYLE:
-           - Be patient, encouraging, and supportive like a real teacher would be
-           - Use the Socratic method when appropriate - guide with questions rather than just giving answers
-           - Adapt your explanations to the student's level of understanding
-           - Use analogies and real-world examples to illustrate complex concepts
-
-        2. KNOWLEDGE AND ACCURACY:
-           - Prioritize accuracy over speed or confidence
-           - When you're uncertain about something, clearly acknowledge it
-           - Never make up facts or information to appear knowledgeable
-           - If you notice a misconception in the student's understanding, gently correct it
-           - Cite sources or reference materials when appropriate
-
-        3. COMMUNICATION APPROACH:
-           - Use clear, concise language appropriate for teaching
-           - Break down complex topics into manageable parts
-           - Check for understanding by asking clarifying questions
-           - Provide positive reinforcement for good questions and correct answers
-           - Use a conversational, friendly tone while maintaining professionalism
-           - DO NOT use lengthy greetings or introductions
-           - Get straight to the point and answer questions directly
-
-        4. EDUCATIONAL BEST PRACTICES:
-           - Encourage critical thinking and problem-solving
-           - Provide scaffolded learning - build on existing knowledge
-           - Offer multiple perspectives on complex or controversial topics
-           - Suggest additional resources for further learning when appropriate
-           - Tailor explanations to different learning styles when possible
-
-        Remember that your goal is not just to provide information, but to help develop a deeper understanding of the subject matter and build critical thinking skills.
-        """
-    }
-
-    # Add the system message at the beginning
-    conversation_history.append(teacher_system_prompt)
-
-    # Add the conversation history
     for msg in messages:
         role = "user" if msg["type"] == "user" else "assistant"
         conversation_history.append({"role": role, "content": msg["content"]})
 
-    # Keep only the last 15 messages to avoid token limits, but always keep the system prompt
-    if len(conversation_history) > 16:  # 15 messages + 1 system prompt
-        conversation_history = [conversation_history[0]] + conversation_history[-15:]
+    # Keep only the last 10 messages to avoid token limits
+    if len(conversation_history) > 10:
+        conversation_history = conversation_history[-10:]
 
     headers = {
         "Authorization": f"Bearer {GROQ_API_KEY}",
         "Content-Type": "application/json"
     }
 
-    # Define models to try in order of preference - optimized for teaching tasks
-    models_to_try = [
-        {"name": "llama-3.1-8b-instant", "temperature": 0.6},  # First choice: Llama 3.1 8B Instant (128K context)
-        {"name": "llama-3.3-70b-versatile", "temperature": 0.6},  # Second choice: Llama 3.3 70B (more powerful)
-        {"name": "llama3-70b-8192", "temperature": 0.6},      # Third choice: Llama3 70B
-        {"name": "llama3-8b-8192", "temperature": 0.6},       # Fourth choice: Llama3 8B
-        {"name": "gemma2-9b-it", "temperature": 0.6}          # Fifth choice: Gemma 2 9B
-    ]
+    data = {
+        "model": "llama3-8b-8192",
+        "messages": conversation_history,
+        "temperature": 0.7,
+        "max_tokens": 1024
+    }
 
-    last_error = None
+    try:
+        response = requests.post(GROQ_API_URL, headers=headers, json=data)
+        response.raise_for_status()
+        result = response.json()
+        ai_response = result["choices"][0]["message"]["content"]
 
-    # Try each model in sequence until one works
-    for model_info in models_to_try:
-        model_name = model_info["name"]
-        temperature = model_info["temperature"]
+        # Add AI response to database
+        database.add_message(conversation_id, "ai", ai_response)
 
-        data = {
-            "model": model_name,
-            "messages": conversation_history,
-            "temperature": temperature,
-            "max_tokens": 1024,
-            "top_p": 0.9,  # More focused on likely responses (good for factual teaching)
-            "frequency_penalty": 0.2,  # Slightly reduce repetition
-            "presence_penalty": 0.1  # Slightly encourage topic diversity
-        }
-
-        try:
-            logger.info(f"Trying to generate teacher response with model: {model_name}")
-            response = requests.post(GROQ_API_URL, headers=headers, json=data)
-            response.raise_for_status()
-            result = response.json()
-            ai_response = result["choices"][0]["message"]["content"]
-
-            # Add model info to the response for transparency
-            model_descriptions = {
-                "llama-3.1-8b-instant": "Llama 3.1 8B Instant - Fast model with 128K context window",
-                "llama-3.3-70b-versatile": "Llama 3.3 70B Versatile - Powerful model with 128K context window",
-                "llama3-70b-8192": "Llama 3 70B - Powerful model with strong reasoning capabilities",
-                "llama3-8b-8192": "Llama 3 8B - Balanced model for general tasks",
-                "gemma2-9b-it": "Gemma 2 9B - Google's instruction-tuned model"
-            }
-            model_description = model_descriptions.get(model_name, model_name)
-
-            # Check if this is the first message and remove any introductions/greetings
-            is_first_message = len([msg for msg in messages if msg["type"] == "ai"]) == 0
-
-            if is_first_message:
-                # Remove common greeting patterns from the beginning of the response
-                greeting_patterns = [
-                    r"^Hello[!,.]?",
-                    r"^Hi[!,.]?",
-                    r"^Greetings[!,.]?",
-                    r"^Welcome[!,.]?",
-                    r"^Good (morning|afternoon|evening|day)[!,.]?",
-                    r"^Hey( there)?[!,.]?",
-                    r"^I('m| am) [^.!?]*\.",  # Matches "I'm [name]" or "I am [description]"
-                    r"^My name is [^.!?]*\.",
-                    r"^It's (great|nice|a pleasure) to [^.!?]*\.",
-                    r"^(I'm|I am) (happy|glad|excited|pleased|delighted) to [^.!?]*\."
-                ]
-
-                import re
-                cleaned_response = ai_response
-                for pattern in greeting_patterns:
-                    cleaned_response = re.sub(pattern, "", cleaned_response, flags=re.IGNORECASE | re.MULTILINE)
-
-                # Remove extra whitespace and newlines from the beginning
-                cleaned_response = cleaned_response.lstrip()
-
-                # If we removed something, use the cleaned response
-                if cleaned_response != ai_response:
-                    logger.info("Removed greeting/introduction from first response")
-                    ai_response = cleaned_response
-
-            # Decide whether to include model info based on user preference
-            # You can set this to False if you don't want to show model info
-            show_model_info = False
-
-            if show_model_info:
-                # Prepend model info to the response
-                ai_response_with_model = f"[Using {model_description}]\n\n{ai_response}"
-            else:
-                # Just use the response without model info
-                ai_response_with_model = ai_response
-
-            # Add AI response to database
-            database.add_message(conversation_id, "ai", ai_response_with_model)
-
-            logger.info(f"Successfully generated teacher response with model: {model_name}")
-            return ai_response_with_model
-
-        except Exception as e:
-            last_error = e
-            logger.warning(f"Error using model {model_name}: {e}. Trying next model if available.")
-            continue
-
-    # If we get here, all models failed
-    error_msg = f"Error generating response: All models failed. Last error: {str(last_error)}"
-    logger.error(error_msg)
-    database.add_message(conversation_id, "ai", error_msg)
-    return error_msg
+        return ai_response
+    except Exception as e:
+        logger.error(f"Error calling Groq API: {e}")
+        error_msg = f"Error generating response: {str(e)}"
+        database.add_message(conversation_id, "ai", error_msg)
+        return error_msg
 
 async def _forward_transcription(
     stt_stream: stt.SpeechStream, stt_forwarder: transcription.STTSegmentsForwarder, room: rtc.Room

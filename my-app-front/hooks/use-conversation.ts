@@ -58,10 +58,53 @@ export function useConversation() {
   useEffect(() => {
     if (!room) return;
 
-    const handleDataReceived = (payload: Uint8Array) => {
+    const handleDataReceived = (payload: Uint8Array, topic?: string) => {
       try {
+        // Handle binary audio data with specific topic
+        if (topic === "binary_audio") {
+          console.log("Received binary audio data with topic 'binary_audio'", payload.length);
+          // We'll let the use-ai-responses hook handle the audio playback
+          return;
+        }
+
+        // Handle audio info with specific topic
+        if (topic === "audio_info") {
+          const dataString = new TextDecoder().decode(payload);
+          const data = JSON.parse(dataString);
+          console.log("Received audio info:", data);
+          return;
+        }
+
+        // Try to decode as JSON for other messages
         const dataString = new TextDecoder().decode(payload);
-        const data = JSON.parse(dataString);
+        let data;
+
+        try {
+          data = JSON.parse(dataString);
+
+          // Handle audio data info message
+          if (data.type === "audio_data_info") {
+            console.log("Received audio data info:", data);
+            return;
+          }
+
+          // Handle audio data message
+          if (data.type === "audio_data") {
+            console.log("Received audio data info");
+            return;
+          }
+
+          // Handle audio URL message
+          if (data.type === "tts_audio_url") {
+            console.log("Received TTS audio URL for text:", data.text);
+            return;
+          }
+        } catch (e) {
+          // If it's not valid JSON, it might be binary audio data without a topic
+          console.log("Received possible binary audio data without topic", payload.length);
+          // We'll let the use-ai-responses hook handle the audio playback
+          return;
+        }
 
         if (data.type === "conversation_data") {
           console.log("Received conversation data in conversation hook", data.conversation.id);
