@@ -73,17 +73,17 @@ export function TextInput({ isConnected }: TextInputProps) {
   // Removed createNewConversation function as it's already in ConversationManager
 
   return (
-    <div className="flex flex-col w-full px-6 py-4 gap-4">
-      <div className="flex justify-between">
-        <div className="flex gap-2">
+    <div className="flex flex-col w-full px-6 py-4 gap-2 relative">
+      <div className="flex justify-between items-center">
+        <div className="flex items-center">
           <Button
             onClick={openCodeEditor}
             variant="ghost"
             size="sm"
-            className="text-text-secondary hover:text-primary-DEFAULT hover:bg-bg-tertiary flex items-center gap-2 px-3 py-2 rounded-md"
+            className="text-text-secondary hover:text-primary-DEFAULT/90 hover:bg-bg-tertiary/70 flex items-center gap-1.5 px-3 py-2 rounded-md"
             title="Open code editor"
           >
-            <Code size={18} />
+            <Code size={16} className="flex-shrink-0" />
             <span className="hidden sm:inline">Code</span>
           </Button>
         </div>
@@ -91,9 +91,9 @@ export function TextInput({ isConnected }: TextInputProps) {
           onClick={handleClearMessages}
           variant="ghost"
           size="sm"
-          className="text-text-secondary hover:text-danger-DEFAULT hover:bg-bg-tertiary flex items-center gap-2 px-3 py-2 rounded-md"
+          className="text-text-secondary hover:text-danger-DEFAULT/90 hover:bg-bg-tertiary/70 flex items-center gap-1.5 px-3 py-2 rounded-md"
         >
-          <Trash2 size={18} />
+          <Trash2 size={16} className="flex-shrink-0" />
           <span className="hidden sm:inline">Clear Chat</span>
         </Button>
       </div>
@@ -107,13 +107,13 @@ export function TextInput({ isConnected }: TextInputProps) {
             onKeyDown={handleKeyDown}
             placeholder={isConnected ? "Type your message here..." : "Connect to start chatting"}
             disabled={!isConnected || isSubmitting}
-            className="w-full bg-bg-primary border border-border-DEFAULT rounded-md px-4 py-3.5 text-text-primary placeholder:text-text-tertiary focus:outline-none focus:ring-1 focus:ring-primary-DEFAULT focus:border-primary-DEFAULT"
+            className="w-full bg-bg-primary border-0 rounded-full px-4 py-3.5 text-text-primary placeholder:text-text-tertiary focus:outline-none focus:ring-1 focus:ring-primary-DEFAULT/50 shadow-sm"
           />
-          <div className="absolute right-3 top-1/2 transform -translate-y-1/2 flex gap-2">
+          <div className="absolute right-3 top-1/2 transform -translate-y-1/2 flex items-center gap-2">
             <button
               type="button"
               onClick={openCodeEditor}
-              className="text-text-tertiary hover:text-primary-DEFAULT p-1.5 rounded-full hover:bg-bg-tertiary transition-colors"
+              className="text-text-tertiary hover:text-primary-DEFAULT/90 p-1.5 rounded-full hover:bg-bg-tertiary/70 transition-colors flex items-center justify-center"
               title="Open code editor"
             >
               <Code size={18} />
@@ -126,7 +126,7 @@ export function TextInput({ isConnected }: TextInputProps) {
           isLoading={isSubmitting}
           variant="primary"
           size="lg"
-          className="rounded-md p-3"
+          className="rounded-full p-3 bg-primary-DEFAULT hover:opacity-90 flex items-center justify-center"
           title="Send message"
         >
           <Send size={20} />

@@ -35,6 +35,8 @@ export function useConversation() {
     const checkForConversationChanges = () => {
       const newId = localStorage.getItem('current-conversation-id');
       if (newId !== currentConversationId) {
+        // Clear messages when switching conversations
+        setMessages([]);
         setCurrentConversationId(newId);
       }
     };
@@ -190,56 +192,25 @@ export function useConversation() {
     if (transcriptionText && transcriptionText !== lastProcessedTranscription) {
       setLastProcessedTranscription(transcriptionText);
 
-      // Get the current conversation ID
-      const currentConversationId = localStorage.getItem('current-conversation-id');
-
-      if (currentConversationId) {
-        // Add user message to conversation history
-        setMessages(prev => {
-          const newMessages = [...prev, {
-            type: 'user',
-            text: transcriptionText,
-            id: `user-voice-${Date.now()}`,
-            timestamp: Date.now(),
-            conversation_id: currentConversationId
-          }];
-
-          return newMessages;
-        });
-      }
+      // We'll let the server handle adding the message to the conversation
+      // The message will be added when we receive the echo from the server
+      console.log('Processed transcription, waiting for server echo:', transcriptionText);
     }
   }, [transcriptions, lastProcessedTranscription]);
 
   // Process AI responses and add them to messages
   useEffect(() => {
+    // We'll let the server handle adding AI responses to the conversation
+    // The message will be added when we receive the AI response from the server
     if (responses.length > 0) {
       const lastResponse = responses[responses.length - 1];
 
       if (lastResponse.id !== lastProcessedResponseId) {
         setLastProcessedResponseId(lastResponse.id);
-
-        // Get the current conversation ID
-        const currentConversationId = localStorage.getItem('current-conversation-id');
-
-        if (currentConversationId) {
-          // Create the new message object
-          const newMessage = {
-            type: 'ai' as MessageType,
-            text: lastResponse.text,
-            id: `ai-${lastResponse.id}`,
-            timestamp: lastResponse.receivedTime,
-            conversation_id: currentConversationId
-          };
-
-          // Update messages state immediately
-          setMessages(prev => [...prev, newMessage]);
-
-          // Log for debugging
-          console.log('Added AI response to messages:', newMessage.text.substring(0, 30) + '...');
-        }
+        console.log('Processed AI response, waiting for server message:', lastResponse.text.substring(0, 30) + '...');
       }
     }
-  }, [responses]);  // Removed lastProcessedResponseId from dependencies to ensure updates
+  }, [responses, lastProcessedResponseId]);
 
   // Add a user message to the conversation
   const addUserMessage = useCallback(async (text: string) => {

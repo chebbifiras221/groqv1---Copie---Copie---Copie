@@ -1,4 +1,5 @@
 import { useState, useCallback, useEffect } from 'react';
+import { useSettings } from './use-settings';
 
 // Helper function to find the best voice
 const getBestVoice = (availableVoices: SpeechSynthesisVoice[]): SpeechSynthesisVoice | null => {
@@ -103,6 +104,7 @@ const getBestVoice = (availableVoices: SpeechSynthesisVoice[]): SpeechSynthesisV
 };
 
 export function useWebTTS() {
+  const { settings } = useSettings();
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
@@ -320,7 +322,7 @@ export function useWebTTS() {
       // Set properties for more natural, high-quality female voice sound
       utterance.rate = 0.95;     // Slightly slower for more natural sound
       utterance.pitch = 1.05;    // Slightly higher pitch for female voice
-      utterance.volume = 1.0;    // Full volume
+      utterance.volume = settings.volume;  // Use volume from settings (0-1 range)
 
       // Set event handlers with proper error handling
       utterance.onstart = () => {
@@ -371,7 +373,7 @@ export function useWebTTS() {
 
       return true; // Return true anyway so the UI shows we're handling it
     }
-  }, [selectedVoice, stopSpeaking]);
+  }, [selectedVoice, stopSpeaking, settings]);
 
   // Function to select a voice by name
   const selectVoiceByName = useCallback((voiceName: string) => {

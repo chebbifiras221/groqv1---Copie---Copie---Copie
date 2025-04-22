@@ -4,6 +4,7 @@ import { MultibandAudioVisualizer } from "@/components/visualization/multiband";
 import { DeviceSelector } from "@/components/device-selector";
 import { useEffect, useState } from "react";
 import { Mic, MicOff } from "lucide-react";
+// import { RobotFace } from "@/components/ui/robot-face";
 
 type MicrophoneButtonProps = {
   localMultibandVolume: Float32Array[];
@@ -14,9 +15,19 @@ export const MicrophoneButton = ({
   isSpaceBarEnabled = false,
 }: MicrophoneButtonProps) => {
   const { localParticipant } = useLocalParticipant();
-  const [isMuted, setIsMuted] = useState(localParticipant.isMicrophoneEnabled);
+  const [isMuted, setIsMuted] = useState(true); // Start muted by default
   const [isSpaceBarPressed, setIsSpaceBarPressed] = useState(false);
 
+  // Ensure microphone is muted on component mount
+  useEffect(() => {
+    // Set microphone to muted on initial load
+    if (localParticipant) {
+      // Force mute the microphone
+      localParticipant.setMicrophoneEnabled(false);
+    }
+  }, [localParticipant]); // Only run once when component mounts with localParticipant
+
+  // Keep isMuted state in sync with actual microphone state
   useEffect(() => {
     setIsMuted(localParticipant.isMicrophoneEnabled === false);
   }, [localParticipant.isMicrophoneEnabled]);
@@ -48,16 +59,17 @@ export const MicrophoneButton = ({
     <div className="flex flex-col items-center gap-4 max-w-xl mx-auto w-full">
       <div className="text-text-secondary text-sm text-center mb-1">
         {isSpaceBarEnabled ? (
-          <span>Press and hold <kbd className="px-2 py-1 bg-bg-tertiary rounded border border-border-DEFAULT mx-1">Space</kbd> to speak</span>
+          <span>Press and hold <kbd className="px-2 py-1 rounded border border-border-DEFAULT/30 bg-bg-tertiary/80 mx-1 text-text-primary shadow-sm">Space</kbd> to speak</span>
         ) : (
           <span>Click the microphone to toggle</span>
         )}
       </div>
 
       <div
-        className={`flex items-center justify-center gap-3 px-4 py-3 bg-bg-tertiary rounded-lg text-text-primary border border-border-DEFAULT hover:border-primary-DEFAULT active:translate-y-[1px] active:scale-[0.99] transition-all ease-out duration-250 ${
+        className={`flex items-center justify-center gap-3 px-4 py-3 bg-bg-tertiary/80 rounded-lg text-text-primary border border-border-DEFAULT/30 hover:border-primary-DEFAULT/70 active:translate-y-[1px] active:scale-[0.99] transition-all ease-out duration-250 shadow-sm ${
           isSpaceBarPressed ? "scale-95 border-primary-DEFAULT bg-bg-overlay" : "scale-100"
         }`}
+
       >
         <TrackToggle
           source={Track.Source.Microphone}

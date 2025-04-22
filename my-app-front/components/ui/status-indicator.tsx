@@ -5,6 +5,7 @@ import { motion } from 'framer-motion';
 import { CheckCircle, AlertCircle, Loader2 } from 'lucide-react';
 import { ConnectionState } from 'livekit-client';
 import { useConnectionState } from '@livekit/components-react';
+import { BotIcon } from './bot-icon';
 
 interface StatusIndicatorProps {
   className?: string;
@@ -13,11 +14,11 @@ interface StatusIndicatorProps {
 
 export function StatusIndicator({ className = '', showText = true }: StatusIndicatorProps) {
   const connectionState = useConnectionState();
-  
+
   let statusColor = '';
   let statusText = '';
   let StatusIcon = Loader2;
-  
+
   switch (connectionState) {
     case ConnectionState.Connecting:
       statusColor = 'bg-warning-DEFAULT';
@@ -49,25 +50,16 @@ export function StatusIndicator({ className = '', showText = true }: StatusIndic
       statusText = 'Unknown';
       StatusIcon = AlertCircle;
   }
-  
+
   const isLoading = [
-    ConnectionState.Connecting, 
+    ConnectionState.Connecting,
     ConnectionState.Reconnecting,
     ConnectionState.Disconnecting
   ].includes(connectionState);
-  
+
   return (
     <div className={`flex items-center gap-2 ${className}`}>
-      <div className="relative flex items-center justify-center">
-        <div className={`w-2.5 h-2.5 rounded-full ${statusColor}`} />
-        {isLoading && (
-          <motion.div 
-            className={`absolute inset-0 w-2.5 h-2.5 rounded-full ${statusColor} opacity-75`}
-            animate={{ scale: [1, 1.5, 1], opacity: [0.7, 0, 0.7] }}
-            transition={{ duration: 2, repeat: Infinity }}
-          />
-        )}
-      </div>
+      <BotIcon connectionState={connectionState} />
       {showText && (
         <span className="text-xs text-text-secondary font-medium">
           {statusText}
@@ -86,7 +78,7 @@ export function ConnectionToast({ state, onClose }: ConnectionToastProps) {
   let statusColor = '';
   let statusText = '';
   let StatusIcon = Loader2;
-  
+
   switch (state) {
     case ConnectionState.Connected:
       statusColor = 'bg-success-DEFAULT border-success-DEFAULT';
@@ -106,12 +98,13 @@ export function ConnectionToast({ state, onClose }: ConnectionToastProps) {
     default:
       return null;
   }
-  
+
   const isLoading = state === ConnectionState.Reconnecting;
-  
+
   return (
-    <motion.div 
-      className={`fixed top-4 right-4 z-50 flex items-center gap-3 px-4 py-3 rounded-md shadow-md bg-bg-secondary border-l-4 ${statusColor}`}
+    <motion.div
+      className={`fixed top-4 right-4 z-50 flex items-center gap-3 px-4 py-3 rounded-md bg-bg-secondary border-l-4 ${statusColor}`}
+      style={{ boxShadow: '0 2px 8px rgba(0, 0, 0, 0.05)' }}
       initial={{ opacity: 0, y: -20, x: 20 }}
       animate={{ opacity: 1, y: 0, x: 0 }}
       exit={{ opacity: 0, y: -20, x: 20 }}
@@ -127,7 +120,7 @@ export function ConnectionToast({ state, onClose }: ConnectionToastProps) {
         <p className="text-sm font-medium text-text-primary">{statusText}</p>
       </div>
       {onClose && (
-        <button 
+        <button
           onClick={onClose}
           className="text-text-secondary hover:text-text-primary transition-colors"
         >

@@ -152,21 +152,22 @@ export function Typewriter({ typingSpeed = 50 }: TypewriterProps) {
               </div>
             ) : (
               messages
-                .filter(item => !item.conversation_id || item.conversation_id === currentConversationId)
+                .filter(item => item.conversation_id === currentConversationId)
                 .map((item) => (
                 <motion.div
                   key={item.id}
-                  className={`mb-8 whitespace-pre-wrap ${item.type === "ai" ? "p-6 bg-bg-secondary rounded-lg border border-border-muted shadow-sm" : "px-2"}`}
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ duration: 0.3 }}
+                  className={`mb-6 whitespace-pre-wrap ${item.type === "ai" ? "p-6 bg-bg-secondary/30 rounded-lg border-l-4 border-primary-DEFAULT/30" : "px-2"}`}
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  transition={{ duration: 0.2, ease: "easeOut" }}
+                  style={{ willChange: "opacity" }}
                 >
                   <div className="flex items-center gap-2 mb-3">
                     <div className={`w-8 h-8 rounded-full flex items-center justify-center ${item.type === "user" ? "bg-primary-DEFAULT" : "bg-secondary-DEFAULT"}`}>
                       <span className="text-white font-bold text-xs">{item.type === "user" ? "You" : "AI"}</span>
                     </div>
                     <div className="text-sm text-text-secondary font-medium">
-                      {item.type === "user" ? "You" : "AI Teacher Assistant"}
+                      {item.type === "user" ? "You" : "Programming Teacher AI"}
                     </div>
                   </div>
 
@@ -183,7 +184,7 @@ export function Typewriter({ typingSpeed = 50 }: TypewriterProps) {
                       {isTtsSpeaking ? (
                         <button
                           onClick={stopSpeaking}
-                          className="text-xs bg-danger-DEFAULT text-white px-3 py-1.5 rounded-md hover:bg-danger-hover transition-colors flex items-center gap-1"
+                          className="text-xs bg-danger-DEFAULT text-white px-3 py-1.5 rounded-full hover:opacity-90 flex items-center gap-1"
                         >
                           <span className="w-2 h-2 bg-white rounded-full animate-pulse"></span>
                           Stop TTS
@@ -191,7 +192,7 @@ export function Typewriter({ typingSpeed = 50 }: TypewriterProps) {
                       ) : isProcessingTTS ? (
                         <button
                           disabled
-                          className="text-xs bg-bg-tertiary text-text-secondary px-3 py-1.5 rounded-md cursor-wait flex items-center gap-1"
+                          className="text-xs bg-bg-tertiary/80 text-text-secondary px-3 py-1.5 rounded-full cursor-wait flex items-center gap-1"
                         >
                           <span className="w-2 h-2 bg-text-tertiary rounded-full animate-pulse"></span>
                           Loading...
@@ -199,7 +200,7 @@ export function Typewriter({ typingSpeed = 50 }: TypewriterProps) {
                       ) : (
                         <button
                           onClick={speakLastResponse}
-                          className="text-xs bg-primary-DEFAULT text-white px-3 py-1.5 rounded-md hover:bg-primary-hover transition-colors"
+                          className="text-xs bg-primary-DEFAULT text-white px-3 py-1.5 rounded-full hover:opacity-90"
                         >
                           Speak
                         </button>

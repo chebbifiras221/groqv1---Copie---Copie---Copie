@@ -5,6 +5,7 @@ import {
 } from "@livekit/components-react";
 import { RoomEvent } from "livekit-client";
 import { useWebTTS } from "./use-web-tts";
+import { useSettings } from "./use-settings";
 
 export interface AIResponse {
   id: string;
@@ -28,6 +29,7 @@ const createMessageHash = (text: string): string => {
 export function useAIResponses() {
   const state = useConnectionState();
   const room = useMaybeRoomContext();
+  const { settings } = useSettings();
   const [responses, setResponses] = useState<AIResponse[]>([]);
   const [isTtsSpeaking, setIsTtsSpeaking] = useState(false);
   const [isProcessingTTS, setIsProcessingTTS] = useState(false);

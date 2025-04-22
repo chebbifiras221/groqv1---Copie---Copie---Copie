@@ -25,7 +25,7 @@ export function CodeEditorModal({
 }: CodeEditorModalProps) {
   const [codeText, setCodeText] = useState('');
   const [codeLanguage, setCodeLanguage] = useState('javascript');
-  
+
   // Reset state when modal opens
   useEffect(() => {
     if (isOpen) {
@@ -33,24 +33,24 @@ export function CodeEditorModal({
       setCodeLanguage('javascript');
     }
   }, [isOpen]);
-  
+
   const handleCodeChange = (code: string) => {
     setCodeText(code);
   };
-  
+
   const handleLanguageChange = (language: string) => {
     setCodeLanguage(language);
   };
-  
+
   const handleSubmit = () => {
     if (!codeText.trim() || !isConnected || isSubmitting) return;
     onSubmit(codeText, codeLanguage);
     onClose();
   };
-  
+
   return (
-    <Modal 
-      isOpen={isOpen} 
+    <Modal
+      isOpen={isOpen}
       onClose={onClose}
       title="Code Editor"
       maxWidth="max-w-4xl"
@@ -66,7 +66,7 @@ export function CodeEditorModal({
             onChange={handleLanguageChange}
           />
         </div>
-        
+
         <div className="mb-6">
           <CodeEditor
             initialCode={codeText}
@@ -75,11 +75,12 @@ export function CodeEditorModal({
             onChange={handleCodeChange}
           />
         </div>
-        
+
         <div className="flex justify-end gap-3">
           <Button
             variant="outline"
             onClick={onClose}
+            className="rounded-full shadow-sm"
           >
             Cancel
           </Button>
@@ -88,7 +89,7 @@ export function CodeEditorModal({
             onClick={handleSubmit}
             disabled={!isConnected || !codeText.trim() || isSubmitting}
             isLoading={isSubmitting}
-            className="px-4 py-2 flex items-center gap-2"
+            className="px-4 py-2 flex items-center gap-2 rounded-full shadow-sm"
           >
             <Send size={16} />
             <span>Send Code</span>

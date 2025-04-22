@@ -3,19 +3,25 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Settings, LogOut, HelpCircle, Moon, Sun, Menu, X, MessageSquare } from 'lucide-react';
+import { SimpleBotFace } from './simple-bot-face';
 import { Button } from './button';
 import { StatusIndicator } from './status-indicator';
 import { useConnection } from '@/hooks/use-connection';
 import { ConversationManager } from '../conversation-manager';
+import { useTheme } from '@/hooks/use-theme';
+import { SettingsModal } from './settings-modal';
+import { HelpModal } from './help-modal';
 
 interface HeaderProps {
   title?: string;
 }
 
-export function Header({ title = "AI Teacher Assistant" }: HeaderProps) {
+export function Header({ title = "Programming Teacher AI" }: HeaderProps) {
   const { disconnect } = useConnection();
-  const [isDarkMode, setIsDarkMode] = useState(true);
+  const { theme, toggleTheme } = useTheme();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [isHelpOpen, setIsHelpOpen] = useState(false);
 
   const handleDisconnect = () => {
     if (confirm('Are you sure you want to disconnect?')) {
@@ -23,19 +29,22 @@ export function Header({ title = "AI Teacher Assistant" }: HeaderProps) {
     }
   };
 
-  const toggleTheme = () => {
-    setIsDarkMode(!isDarkMode);
-    // In a real implementation, this would toggle the theme
-    // For now, we'll just toggle the state for the icon
-  };
-
   const toggleMobileMenu = () => {
     setIsMobileMenuOpen(!isMobileMenuOpen);
   };
 
+  const openSettings = () => {
+    setIsSettingsOpen(true);
+  };
+
+  const openHelp = () => {
+    setIsHelpOpen(true);
+  };
+
   return (
     <>
-      <header className="h-16 border-b border-border-DEFAULT bg-bg-secondary flex items-center justify-between px-4 z-20 relative">
+      <header className="h-16 bg-bg-secondary flex items-center justify-between px-4 z-20 relative shadow-sm overflow-hidden">
+        <div className="absolute top-0 left-0 w-full h-1 bg-primary-DEFAULT/20"></div>
         <div className="flex items-center gap-2">
           <Button
             variant="ghost"
@@ -46,14 +55,7 @@ export function Header({ title = "AI Teacher Assistant" }: HeaderProps) {
             {isMobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
           </Button>
 
-          <motion.div
-            className="w-8 h-8 rounded-full bg-gradient-to-br from-primary-DEFAULT to-secondary-DEFAULT flex items-center justify-center"
-            initial={{ scale: 0.8 }}
-            animate={{ scale: 1 }}
-            transition={{ type: "spring", stiffness: 260, damping: 20 }}
-          >
-            <span className="text-white font-bold text-sm">AI</span>
-          </motion.div>
+          <SimpleBotFace size={32} animated={true} />
           <h1 className="text-lg font-semibold text-text-primary hidden sm:block">{title}</h1>
         </div>
 
@@ -64,15 +66,23 @@ export function Header({ title = "AI Teacher Assistant" }: HeaderProps) {
             variant="ghost"
             size="icon"
             onClick={toggleTheme}
-            title={isDarkMode ? "Switch to light mode" : "Switch to dark mode"}
+            title={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
+            className="w-10 h-10 rounded-full relative overflow-hidden"
           >
-            {isDarkMode ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
+            <span className={`absolute inset-0 flex items-center justify-center transition-opacity duration-300 ${theme === 'dark' ? 'opacity-100' : 'opacity-0'}`}>
+              <Sun className="w-5 h-5" />
+            </span>
+            <span className={`absolute inset-0 flex items-center justify-center transition-opacity duration-300 ${theme === 'light' ? 'opacity-100' : 'opacity-0'}`}>
+              <Moon className="w-5 h-5" />
+            </span>
           </Button>
 
           <Button
             variant="ghost"
             size="icon"
             title="Help"
+            onClick={openHelp}
+            className="w-10 h-10 rounded-full"
           >
             <HelpCircle className="w-5 h-5" />
           </Button>
@@ -81,17 +91,19 @@ export function Header({ title = "AI Teacher Assistant" }: HeaderProps) {
             variant="ghost"
             size="icon"
             title="Settings"
+            onClick={openSettings}
+            className="w-10 h-10 rounded-full"
           >
-            <Settings className="w-5 h-5" />
+            <Settings className="w-5 h-5 text-text-secondary" />
           </Button>
 
           <Button
             variant="outline"
             size="sm"
             onClick={handleDisconnect}
-            className="text-danger-DEFAULT hover:text-danger-DEFAULT hover:border-danger-DEFAULT"
+            className="text-danger-DEFAULT hover:text-danger-DEFAULT hover:border-danger-DEFAULT flex items-center gap-1.5"
           >
-            <LogOut className="w-4 h-4 mr-1" />
+            <LogOut className="w-4 h-4 flex-shrink-0" />
             <span className="hidden sm:inline">Disconnect</span>
           </Button>
         </div>
@@ -108,14 +120,15 @@ export function Header({ title = "AI Teacher Assistant" }: HeaderProps) {
             onClick={() => setIsMobileMenuOpen(false)}
           >
             <motion.div
-              className="absolute top-16 left-0 bottom-0 w-80 bg-bg-secondary border-r border-border-DEFAULT"
+              className="absolute top-16 left-0 bottom-0 w-64 bg-bg-secondary shadow-md"
+
               initial={{ x: -320 }}
               animate={{ x: 0 }}
               exit={{ x: -320 }}
               transition={{ type: "spring", damping: 30, stiffness: 300 }}
               onClick={(e) => e.stopPropagation()}
             >
-              <div className="p-4 border-b border-border-DEFAULT flex items-center gap-2">
+              <div className="p-4 flex items-center gap-2">
                 <MessageSquare className="w-5 h-5 text-primary-DEFAULT" />
                 <h2 className="text-lg font-semibold">Conversations</h2>
               </div>
@@ -126,6 +139,18 @@ export function Header({ title = "AI Teacher Assistant" }: HeaderProps) {
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* Settings Modal */}
+      <SettingsModal
+        isOpen={isSettingsOpen}
+        onClose={() => setIsSettingsOpen(false)}
+      />
+
+      {/* Help Modal */}
+      <HelpModal
+        isOpen={isHelpOpen}
+        onClose={() => setIsHelpOpen(false)}
+      />
     </>
   );
 }

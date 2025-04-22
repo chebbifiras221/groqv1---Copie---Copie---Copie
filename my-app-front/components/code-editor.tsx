@@ -94,6 +94,11 @@ export function CodeEditor({
           transition: all 0.3s ease;
         }
 
+        .light-theme .code-editor-container {
+          background-color: #f6f8fa;
+          border-color: #d0d7de;
+        }
+
         .code-editor-container:focus-within {
           border-color: ${langColors.primary}80;
           box-shadow: 0 0 0 2px ${langColors.primary}20;
@@ -104,8 +109,13 @@ export function CodeEditor({
           justify-content: space-between;
           align-items: center;
           padding: 12px 16px;
-          background: linear-gradient(to right, #161b22, #0d1117);
+          background: #161b22;
           border-bottom: 1px solid #21262d;
+        }
+
+        .light-theme .code-editor-header {
+          background: #eaeef2;
+          border-bottom: 1px solid #d0d7de;
         }
 
         .language-indicator {
@@ -128,6 +138,10 @@ export function CodeEditor({
           font-weight: 500;
           text-transform: uppercase;
           letter-spacing: 0.5px;
+        }
+
+        .light-theme .language-tag {
+          color: #24292f;
         }
 
         .editor-actions {
@@ -173,6 +187,12 @@ export function CodeEditor({
           background-color: #0d1117;
         }
 
+        .light-theme .line-numbers {
+          border-right: 1px solid #d0d7de;
+          color: #6e7781;
+          background-color: #f6f8fa;
+        }
+
         .line-number {
           font-size: 14px;
           line-height: 1.6;
@@ -197,6 +217,12 @@ export function CodeEditor({
           scrollbar-color: #30363d transparent;
         }
 
+        .light-theme .code-textarea {
+          background-color: #f6f8fa;
+          color: #24292f;
+          scrollbar-color: #d0d7de transparent;
+        }
+
         .code-textarea::-webkit-scrollbar {
           width: 8px;
           height: 8px;
@@ -215,8 +241,22 @@ export function CodeEditor({
           background-color: #6e7681;
         }
 
+        .light-theme .code-textarea::-webkit-scrollbar-thumb {
+          background-color: #d0d7de;
+          border-radius: 4px;
+        }
+
+        .light-theme .code-textarea::-webkit-scrollbar-thumb:hover {
+          background-color: #6e7781;
+        }
+
         .code-textarea::placeholder {
-          color: #8b949e;
+          color: #6e7681;
+          opacity: 0.6;
+        }
+
+        .light-theme .code-textarea::placeholder {
+          color: #6e7781;
           opacity: 0.6;
         }
       `}</style>

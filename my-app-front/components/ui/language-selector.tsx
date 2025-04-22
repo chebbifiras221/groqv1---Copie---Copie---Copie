@@ -19,7 +19,7 @@ interface LanguageSelectorProps {
 export function LanguageSelector({ value, onChange, className = '' }: LanguageSelectorProps) {
   const [isOpen, setIsOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
-  
+
   const languages: Language[] = [
     { value: 'javascript', label: 'JavaScript', color: '#f7df1e' },
     { value: 'typescript', label: 'TypeScript', color: '#3178c6' },
@@ -30,9 +30,9 @@ export function LanguageSelector({ value, onChange, className = '' }: LanguageSe
     { value: 'tsx', label: 'TSX', color: '#3178c6' },
     { value: 'json', label: 'JSON', color: '#8bc34a' },
   ];
-  
+
   const selectedLanguage = languages.find(lang => lang.value === value) || languages[0];
-  
+
   // Close dropdown when clicking outside
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -40,48 +40,48 @@ export function LanguageSelector({ value, onChange, className = '' }: LanguageSe
         setIsOpen(false);
       }
     };
-    
+
     document.addEventListener('mousedown', handleClickOutside);
     return () => {
       document.removeEventListener('mousedown', handleClickOutside);
     };
   }, []);
-  
+
   const handleSelect = (langValue: string) => {
     onChange(langValue);
     setIsOpen(false);
   };
-  
+
   return (
     <div className={`relative ${className}`} ref={containerRef}>
       <button
         type="button"
-        className="flex items-center gap-2 px-3 py-2 rounded-md bg-bg-tertiary border border-border-DEFAULT hover:border-border-muted transition-colors text-sm font-medium"
+        className="flex items-center gap-2 px-3 py-2 rounded-full bg-bg-tertiary/50 hover:bg-bg-tertiary transition-colors text-sm font-medium shadow-sm"
         onClick={() => setIsOpen(!isOpen)}
         aria-haspopup="listbox"
         aria-expanded={isOpen}
       >
-        <span 
-          className="w-3 h-3 rounded-full" 
+        <span
+          className="w-3 h-3 rounded-full"
           style={{ backgroundColor: selectedLanguage.color }}
         />
         <span className="text-text-primary">{selectedLanguage.label}</span>
-        <ChevronDown 
-          size={16} 
-          className={`text-text-secondary transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`} 
+        <ChevronDown
+          size={16}
+          className={`text-text-secondary transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`}
         />
       </button>
-      
+
       <AnimatePresence>
         {isOpen && (
           <motion.div
-            className="absolute z-10 mt-1 w-full bg-bg-secondary border border-border-DEFAULT rounded-md shadow-lg overflow-hidden"
+            className="absolute z-10 mt-1 w-full bg-bg-primary rounded-md shadow-lg overflow-hidden"
             initial={{ opacity: 0, y: -10 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -10 }}
             transition={{ duration: 0.15 }}
           >
-            <ul 
+            <ul
               className="py-1 max-h-60 overflow-auto"
               role="listbox"
               aria-activedescendant={selectedLanguage.value}
@@ -98,8 +98,8 @@ export function LanguageSelector({ value, onChange, className = '' }: LanguageSe
                   `}
                   onClick={() => handleSelect(language.value)}
                 >
-                  <span 
-                    className="w-3 h-3 rounded-full" 
+                  <span
+                    className="w-3 h-3 rounded-full"
                     style={{ backgroundColor: language.color }}
                   />
                   <span className="text-text-primary">{language.label}</span>

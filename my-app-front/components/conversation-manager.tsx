@@ -293,7 +293,8 @@ export function ConversationManager() {
   const formatDate = (dateString: string) => {
     try {
       const date = new Date(dateString);
-      return date.toLocaleString();
+      // Format as MM/DD HH:MM
+      return `${date.getMonth()+1}/${date.getDate()} ${date.getHours()}:${date.getMinutes().toString().padStart(2, '0')}`;
     } catch (e) {
       return dateString;
     }
@@ -305,32 +306,32 @@ export function ConversationManager() {
 
   return (
     <div className="w-full h-full flex flex-col">
-      <div className="p-4">
-        <div className="flex justify-between items-center mb-3">
+      <div className="p-3">
+        <div className="flex justify-between items-center mb-2">
+          <Button
+            onClick={createNewConversation}
+            variant="primary"
+            className="flex-1 py-1.5 flex items-center justify-center gap-1.5 text-sm bg-primary-DEFAULT hover:opacity-90 rounded-md"
+            disabled={isLoading}
+          >
+            <Plus size={14} className="flex-shrink-0" />
+            <span>New Chat</span>
+          </Button>
           <Button
             onClick={clearAllConversations}
             variant="ghost"
             size="icon"
-            className="text-danger-DEFAULT hover:text-danger-hover"
+            className="ml-2 text-danger-DEFAULT hover:text-danger-hover"
             title="Clear All Conversations"
             disabled={isLoading || conversations.length === 0}
           >
-            <Trash2 size={18} />
+            <Trash2 size={16} />
           </Button>
         </div>
-        <Button
-          onClick={createNewConversation}
-          variant="default"
-          className="w-full py-2 flex items-center justify-center gap-2"
-          disabled={isLoading}
-        >
-          <Plus size={16} />
-          <span>New Conversation</span>
-        </Button>
       </div>
 
       <div className="flex-1 overflow-y-auto">
-        <div className="p-3">
+        <div className="p-2">
           {isLoading && conversations.length === 0 && (
             <div className="flex flex-col items-center justify-center py-8 gap-4">
               <div className="w-10 h-10 rounded-full bg-bg-tertiary flex items-center justify-center animate-pulse">
@@ -353,16 +354,17 @@ export function ConversationManager() {
           )}
 
           {conversations.length > 0 && (
-            <div className="space-y-2">
+            <div className="space-y-1.5">
               {conversations.map((conversation) => (
                 <motion.div
                   key={conversation.id}
-                  className={`p-3 rounded-md hover:bg-bg-tertiary transition-colors border ${currentConversation?.id === conversation.id
-                    ? "border-border-DEFAULT bg-bg-tertiary"
-                    : "border-transparent hover:border-border-muted"}`}
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ duration: 0.2 }}
+                  className={`p-1.5 rounded-md ${currentConversation?.id === conversation.id
+                    ? "bg-bg-tertiary/60 border-l-2 border-primary-DEFAULT/30"
+                    : "hover:bg-bg-tertiary/30 hover:border-l-2 hover:border-primary-DEFAULT/20"}`}
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  transition={{ duration: 0.15, ease: "easeOut" }}
+                  style={{ willChange: "opacity, transform" }}
                   onClick={() => fetchConversation(conversation.id)}
                 >
                   {editingId === conversation.id ? (
@@ -371,7 +373,7 @@ export function ConversationManager() {
                         type="text"
                         value={editTitle}
                         onChange={(e) => setEditTitle(e.target.value)}
-                        className="bg-bg-primary border border-border-DEFAULT focus:border-primary-DEFAULT rounded-md px-2 py-1 text-text-primary w-full text-sm"
+                        className="bg-bg-primary border-0 focus:ring-1 focus:ring-primary-DEFAULT rounded-md px-2 py-1 text-text-primary w-full text-sm shadow-sm"
                         autoFocus
                         onClick={(e) => e.stopPropagation()}
                       />
@@ -404,7 +406,7 @@ export function ConversationManager() {
                   ) : (
                     <div>
                       <div className="flex justify-between items-start mb-2">
-                        <h3 className="font-medium text-text-primary break-words pr-2 text-sm">{conversation.title}</h3>
+                        <h3 className="font-medium text-text-primary break-words pr-2 text-[11px]">{conversation.title}</h3>
                         <div className="flex gap-1">
                           <Button
                             onClick={(e) => {
@@ -413,9 +415,9 @@ export function ConversationManager() {
                             }}
                             variant="ghost"
                             size="icon"
-                            className="h-6 w-6 text-text-tertiary hover:text-text-primary"
+                            className="h-5 w-5 text-text-tertiary hover:text-text-primary"
                           >
-                            <Edit size={12} />
+                            <Edit size={10} />
                           </Button>
                           <Button
                             onClick={(e) => {
@@ -424,21 +426,21 @@ export function ConversationManager() {
                             }}
                             variant="ghost"
                             size="icon"
-                            className="h-6 w-6 text-danger-DEFAULT hover:text-danger-hover"
+                            className="h-5 w-5 text-danger-DEFAULT hover:text-danger-hover"
                           >
-                            <Trash2 size={12} />
+                            <Trash2 size={10} />
                           </Button>
                         </div>
                       </div>
 
-                      <div className="flex items-center gap-1 text-xs text-text-tertiary mb-2">
-                        <Clock size={12} />
+                      <div className="flex items-center gap-1 text-[8px] text-text-tertiary mb-0.5">
+                        <Clock size={10} />
                         <span>{formatDate(conversation.updated_at)}</span>
                       </div>
 
                       {/* Message preview */}
                       {(currentConversation?.id === conversation.id && currentConversation.messages && currentConversation.messages.length > 0) ? (
-                        <div className="mt-1 text-xs text-text-secondary bg-bg-primary p-2 rounded-md">
+                        <div className="mt-1 text-[9px] text-text-secondary bg-bg-primary/30 backdrop-blur-sm p-1 rounded-md shadow-sm">
                           <span className="font-medium">
                             {currentConversation.messages[currentConversation.messages.length - 1].type === 'user' ? 'You: ' : 'AI: '}
                           </span>
@@ -448,7 +450,7 @@ export function ConversationManager() {
                           </span>
                         </div>
                       ) : conversation.messages && conversation.messages.length > 0 ? (
-                        <div className="mt-1 text-xs text-text-secondary bg-bg-primary p-2 rounded-md">
+                        <div className="mt-1 text-[9px] text-text-secondary bg-bg-primary/30 backdrop-blur-sm p-1 rounded-md shadow-sm">
                           <span className="font-medium">
                             {conversation.messages[conversation.messages.length - 1].type === 'user' ? 'You: ' : 'AI: '}
                           </span>
@@ -458,7 +460,7 @@ export function ConversationManager() {
                           </span>
                         </div>
                       ) : conversation.last_message ? (
-                        <div className="mt-1 text-xs text-text-secondary bg-bg-primary p-2 rounded-md">
+                        <div className="mt-1 text-[9px] text-text-secondary bg-bg-primary/30 backdrop-blur-sm p-1 rounded-md shadow-sm">
                           <span className="font-medium">
                             {conversation.last_message.type === 'user' ? 'You: ' : 'AI: '}
                           </span>

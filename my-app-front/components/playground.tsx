@@ -42,9 +42,13 @@ export function Playground({ onConnect }: PlaygroundProps) {
     setLastConnectionState(roomState);
   }, [roomState, lastConnectionState]);
 
+  // Ensure microphone is muted whenever connection state changes
   useEffect(() => {
     if (roomState === ConnectionState.Connected) {
-      localParticipant.setMicrophoneEnabled(true);
+      // Force mute the microphone on connection
+      setTimeout(() => {
+        localParticipant.setMicrophoneEnabled(false);
+      }, 100); // Small delay to ensure it happens after connection is established
     }
   }, [localParticipant, roomState]);
 
@@ -105,7 +109,7 @@ export function Playground({ onConnect }: PlaygroundProps) {
 
   return (
     <div className="flex flex-col h-full w-full">
-      <Header title="AI Teacher Assistant" />
+      <Header title="Programming Teacher AI" />
 
       <AnimatePresence>
         {showConnectionToast && (
@@ -118,7 +122,7 @@ export function Playground({ onConnect }: PlaygroundProps) {
 
       <div className="flex flex-1 overflow-hidden">
         {isConnected && (
-          <div className="hidden md:block w-80 lg:w-96 border-r border-border-DEFAULT">
+          <div className="hidden md:block w-64 lg:w-72 bg-bg-secondary relative overflow-hidden">
             <ConversationManager />
           </div>
         )}
@@ -126,11 +130,11 @@ export function Playground({ onConnect }: PlaygroundProps) {
           <div className="h-full pb-48 overflow-hidden">
             <Typewriter typingSpeed={25} />
           </div>
-          <div className="absolute left-0 bottom-0 w-full bg-bg-secondary border-t border-border-DEFAULT shadow-lg">
+          <div className="absolute left-0 bottom-0 w-full bg-bg-secondary shadow-sm">
             <div className="pt-4 pb-2 px-4">
               {audioTileContent}
             </div>
-            <div className="border-t border-border-DEFAULT">
+            <div className="bg-bg-secondary">
               <TextInput isConnected={isConnected} />
             </div>
           </div>

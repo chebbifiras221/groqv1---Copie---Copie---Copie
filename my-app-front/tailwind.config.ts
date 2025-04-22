@@ -1,8 +1,8 @@
 import type { Config } from "tailwindcss";
 import colors from "tailwindcss/colors";
 
-const custom = {
-  // GitHub-inspired dark theme colors
+// Define both dark and light theme colors
+const darkTheme = {
   primary: {
     DEFAULT: "#2188ff",
     hover: "#0366d6",
@@ -70,6 +70,81 @@ const custom = {
     overlay: "#161b22",
     inset: "#010409",
   },
+};
+
+const lightTheme = {
+  primary: {
+    DEFAULT: "#0969da",
+    hover: "#0969da",
+    focus: "#0969da",
+    muted: "#0969da80",
+  },
+  secondary: {
+    DEFAULT: "#8250df",
+    hover: "#6e40c9",
+    focus: "#5a32a3",
+  },
+  success: {
+    DEFAULT: "#1a7f37",
+    hover: "#2ea043",
+    focus: "#238636",
+  },
+  danger: {
+    DEFAULT: "#cf222e",
+    hover: "#a40e26",
+    focus: "#86061d",
+  },
+  warning: {
+    DEFAULT: "#9a6700",
+    hover: "#7d4e00",
+    focus: "#633c01",
+  },
+  bg: {
+    primary: "#ffffff",
+    secondary: "#f6f8fa",
+    tertiary: "#eaeef2",
+    overlay: "#f6f8fa",
+    inset: "#f6f8fa",
+    inverse: "#0d1117",
+  },
+  border: {
+    DEFAULT: "#d0d7de",
+    muted: "#eaeef2",
+    subtle: "#1b1f241a",
+  },
+  text: {
+    primary: "#24292f",
+    secondary: "#57606a",
+    tertiary: "#6e7781",
+    placeholder: "#6e778180",
+    disabled: "#8c959f",
+    inverse: "#ffffff",
+    link: "#0969da",
+    danger: "#cf222e",
+    success: "#1a7f37",
+    warning: "#9a6700",
+    white: "#ffffff",
+  },
+  accent: {
+    emphasis: "#0969da",
+    muted: "#ddf4ff",
+    subtle: "#ddf4ff80",
+  },
+  neutral: {
+    emphasis: "#6e7781",
+    muted: "#6e77811a",
+    subtle: "#6e77810d",
+  },
+  canvas: {
+    DEFAULT: "#ffffff",
+    overlay: "#f6f8fa",
+    inset: "#f6f8fa",
+  },
+};
+
+const custom = {
+  // Use dark theme as default
+  ...darkTheme
 };
 
 export default {

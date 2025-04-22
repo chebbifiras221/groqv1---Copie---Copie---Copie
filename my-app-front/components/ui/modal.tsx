@@ -26,7 +26,7 @@ export function Modal({
   // Handle escape key press
   useEffect(() => {
     setIsMounted(true);
-    
+
     const handleEscape = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
         onClose();
@@ -63,7 +63,7 @@ export function Modal({
           >
             {/* Modal */}
             <motion.div
-              className={`bg-bg-secondary border border-border-DEFAULT rounded-lg shadow-xl ${maxWidth} w-full max-h-[90vh] overflow-hidden`}
+              className={`bg-bg-primary rounded-lg shadow-lg ${maxWidth} w-full max-h-[90vh] overflow-hidden`}
               initial={{ scale: 0.95, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
               exit={{ scale: 0.95, opacity: 0 }}
@@ -72,7 +72,7 @@ export function Modal({
             >
               {/* Header */}
               {(title || showCloseButton) && (
-                <div className="flex items-center justify-between p-4 border-b border-border-DEFAULT">
+                <div className="flex items-center justify-between p-4 bg-bg-secondary">
                   {title && <h2 className="text-lg font-semibold text-text-primary">{title}</h2>}
                   {showCloseButton && (
                     <button
@@ -85,7 +85,7 @@ export function Modal({
                   )}
                 </div>
               )}
-              
+
               {/* Content */}
               <div className="overflow-y-auto max-h-[calc(90vh-4rem)]">
                 {children}

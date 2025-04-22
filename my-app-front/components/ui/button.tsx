@@ -4,17 +4,17 @@ import { cn } from "@/lib/utils";
 import { LoadingSVG } from "./loading-svg";
 
 const buttonVariants = cva(
-  "relative inline-flex items-center justify-center whitespace-nowrap rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary disabled:pointer-events-none disabled:opacity-50",
+  "relative inline-flex items-center justify-center whitespace-nowrap rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary/50 disabled:pointer-events-none disabled:opacity-50 leading-none",
   {
     variants: {
       variant: {
-        default: "bg-button-bg text-button-text hover:bg-button-hover-bg active:bg-button-active-bg",
-        primary: "bg-primary-DEFAULT text-white hover:bg-primary-hover active:bg-primary-focus",
-        secondary: "bg-secondary-DEFAULT text-white hover:bg-secondary-hover active:bg-secondary-focus",
-        success: "bg-success-DEFAULT text-white hover:bg-success-hover active:bg-success-focus",
-        danger: "bg-danger-DEFAULT text-white hover:bg-danger-hover active:bg-danger-focus",
-        warning: "bg-warning-DEFAULT text-text-inverse hover:bg-warning-hover active:bg-warning-focus",
-        outline: "border border-border-DEFAULT bg-transparent hover:bg-bg-tertiary hover:text-text-primary",
+        default: "bg-button-bg text-button-text hover:bg-button-hover-bg active:bg-button-active-bg shadow-sm",
+        primary: "bg-primary-DEFAULT/90 text-white hover:bg-primary-hover active:bg-primary-focus shadow-sm",
+        secondary: "bg-secondary-DEFAULT/90 text-white hover:bg-secondary-hover active:bg-secondary-focus shadow-sm",
+        success: "bg-success-DEFAULT/90 text-white hover:bg-success-hover active:bg-success-focus shadow-sm",
+        danger: "bg-danger-DEFAULT/90 text-white hover:bg-danger-hover active:bg-danger-focus shadow-sm",
+        warning: "bg-warning-DEFAULT/90 text-text-inverse hover:bg-warning-hover active:bg-warning-focus shadow-sm",
+        outline: "bg-transparent hover:bg-bg-tertiary hover:text-text-primary shadow-sm",
         ghost: "bg-transparent text-text-secondary hover:bg-bg-tertiary hover:text-text-primary",
         link: "bg-transparent text-primary-DEFAULT underline-offset-4 hover:underline",
       },

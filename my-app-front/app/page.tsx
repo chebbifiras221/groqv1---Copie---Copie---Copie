@@ -6,12 +6,18 @@ import { RoomComponent } from "@/components/room";
 import { ConnectionProvider } from "@/hooks/use-connection";
 import { ConnectionPage } from "@/components/connection-page";
 import { useConnection } from "@/hooks/use-connection";
+import { ThemeProvider } from "@/hooks/use-theme";
+import { SettingsProvider } from "@/hooks/use-settings";
 
 export default function Home() {
   return (
-    <ConnectionProvider>
-      <AppContent />
-    </ConnectionProvider>
+    <ThemeProvider>
+      <SettingsProvider>
+        <ConnectionProvider>
+          <AppContent />
+        </ConnectionProvider>
+      </SettingsProvider>
+    </ThemeProvider>
   );
 }
 
@@ -21,7 +27,7 @@ function AppContent() {
   return (
     <div className="h-dvh w-full bg-bg-primary">
       {shouldConnect ? <RoomComponent /> : <ConnectionPage />}
-      <div className="fixed bottom-2 right-2 text-xs text-text-tertiary">
+      <div className="fixed bottom-2 right-2 text-xs text-text-tertiary opacity-70 hover:opacity-100 transition-opacity">
         <span>Powered by </span>
         <a
           href="https://docs.livekit.io/agents"

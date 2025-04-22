@@ -4,7 +4,8 @@ import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { useConnection } from "@/hooks/use-connection";
-import { Mic, Code, MessageSquare, Github } from "lucide-react";
+import { Code, MessageSquare, Github, Mic } from "lucide-react";
+import { SimpleBotFace } from "@/components/ui/simple-bot-face";
 
 export function ConnectionPage() {
   const { connect } = useConnection();
@@ -80,57 +81,45 @@ export function ConnectionPage() {
   ];
 
   return (
-    <div className="flex flex-col items-center justify-center h-full w-full overflow-auto py-8">
+    <div className="flex flex-col items-center justify-center h-full w-full overflow-auto py-8 relative">
       <motion.div
         className="flex flex-col items-center gap-8 max-w-xl w-full text-center px-4"
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.5 }}
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        transition={{ duration: 0.3, ease: "easeOut" }}
       >
         <div className="flex flex-col items-center gap-4">
-          <motion.div
-            className="w-16 h-16 rounded-full bg-gradient-to-br from-primary-DEFAULT to-secondary-DEFAULT flex items-center justify-center shadow-lg"
-            initial={{ scale: 0.8 }}
-            animate={{ scale: 1 }}
-            transition={{
-              type: "spring",
-              stiffness: 260,
-              damping: 20,
-              delay: 0.1
-            }}
-          >
-            <Mic className="w-8 h-8 text-white" />
-          </motion.div>
+          <SimpleBotFace size={80} animated={true} />
 
           <motion.h1
-            className="text-4xl font-bold bg-gradient-to-r from-primary-DEFAULT to-secondary-DEFAULT text-transparent bg-clip-text"
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.2 }}
+            className="text-4xl font-bold text-primary-DEFAULT"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ delay: 0.1, duration: 0.2 }}
           >
-            AI Teacher Assistant
+            Programming Teacher AI
           </motion.h1>
 
           <motion.p
             className="text-text-secondary text-lg max-w-md"
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.3 }}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ delay: 0.2, duration: 0.2 }}
           >
-            Connect to start a conversation with your AI teaching assistant. Your voice will be transcribed in real-time.
+            Connect to start a conversation with your programming teacher AI. Your voice will be transcribed in real-time.
           </motion.p>
         </div>
 
         <motion.div
           className="w-full max-w-md"
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.4 }}
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ delay: 0.25, duration: 0.2 }}
         >
           <Button
             variant="primary"
             size="lg"
-            className="w-full text-base font-medium"
+            className="w-full text-base font-medium rounded-full bg-primary-DEFAULT hover:opacity-90"
             onClick={handleConnect}
             isLoading={isLoading}
             disabled={isLoading}
@@ -143,19 +132,19 @@ export function ConnectionPage() {
           {showFeatures && (
             <motion.div
               className="grid grid-cols-1 md:grid-cols-3 gap-6 w-full mt-4"
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.5, staggerChildren: 0.1 }}
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ delay: 0.3, duration: 0.2 }}
             >
               {features.map((feature, index) => (
                 <motion.div
                   key={index}
-                  className="bg-bg-secondary border border-border-muted rounded-lg p-6 flex flex-col items-center text-center gap-3 hover:border-border-DEFAULT transition-colors"
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: 0.5 + (index * 0.1) }}
+                  className="bg-bg-secondary/50 rounded-lg p-6 flex flex-col items-center text-center gap-3 transition-transform hover:translate-y-[-2px]"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  transition={{ delay: 0.3 + (index * 0.05), duration: 0.2 }}
                 >
-                  <div className="p-3 rounded-full bg-bg-tertiary">
+                  <div className="p-3 rounded-full bg-bg-tertiary/50">
                     {feature.icon}
                   </div>
                   <h3 className="text-lg font-medium text-text-primary">{feature.title}</h3>
