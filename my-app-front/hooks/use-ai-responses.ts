@@ -3,9 +3,10 @@ import {
   useConnectionState,
   useMaybeRoomContext,
 } from "@livekit/components-react";
-import { RoomEvent } from "livekit-client";
+import { RoomEvent, RemoteParticipant, DataPacket_Kind } from "livekit-client";
 import { useWebTTS } from "./use-web-tts";
 import { useSettings } from "./use-settings";
+import { useErrorHandler } from "./use-error-handler";
 
 export interface AIResponse {
   id: string;
@@ -26,14 +27,21 @@ const createMessageHash = (text: string): string => {
   return text.substring(0, 100);
 };
 
+/**
+ * Custom hook for handling AI responses and text-to-speech functionality
+ *
+ * This hook manages the reception and processing of AI responses from the server,
+ * as well as controlling text-to-speech playback for these responses.
+ */
 export function useAIResponses() {
   const state = useConnectionState();
   const room = useMaybeRoomContext();
-  const { settings } = useSettings();
+  const { settings } = useSettings(); // Access settings for TTS configuration
   const [responses, setResponses] = useState<AIResponse[]>([]);
   const [isTtsSpeaking, setIsTtsSpeaking] = useState(false);
-  const [isProcessingTTS, setIsProcessingTTS] = useState(false);
+  const [isProcessingTTS] = useState(false); // For future use with loading states
   const webTTS = useWebTTS();
+  const { handleError } = useErrorHandler();
 
 
 
@@ -42,13 +50,18 @@ export function useAIResponses() {
     setIsTtsSpeaking(webTTS.isPlaying);
   }, [webTTS.isPlaying]);
 
-  // Force a high-quality female voice when voices are loaded
+  /**
+   * Select a high-quality female voice for text-to-speech when voices are loaded
+   *
+   * This effect runs when the available voices list changes and attempts to select
+   * the best available female voice based on a priority list.
+   */
   useEffect(() => {
     if (webTTS.voices && webTTS.voices.length > 0) {
-      // List all available voices in the console
+      // List all available voices in the console for debugging
       webTTS.listAvailableVoices();
 
-      // Try to select a high-quality female voice in this order
+      // Priority list of preferred female voices across different platforms
       const femaleVoices = [
         'Zira',       // Microsoft Zira (Windows)
         'Female',     // Any voice with 'Female' in the name
@@ -73,21 +86,26 @@ export function useAIResponses() {
 
 
 
-  // Function to restart TTS for the last response
+  /**
+   * Function to manually speak the last AI response using text-to-speech
+   *
+   * This function is triggered when the user clicks the 'Speak' button for an AI response.
+   * It includes logic to prevent duplicate speech requests and manages the TTS state.
+   */
   const speakLastResponse = useCallback(() => {
     if (responses.length > 0) {
       // Get the most recent response
       const lastResponse = responses[responses.length - 1];
 
-      // Create a hash of the message
+      // Create a hash of the message for tracking
       const messageHash = createMessageHash(lastResponse.text);
       const currentTime = Date.now();
 
-      // For manual speaking, we'll always allow it regardless of whether it was recently spoken
-      // But we'll still check for rapid duplicate clicks
+      // For manual speaking, we'll allow it even if it was recently spoken automatically
+      // But we'll still check for rapid duplicate clicks (within 1 second)
       const isDuplicate =
         lastResponse.text === lastResponseText &&
-        (currentTime - lastResponseTime) < 1000; // Reduced to 1 second for manual clicks
+        (currentTime - lastResponseTime) < 1000;
 
       if (!isDuplicate) {
         // Update last response tracking
@@ -102,21 +120,31 @@ export function useAIResponses() {
 
         // Add a small delay to ensure any other audio has stopped
         setTimeout(() => {
-          // Use web speech to speak the response
-          webTTS.speak(lastResponse.text);
-          console.log('Speaking last response with Web TTS (manual) with hash:', messageHash);
+          try {
+            // Use web speech to speak the response
+            webTTS.speak(lastResponse.text);
+            console.log('Speaking last response with Web TTS (manual) with hash:', messageHash);
+          } catch (error) {
+            handleError(error, 'audio', 'Failed to play text-to-speech');
+          }
         }, 100);
       } else {
         console.log('Skipping duplicate manual speak request');
       }
     }
-  }, [responses, webTTS]);
+  }, [responses, webTTS, handleError]);
 
-  // Function to stop TTS
+  /**
+   * Function to stop any currently playing text-to-speech
+   */
   const stopSpeaking = useCallback(() => {
-    webTTS.stopSpeaking();
-    setIsTtsSpeaking(false);
-  }, [webTTS]);
+    try {
+      webTTS.stopSpeaking();
+      setIsTtsSpeaking(false);
+    } catch (error) {
+      handleError(error, 'audio', 'Failed to stop text-to-speech');
+    }
+  }, [webTTS, handleError]);
 
   // Function to clear the spoken messages tracking
   const clearSpokenMessages = useCallback(() => {
@@ -129,7 +157,7 @@ export function useAIResponses() {
       return;
     }
 
-    const handleDataReceived = (payload: Uint8Array, topic?: string) => {
+    const handleDataReceived = (payload: Uint8Array, _participant?: RemoteParticipant, _kind?: DataPacket_Kind, topic?: string) => {
       try {
         // Handle binary audio data with specific topic
         if (topic === "binary_audio") {
@@ -198,7 +226,7 @@ export function useAIResponses() {
               console.log('Speaking web TTS message with hash:', messageHash);
             }, 100);
             return;
-          } else if (data.type === "ai_response") {
+          } else if (data.type === "ai_response" && data.text) {
             const currentTime = Date.now();
 
             // Check for duplicate responses (same text within 3 seconds)
@@ -212,13 +240,30 @@ export function useAIResponses() {
               lastResponseTime = currentTime;
 
               const newResponse = {
-                id: currentTime.toString(),
+                id: data.id || currentTime.toString(), // Use provided ID or fallback to timestamp
                 text: data.text,
                 receivedTime: currentTime,
               };
 
               setResponses((prev) => [...prev, newResponse]);
               console.log('Processing AI response:', data.text.substring(0, 30) + '...');
+
+              // Auto-speak if enabled in settings
+              if (webTTS && settings.autoSpeak) {
+                try {
+                  // Create a hash for tracking
+                  const messageHash = createMessageHash(data.text);
+                  spokenMessages.set(messageHash, currentTime);
+
+                  // Add a small delay to ensure any other audio has stopped
+                  setTimeout(() => {
+                    webTTS.speak(data.text);
+                    console.log('Auto-speaking AI response with hash:', messageHash.substring(0, 8));
+                  }, 100);
+                } catch (speakError) {
+                  handleError(speakError, 'audio', 'Failed to auto-speak response');
+                }
+              }
             } else {
               console.log('Skipping duplicate AI response');
             }
@@ -240,16 +285,26 @@ export function useAIResponses() {
           }
         }
       } catch (error) {
-        console.error("Error handling data:", error);
+        handleError(error, 'api', 'Error processing server data');
       }
     };
 
-    room.on(RoomEvent.DataReceived, handleDataReceived);
+    // Safely add event listener
+    try {
+      room.on(RoomEvent.DataReceived, handleDataReceived);
+    } catch (error) {
+      handleError(error, 'connection', 'Error setting up data receiver');
+    }
 
     return () => {
-      room.off(RoomEvent.DataReceived, handleDataReceived);
+      // Safely remove event listener
+      try {
+        room.off(RoomEvent.DataReceived, handleDataReceived);
+      } catch (error) {
+        console.error('Error removing data receiver:', error);
+      }
     };
-  }, [room, state, webTTS]);
+  }, [room, state, webTTS, settings, handleError]);
 
   // Clear spoken messages when the room changes
   useEffect(() => {

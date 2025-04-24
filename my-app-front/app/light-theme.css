@@ -1,10 +1,10 @@
 /* Light Theme Styles */
 .light-theme {
   /* Shadow colors - much lighter for light theme */
-  --shadow-color: rgba(0, 0, 0, 0.05);
-  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.02);
-  --shadow-md: 0 2px 4px rgba(0, 0, 0, 0.03);
-  --shadow-lg: 0 4px 8px rgba(0, 0, 0, 0.04);
+  --shadow-color: rgba(0, 0, 0, 0.02);
+  --shadow-sm: 0 1px 1px rgba(0, 0, 0, 0.01);
+  --shadow-md: 0 1px 2px rgba(0, 0, 0, 0.015);
+  --shadow-lg: 0 2px 4px rgba(0, 0, 0, 0.02);
   /* Background colors */
   --bg-primary: #ffffff;
   --bg-secondary: #f6f8fa;
@@ -147,13 +147,15 @@
 
 /* Fix for microphone button in light theme */
 .light-theme div[class*="bg-bg-tertiary rounded-lg"] {
-  background-color: var(--bg-secondary) !important;
-  border-color: var(--border-default) !important;
+  background-color: #f0f2f5 !important;
+  border-color: #e1e4e8 !important;
+  box-shadow: none !important;
 }
 
 .light-theme div[class*="bg-bg-tertiary rounded-lg"][class*="border-primary-DEFAULT"] {
   border-color: var(--primary-default) !important;
-  background-color: var(--bg-tertiary) !important;
+  background-color: #f0f2f5 !important;
+  box-shadow: none !important;
 }
 
 /* Fix for microphone button in light theme */
@@ -186,7 +188,7 @@
 
 /* Fix for shadows in light theme */
 .light-theme [style*="box-shadow"] {
-  box-shadow: var(--shadow-sm) !important;
+  box-shadow: none !important;
 }
 
 /* Fix for gradients in light theme */
@@ -282,4 +284,21 @@
 
 .light-theme ::-webkit-scrollbar-thumb:hover {
   background-color: rgba(0, 0, 0, 0.3) !important;
+}
+
+/* Fix for language selector in light theme */
+.light-theme button[class*="rounded-full bg-bg-tertiary"] {
+  background-color: #f1f5f9 !important;
+  color: var(--text-primary) !important;
+  border: 1px solid #e2e8f0 !important;
+}
+
+.light-theme button[class*="rounded-full bg-bg-tertiary"]:hover {
+  background-color: #e2e8f0 !important;
+}
+
+.light-theme div[class*="absolute z-10 mt-1 w-full bg-bg-primary rounded-md"] {
+  background-color: white !important;
+  border: 1px solid #e2e8f0 !important;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05) !important;
 }

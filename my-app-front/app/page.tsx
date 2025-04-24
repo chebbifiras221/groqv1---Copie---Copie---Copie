@@ -27,16 +27,7 @@ function AppContent() {
   return (
     <div className="h-dvh w-full bg-bg-primary">
       {shouldConnect ? <RoomComponent /> : <ConnectionPage />}
-      <div className="fixed bottom-2 right-2 text-xs text-text-tertiary opacity-70 hover:opacity-100 transition-opacity">
-        <span>Powered by </span>
-        <a
-          href="https://docs.livekit.io/agents"
-          className="text-primary-DEFAULT hover:underline"
-          target="_blank"
-        >
-          LiveKit
-        </a>
-      </div>
+      {/* Powered by LiveKit text removed */}
     </div>
   );
 }

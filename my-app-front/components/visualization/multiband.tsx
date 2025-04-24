@@ -73,16 +73,16 @@ export const MultibandAudioVisualizer = ({
 
         return (
           <div
-            className={`bg-white ${
+            className={`${state === "speaking" ? "bg-primary-DEFAULT" : "bg-primary-DEFAULT/40"} ${
               isCenter && state === "listening" ? "animate-pulse" : ""
-            }`}
+            } transition-all duration-300`}
             key={"frequency-" + index}
             style={{
               height:
                 minBarHeight + frequency * (maxBarHeight - minBarHeight) + "px",
               width: barWidth + "px",
               transition:
-                "background-color 0.35s ease-out, transform 0.25s ease-out",
+                "all 0.35s ease-out",
               transform: transform,
               borderRadius: borderRadius + "px",
               boxShadow:

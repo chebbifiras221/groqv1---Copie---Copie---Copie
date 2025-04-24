@@ -8,13 +8,13 @@ const buttonVariants = cva(
   {
     variants: {
       variant: {
-        default: "bg-button-bg text-button-text hover:bg-button-hover-bg active:bg-button-active-bg shadow-sm",
-        primary: "bg-primary-DEFAULT/90 text-white hover:bg-primary-hover active:bg-primary-focus shadow-sm",
-        secondary: "bg-secondary-DEFAULT/90 text-white hover:bg-secondary-hover active:bg-secondary-focus shadow-sm",
-        success: "bg-success-DEFAULT/90 text-white hover:bg-success-hover active:bg-success-focus shadow-sm",
-        danger: "bg-danger-DEFAULT/90 text-white hover:bg-danger-hover active:bg-danger-focus shadow-sm",
-        warning: "bg-warning-DEFAULT/90 text-text-inverse hover:bg-warning-hover active:bg-warning-focus shadow-sm",
-        outline: "bg-transparent hover:bg-bg-tertiary hover:text-text-primary shadow-sm",
+        default: "bg-button-bg text-button-text hover:bg-button-hover-bg active:bg-button-active-bg",
+        primary: "bg-primary-DEFAULT/80 text-white hover:bg-primary-hover active:bg-primary-focus border border-primary-DEFAULT/20 shadow-none",
+        secondary: "bg-secondary-DEFAULT/90 text-white hover:bg-secondary-hover active:bg-secondary-focus",
+        success: "bg-success-DEFAULT/90 text-white hover:bg-success-hover active:bg-success-focus",
+        danger: "bg-danger-DEFAULT/90 text-white hover:bg-danger-hover active:bg-danger-focus",
+        warning: "bg-warning-DEFAULT/90 text-text-inverse hover:bg-warning-hover active:bg-warning-focus",
+        outline: "bg-transparent border border-bg-tertiary/30 hover:bg-bg-tertiary/10 hover:text-text-primary shadow-none",
         ghost: "bg-transparent text-text-secondary hover:bg-bg-tertiary hover:text-text-primary",
         link: "bg-transparent text-primary-DEFAULT underline-offset-4 hover:underline",
       },

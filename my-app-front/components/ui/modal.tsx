@@ -1,7 +1,6 @@
 "use client";
 
-import React, { useEffect, useState } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import React, { useEffect, useState, useCallback } from 'react';
 import { X } from 'lucide-react';
 
 interface ModalProps {
@@ -11,6 +10,11 @@ interface ModalProps {
   children: React.ReactNode;
   maxWidth?: string;
   showCloseButton?: boolean;
+  /**
+   * ID of the element that labels the modal
+   * Used for accessibility to connect the modal to its title
+   */
+  'aria-labelledby'?: string;
 }
 
 export function Modal({
@@ -19,19 +23,27 @@ export function Modal({
   title,
   children,
   maxWidth = 'max-w-2xl',
-  showCloseButton = true
+  showCloseButton = true,
+  'aria-labelledby': ariaLabelledBy
 }: ModalProps) {
   const [isMounted, setIsMounted] = useState(false);
 
-  // Handle escape key press
+  /**
+   * Memoize the escape handler to prevent unnecessary re-renders
+   * This ensures we don't create a new function on every render
+   */
+  const handleEscape = useCallback((e: KeyboardEvent) => {
+    if (e.key === 'Escape') {
+      onClose();
+    }
+  }, [onClose]);
+
+  /**
+   * Handle escape key press and body scroll lock
+   * This improves accessibility and prevents scrolling behind the modal
+   */
   useEffect(() => {
     setIsMounted(true);
-
-    const handleEscape = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        onClose();
-      }
-    };
 
     if (isOpen) {
       document.addEventListener('keydown', handleEscape);
@@ -44,36 +56,37 @@ export function Modal({
       // Restore scrolling when modal is closed
       document.body.style.overflow = 'auto';
     };
-  }, [isOpen, onClose]);
+  }, [isOpen, handleEscape]);
 
   // Don't render on the server
   if (!isMounted) return null;
 
   return (
-    <AnimatePresence>
+    <>
       {isOpen && (
         <>
           {/* Backdrop */}
-          <motion.div
-            className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
+          <div
+            className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4"
+            style={{ contain: 'content' }}
             onClick={onClose}
           >
             {/* Modal */}
-            <motion.div
-              className={`bg-bg-primary rounded-lg shadow-lg ${maxWidth} w-full max-h-[90vh] overflow-hidden`}
-              initial={{ scale: 0.95, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              exit={{ scale: 0.95, opacity: 0 }}
-              transition={{ type: 'spring', damping: 20, stiffness: 300 }}
+            <div
+              className={`bg-bg-primary rounded-lg ${maxWidth} w-full max-h-[90vh] overflow-hidden border border-bg-tertiary/30`}
+              style={{
+                contain: 'content',
+                transform: 'translateZ(0)' // Force GPU acceleration
+              }}
               onClick={(e) => e.stopPropagation()}
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby={ariaLabelledBy || (title ? 'modal-title' : undefined)}
             >
               {/* Header */}
               {(title || showCloseButton) && (
                 <div className="flex items-center justify-between p-4 bg-bg-secondary">
-                  {title && <h2 className="text-lg font-semibold text-text-primary">{title}</h2>}
+                  {title && <h2 id="modal-title" className="text-lg font-semibold text-text-primary">{title}</h2>}
                   {showCloseButton && (
                     <button
                       onClick={onClose}
@@ -87,13 +100,16 @@ export function Modal({
               )}
 
               {/* Content */}
-              <div className="overflow-y-auto max-h-[calc(90vh-4rem)]">
+              <div
+                className="overflow-y-auto max-h-[calc(90vh-4rem)]"
+                style={{ contain: 'content', transform: 'translateZ(0)' }}
+              >
                 {children}
               </div>
-            </motion.div>
-          </motion.div>
+            </div>
+          </div>
         </>
       )}
-    </AnimatePresence>
+    </>
   );
 }

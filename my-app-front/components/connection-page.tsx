@@ -87,17 +87,19 @@ export function ConnectionPage() {
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         transition={{ duration: 0.3, ease: "easeOut" }}
+        style={{ willChange: 'opacity, transform' }}
       >
         <div className="flex flex-col items-center gap-4">
-          <SimpleBotFace size={80} animated={true} />
+          <SimpleBotFace size={80} />
 
           <motion.h1
             className="text-4xl font-bold text-primary-DEFAULT"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             transition={{ delay: 0.1, duration: 0.2 }}
+            style={{ willChange: 'opacity' }}
           >
-            Programming Teacher AI
+            Programming Teacher
           </motion.h1>
 
           <motion.p
@@ -105,8 +107,9 @@ export function ConnectionPage() {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             transition={{ delay: 0.2, duration: 0.2 }}
+            style={{ willChange: 'opacity' }}
           >
-            Connect to start a conversation with your programming teacher AI. Your voice will be transcribed in real-time.
+            Connect to start a conversation with your programming teacher. Your voice will be transcribed in real-time.
           </motion.p>
         </div>
 
@@ -115,6 +118,7 @@ export function ConnectionPage() {
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           transition={{ delay: 0.25, duration: 0.2 }}
+          style={{ willChange: 'opacity' }}
         >
           <Button
             variant="primary"
@@ -135,16 +139,18 @@ export function ConnectionPage() {
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               transition={{ delay: 0.3, duration: 0.2 }}
+              style={{ willChange: 'opacity' }}
             >
               {features.map((feature, index) => (
                 <motion.div
                   key={index}
-                  className="bg-bg-secondary/50 rounded-lg p-6 flex flex-col items-center text-center gap-3 transition-transform hover:translate-y-[-2px]"
+                  className="bg-bg-primary border border-bg-tertiary/30 rounded-lg p-6 flex flex-col items-center text-center gap-3 transition-all duration-300 hover:translate-y-[-2px] hover:shadow-md"
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
                   transition={{ delay: 0.3 + (index * 0.05), duration: 0.2 }}
+                  style={{ willChange: 'opacity, transform' }}
                 >
-                  <div className="p-3 rounded-full bg-bg-tertiary/50">
+                  <div className="p-3 rounded-full bg-bg-tertiary/30">
                     {feature.icon}
                   </div>
                   <h3 className="text-lg font-medium text-text-primary">{feature.title}</h3>
@@ -160,6 +166,7 @@ export function ConnectionPage() {
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           transition={{ delay: 0.8 }}
+          style={{ willChange: 'opacity' }}
         >
           <Github className="w-4 h-4" />
           <span>Powered by LiveKit and Groq</span>

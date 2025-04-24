@@ -74,31 +74,19 @@ export function TextInput({ isConnected }: TextInputProps) {
 
   return (
     <div className="flex flex-col w-full px-6 py-4 gap-2 relative">
-      <div className="flex justify-between items-center">
-        <div className="flex items-center">
-          <Button
-            onClick={openCodeEditor}
-            variant="ghost"
-            size="sm"
-            className="text-text-secondary hover:text-primary-DEFAULT/90 hover:bg-bg-tertiary/70 flex items-center gap-1.5 px-3 py-2 rounded-md"
-            title="Open code editor"
-          >
-            <Code size={16} className="flex-shrink-0" />
-            <span className="hidden sm:inline">Code</span>
-          </Button>
-        </div>
+
+      <div className="flex items-center gap-5 w-full max-w-4xl mx-auto flex-nowrap">
         <Button
-          onClick={handleClearMessages}
+          onClick={openCodeEditor}
           variant="ghost"
           size="sm"
-          className="text-text-secondary hover:text-danger-DEFAULT/90 hover:bg-bg-tertiary/70 flex items-center gap-1.5 px-3 py-2 rounded-md"
+          className="text-text-secondary hover:text-primary-DEFAULT/90 hover:bg-bg-tertiary/50 inline-flex items-center gap-1.5 px-4 py-2 rounded-md transition-colors duration-150 whitespace-nowrap"
+          title="Open code editor"
         >
-          <Trash2 size={16} className="flex-shrink-0" />
-          <span className="hidden sm:inline">Clear Chat</span>
+          <Code size={16} className="flex-shrink-0" />
+          <span className="sm:inline hidden">Code</span>
         </Button>
-      </div>
 
-      <div className="flex items-center gap-3 w-full max-w-4xl mx-auto">
         <div className="relative flex-1">
           <input
             type="text"
@@ -107,29 +95,34 @@ export function TextInput({ isConnected }: TextInputProps) {
             onKeyDown={handleKeyDown}
             placeholder={isConnected ? "Type your message here..." : "Connect to start chatting"}
             disabled={!isConnected || isSubmitting}
-            className="w-full bg-bg-primary border-0 rounded-full px-4 py-3.5 text-text-primary placeholder:text-text-tertiary focus:outline-none focus:ring-1 focus:ring-primary-DEFAULT/50 shadow-sm"
+            className="w-full bg-bg-primary/80 border border-bg-tertiary/10 rounded-full px-4 py-3.5 text-text-primary placeholder:text-text-tertiary focus:outline-none focus:ring-1 focus:ring-primary-DEFAULT/30 shadow-none"
+            aria-label="Message input"
+            autoComplete="off"
           />
-          <div className="absolute right-3 top-1/2 transform -translate-y-1/2 flex items-center gap-2">
-            <button
-              type="button"
-              onClick={openCodeEditor}
-              className="text-text-tertiary hover:text-primary-DEFAULT/90 p-1.5 rounded-full hover:bg-bg-tertiary/70 transition-colors flex items-center justify-center"
-              title="Open code editor"
-            >
-              <Code size={18} />
-            </button>
-          </div>
         </div>
+
         <Button
           onClick={handleSubmit}
           disabled={!isConnected || !inputText.trim() || isSubmitting}
           isLoading={isSubmitting}
           variant="primary"
           size="lg"
-          className="rounded-full p-3 bg-primary-DEFAULT hover:opacity-90 flex items-center justify-center"
+          className="rounded-full p-3 bg-primary-DEFAULT/80 hover:opacity-90 flex items-center justify-center border border-primary-DEFAULT/20 shadow-none"
           title="Send message"
+          aria-label="Send message"
         >
-          <Send size={20} />
+          <Send size={20} aria-hidden="true" />
+        </Button>
+
+        <Button
+          onClick={handleClearMessages}
+          variant="ghost"
+          size="sm"
+          className="text-text-secondary hover:text-danger-DEFAULT/90 hover:bg-bg-tertiary/70 inline-flex items-center gap-1.5 px-4 py-2 rounded-md whitespace-nowrap"
+          title="Clear chat history"
+        >
+          <Trash2 size={16} className="flex-shrink-0" />
+          <span className="sm:inline hidden">Clear Chat</span>
         </Button>
       </div>
 

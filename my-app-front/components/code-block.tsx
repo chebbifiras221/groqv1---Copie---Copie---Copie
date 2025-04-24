@@ -178,13 +178,18 @@ export function CodeBlock({ code, language = 'javascript' }: CodeBlockProps) {
           margin: 1.5rem 0;
           border-radius: 8px;
           overflow: hidden;
-          background-color: #0d1117;
-          border: 1px solid #30363d;
+          background-color: var(--bg-code);
+          border: 1px solid var(--border-code);
           font-family: var(--font-geist-mono), 'Consolas', 'Monaco', 'Andale Mono', monospace;
           font-size: 14px;
           line-height: 1.6;
-          box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
-          transition: all 0.3s ease;
+          box-shadow: var(--shadow-sm);
+          transition: all 0.2s ease;
+        }
+
+        :global(.light-theme) .code-block-container {
+          background-color: var(--bg-code-light);
+          border: 1px solid var(--border-code-light);
         }
 
         .code-block-container:hover {
@@ -197,9 +202,14 @@ export function CodeBlock({ code, language = 'javascript' }: CodeBlockProps) {
           display: flex;
           justify-content: space-between;
           align-items: center;
-          padding: 12px 16px;
-          background: linear-gradient(to right, #161b22, #0d1117);
-          border-bottom: 1px solid #21262d;
+          padding: 8px 16px;
+          background-color: var(--bg-code-header);
+          border-bottom: 1px solid var(--border-code);
+        }
+
+        :global(.light-theme) .code-header {
+          background-color: var(--bg-code-header-light);
+          border-bottom: 1px solid var(--border-code-light);
         }
 
         .language-indicator {
@@ -217,32 +227,39 @@ export function CodeBlock({ code, language = 'javascript' }: CodeBlockProps) {
         }
 
         .language-tag {
-          color: #e6edf3;
+          color: var(--text-code-primary);
           font-size: 12px;
           font-weight: 500;
           text-transform: uppercase;
           letter-spacing: 0.5px;
         }
 
+        :global(.light-theme) .language-tag {
+          color: var(--text-code-primary-light);
+        }
+
         .copy-button {
-          background: linear-gradient(to right, #1f6feb, #388bfd);
+          background-color: var(--primary-button);
           color: white;
           border: none;
-          border-radius: 4px;
-          padding: 6px 12px;
+          border-radius: 3px;
+          padding: 4px 8px;
           font-size: 12px;
           font-weight: 500;
           cursor: pointer;
-          transition: all 0.2s ease;
+          transition: all 0.15s ease;
           display: flex;
           align-items: center;
           gap: 6px;
         }
 
+        :global(.light-theme) .copy-button {
+          background-color: var(--primary-button-light);
+        }
+
         .copy-button:hover {
-          background: linear-gradient(to right, #388bfd, #1f6feb);
-          transform: translateY(-1px);
-          box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
+          background-color: #0062a3;
+          opacity: 0.95;
         }
 
         .copy-button:active {
@@ -252,9 +269,14 @@ export function CodeBlock({ code, language = 'javascript' }: CodeBlockProps) {
         .code-content {
           padding: 16px;
           overflow-x: auto;
-          background-color: #0d1117;
+          background-color: #1e1e1e;
           scrollbar-width: thin;
-          scrollbar-color: #30363d transparent;
+          scrollbar-color: #3e3e42 transparent;
+        }
+
+        :global(.light-theme) .code-content {
+          background-color: #ffffff;
+          scrollbar-color: #d4d4d4 transparent;
         }
 
         .code-content::-webkit-scrollbar {
@@ -283,62 +305,111 @@ export function CodeBlock({ code, language = 'javascript' }: CodeBlockProps) {
           display: flex;
           flex-direction: column;
           padding-right: 16px;
-          border-right: 1px solid #21262d;
-          color: #6e7681;
+          border-right: 1px solid #3e3e42;
+          color: #858585;
           user-select: none;
           text-align: right;
           min-width: 40px;
+        }
+
+        :global(.light-theme) .line-numbers {
+          border-right: 1px solid #d4d4d4;
+          color: #858585;
         }
 
         pre {
           margin: 0;
           padding: 0;
           background-color: transparent;
-          color: #e6edf3;
+          color: #d4d4d4;
+        }
+
+        :global(.light-theme) pre {
+          color: #000000;
         }
 
         code {
           font-family: inherit;
         }
 
-        /* Syntax highlighting with more vibrant colors */
+        /* Syntax highlighting with VS Code colors */
         .keyword {
-          color: #ff7b72;
+          color: #569cd6;
           font-weight: 500;
         }
 
         .string {
-          color: #a5d6ff;
+          color: #ce9178;
         }
 
         .boolean {
-          color: #d2a8ff;
+          color: #569cd6;
           font-weight: 500;
         }
 
         .number {
-          color: #79c0ff;
+          color: #b5cea8;
         }
 
         .comment {
-          color: #8b949e;
+          color: #6a9955;
           font-style: italic;
         }
 
         .selector {
-          color: #7ee787;
+          color: #d7ba7d;
         }
 
         .property {
-          color: #d2a8ff;
+          color: #9cdcfe;
         }
 
         .value {
-          color: #79c0ff;
+          color: #ce9178;
         }
 
         .bracket {
-          color: #e6edf3;
+          color: #d4d4d4;
+        }
+
+        /* Light theme syntax highlighting - VS Code Light+ theme */
+        :global(.light-theme) .keyword {
+          color: #0000ff;
+          font-weight: 500;
+        }
+
+        :global(.light-theme) .string {
+          color: #a31515;
+        }
+
+        :global(.light-theme) .boolean {
+          color: #0000ff;
+          font-weight: 500;
+        }
+
+        :global(.light-theme) .number {
+          color: #098658;
+        }
+
+        :global(.light-theme) .comment {
+          color: #008000;
+          font-style: italic;
+        }
+
+        :global(.light-theme) .selector {
+          color: #800000;
+        }
+
+        :global(.light-theme) .property {
+          color: #795e26;
+        }
+
+        :global(.light-theme) .value {
+          color: #a31515;
+        }
+
+        :global(.light-theme) .bracket {
+          color: #000000;
         }
       `}</style>
     </motion.div>

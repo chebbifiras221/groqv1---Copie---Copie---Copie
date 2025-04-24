@@ -8,6 +8,7 @@ import {
 } from "@livekit/components-react";
 import { AnimatePresence, motion } from "framer-motion";
 import { ConnectionState, LocalParticipant, Track } from "livekit-client";
+import { MessageSquare } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Header } from "@/components/ui/header";
@@ -17,6 +18,8 @@ import { Typewriter } from "./typewriter";
 import { TextInput } from "./text-input";
 import { ConversationManager } from "./conversation-manager";
 import { StatusIndicator, ConnectionToast } from "./ui/status-indicator";
+import { MobileConversationDrawer } from "./ui/mobile-conversation-drawer";
+import { useErrorHandler } from "@/hooks/use-error-handler";
 
 export interface PlaygroundProps {
   onConnect?: (connect: boolean) => void;
@@ -28,8 +31,13 @@ export function Playground({ onConnect }: PlaygroundProps) {
   const tracks = useTracks();
   const [showConnectionToast, setShowConnectionToast] = useState(false);
   const [lastConnectionState, setLastConnectionState] = useState<ConnectionState | null>(null);
+  const [showMobileConversations, setShowMobileConversations] = useState(false);
+  const { handleError } = useErrorHandler();
 
-  // Show connection toast when connection state changes
+  /**
+   * Show connection toast when connection state changes
+   * Also trigger conversation loading when connected
+   */
   useEffect(() => {
     if (lastConnectionState !== roomState &&
         (roomState === ConnectionState.Connected ||
@@ -37,18 +45,78 @@ export function Playground({ onConnect }: PlaygroundProps) {
          roomState === ConnectionState.Reconnecting)) {
       setShowConnectionToast(true);
       const timer = setTimeout(() => setShowConnectionToast(false), 3000);
+
+      // If we just connected, trigger conversation loading
+      if (roomState === ConnectionState.Connected) {
+        // Use a short delay to ensure everything is initialized
+        setTimeout(() => {
+          // Trigger the conversation manager to load conversations
+          // This will create a new conversation if none exist
+          const event = new Event('storage');
+          window.dispatchEvent(event);
+        }, 500);
+      }
+
       return () => clearTimeout(timer);
     }
     setLastConnectionState(roomState);
   }, [roomState, lastConnectionState]);
 
-  // Ensure microphone is muted whenever connection state changes
+  /**
+   * Ensure microphone is muted whenever connection state changes
+   * This prevents the microphone from being automatically enabled
+   */
   useEffect(() => {
-    if (roomState === ConnectionState.Connected) {
-      // Force mute the microphone on connection
-      setTimeout(() => {
-        localParticipant.setMicrophoneEnabled(false);
-      }, 100); // Small delay to ensure it happens after connection is established
+    // Only proceed if we have a valid connection and participant
+    if (roomState !== ConnectionState.Connected || !localParticipant) {
+      return;
+    }
+
+    // Safety check to ensure localParticipant is fully initialized
+    if (!localParticipant.setMicrophoneEnabled || typeof localParticipant.setMicrophoneEnabled !== 'function') {
+      return;
+    }
+
+    // Mute microphone when connection is established
+    const muteOnConnection = () => {
+      try {
+        if (localParticipant.isMicrophoneEnabled) {
+          localParticipant.setMicrophoneEnabled(false);
+        }
+      } catch (error) {
+        console.error('Error muting microphone:', error);
+      }
+    };
+
+    try {
+      // Check if tracks property exists and is initialized
+      if (localParticipant.tracks && typeof localParticipant.tracks.size === 'number' && localParticipant.tracks.size > 0) {
+        // Execute immediately if tracks are already published
+        muteOnConnection();
+      } else {
+        // Otherwise listen for the trackPublished event
+        const handleTrackPublished = () => {
+          muteOnConnection();
+          // Remove listener after execution to prevent multiple mutes
+          if (localParticipant && localParticipant.off) {
+            localParticipant.off('trackPublished', handleTrackPublished);
+          }
+        };
+
+        // Add event listener safely
+        if (localParticipant && localParticipant.on) {
+          localParticipant.on('trackPublished', handleTrackPublished);
+
+          // Cleanup listener if component unmounts before track is published
+          return () => {
+            if (localParticipant && localParticipant.off) {
+              localParticipant.off('trackPublished', handleTrackPublished);
+            }
+          };
+        }
+      }
+    } catch (error) {
+      console.error('Error in microphone muting effect:', error);
     }
   }, [localParticipant, roomState]);
 
@@ -78,9 +146,11 @@ export function Playground({ onConnect }: PlaygroundProps) {
           exit={{ opacity: 0, y: 25 }}
           transition={{
             type: "spring",
-            stiffness: 260,
-            damping: 20,
+            stiffness: 300,
+            damping: 25,
+            mass: 0.5
           }}
+          style={{ willChange: 'opacity, transform' }}
         >
           <MicrophoneButton
             localMultibandVolume={localMultibandVolume}
@@ -109,7 +179,7 @@ export function Playground({ onConnect }: PlaygroundProps) {
 
   return (
     <div className="flex flex-col h-full w-full">
-      <Header title="Programming Teacher AI" />
+      <Header title="Programming Teacher" />
 
       <AnimatePresence>
         {showConnectionToast && (
@@ -121,16 +191,38 @@ export function Playground({ onConnect }: PlaygroundProps) {
       </AnimatePresence>
 
       <div className="flex flex-1 overflow-hidden">
+        {/* Mobile conversation drawer */}
+        <MobileConversationDrawer
+          isOpen={showMobileConversations}
+          onClose={() => setShowMobileConversations(false)}
+        />
+
+        {/* Desktop sidebar */}
         {isConnected && (
           <div className="hidden md:block w-64 lg:w-72 bg-bg-secondary relative overflow-hidden">
             <ConversationManager />
           </div>
         )}
+
         <div className="relative flex-col grow h-full bg-bg-primary">
+          {/* Mobile conversation button */}
+          {isConnected && (
+            <div className="md:hidden absolute top-16 left-4 z-10">
+              <Button
+                variant="ghost"
+                size="icon"
+                className="bg-bg-secondary/80 backdrop-blur-sm rounded-full p-2 shadow-md"
+                onClick={() => setShowMobileConversations(true)}
+              >
+                <MessageSquare className="w-5 h-5 text-primary-DEFAULT" />
+              </Button>
+            </div>
+          )}
+
           <div className="h-full pb-48 overflow-hidden">
             <Typewriter typingSpeed={25} />
           </div>
-          <div className="absolute left-0 bottom-0 w-full bg-bg-secondary shadow-sm">
+          <div className="absolute left-0 bottom-0 w-full bg-bg-secondary border-t border-bg-tertiary/30">
             <div className="pt-4 pb-2 px-4">
               {audioTileContent}
             </div>

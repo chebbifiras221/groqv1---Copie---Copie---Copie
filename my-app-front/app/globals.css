@@ -4,8 +4,13 @@
 
 :root {
   /* Base colors - Dark Theme (default) */
-  --background: #0d1117;
+  --background: #1a1f24;
   --foreground: #e6edf3;
+
+  /* Background colors */
+  --bg-primary: #242a33;
+  --bg-secondary: #2d333b;
+  --bg-tertiary: #3a424e;
 
   /* Brand colors */
   --primary: #2188ff;
@@ -40,20 +45,20 @@
   --warning-subtle: rgba(227, 179, 65, 0.1);
 
   /* UI colors - Dark Theme */
-  --border-color: #30363d;
-  --border-muted: #21262d;
+  --border-color: #3a424e;
+  --border-muted: #2d333b;
   --border-subtle: rgba(110, 118, 129, 0.1);
 
-  --card-bg: #161b22;
-  --hover-bg: #21262d;
-  --active-bg: #30363d;
+  --card-bg: #242a33;
+  --hover-bg: #2d333b;
+  --active-bg: #3a424e;
 
-  --input-bg: #0d1117;
-  --input-border: #30363d;
+  --input-bg: #1a1f24;
+  --input-border: #3a424e;
   --input-focus-border: #1f6feb;
 
-  --button-bg: #21262d;
-  --button-hover-bg: #30363d;
+  --button-bg: #2d333b;
+  --button-hover-bg: #3a424e;
   --button-active-bg: #1f6feb;
   --button-text: #e6edf3;
 
@@ -63,7 +68,7 @@
   --text-tertiary: #6e7681;
   --text-placeholder: rgba(110, 118, 129, 0.5);
   --text-disabled: #484f58;
-  --text-inverse: #0d1117;
+  --text-inverse: #1a1f24;
 
   /* Code syntax highlighting colors */
   --code-keyword: #ff7b72;
@@ -77,6 +82,20 @@
   --code-function: #d2a8ff;
   --code-variable: #79c0ff;
 
+  /* Code block and editor styling */
+  --bg-code: #1e1e1e;
+  --bg-code-header: #252526;
+  --border-code: #3e3e42;
+  --text-code-primary: #e6edf3;
+  --primary-button: #007acc;
+
+  /* Light theme code variables */
+  --bg-code-light: #ffffff;
+  --bg-code-header-light: #f3f3f3;
+  --border-code-light: #d4d4d4;
+  --text-code-primary-light: #334155;
+  --primary-button-light: #007acc;
+
   /* Language-specific colors */
   --lang-js: #f7df1e;
   --lang-ts: #3178c6;
@@ -88,11 +107,11 @@
   --lang-json: #8bc34a;
 
   /* Effects */
-  --shadow-color: rgba(0, 0, 0, 0.3);
-  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.05);
-  --shadow-md: 0 4px 6px rgba(0, 0, 0, 0.1);
-  --shadow-lg: 0 10px 15px rgba(0, 0, 0, 0.1);
-  --shadow-focus: 0 0 0 3px rgba(33, 136, 255, 0.3);
+  --shadow-color: rgba(0, 0, 0, 0.08);
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.02);
+  --shadow-md: 0 1px 3px rgba(0, 0, 0, 0.03);
+  --shadow-lg: 0 2px 5px rgba(0, 0, 0, 0.04);
+  --shadow-focus: 0 0 0 2px rgba(33, 136, 255, 0.15);
 
   /* Scrollbar */
   scrollbar-color: rgba(255, 255, 255, 0.2) transparent;
@@ -170,8 +189,8 @@ body {
   margin: 1rem 0;
   border-radius: 6px;
   overflow: hidden;
-  background-color: #1e1e1e;
-  border: 1px solid #333;
+  background-color: #2a303a;
+  border: 1px solid #3a424e;
   font-family: var(--font-geist-mono), 'Consolas', 'Monaco', 'Andale Mono', monospace;
   font-size: 14px;
   line-height: 1.5;
@@ -187,8 +206,8 @@ html:not(.dark) .code-block-container {
   justify-content: space-between;
   align-items: center;
   padding: 8px 16px;
-  background-color: #252526;
-  border-bottom: 1px solid #333;
+  background-color: #323a45;
+  border-bottom: 1px solid #3a424e;
 }
 
 html:not(.dark) .code-header {
@@ -243,7 +262,7 @@ html:not(.dark) .code-content {
   display: flex;
   flex-direction: column;
   padding-right: 16px;
-  border-right: 1px solid #333;
+  border-right: 1px solid #3a424e;
   color: #858585;
   user-select: none;
   text-align: right;
@@ -260,8 +279,8 @@ html:not(.dark) .line-numbers {
   margin: 1rem 0;
   border-radius: 6px;
   overflow: hidden;
-  background-color: #1e1e1e;
-  border: 1px solid #333;
+  background-color: #2a303a;
+  border: 1px solid #3a424e;
   font-family: var(--font-geist-mono), 'Consolas', 'Monaco', 'Andale Mono', monospace;
   font-size: 14px;
   line-height: 1.5;
@@ -272,8 +291,8 @@ html:not(.dark) .line-numbers {
   justify-content: space-between;
   align-items: center;
   padding: 8px 16px;
-  background-color: #252526;
-  border-bottom: 1px solid #333;
+  background-color: #323a45;
+  border-bottom: 1px solid #3a424e;
 }
 
 .editor-actions {
@@ -303,7 +322,7 @@ html:not(.dark) .line-numbers {
 
 .code-textarea {
   flex: 1;
-  background-color: #1e1e1e;
+  background-color: #2a303a;
   color: #d4d4d4;
   border: none;
   padding: 8px 16px;

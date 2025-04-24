@@ -19,11 +19,13 @@ export interface Message {
 // and rely on the backend for conversation storage
 
 export function useConversation() {
-  // Clear localStorage on component mount
+  /**
+   * Clear localStorage on component mount
+   * We don't store messages in localStorage anymore as we rely on the backend
+   */
   useEffect(() => {
     if (typeof window !== 'undefined') {
       localStorage.removeItem('conversation-messages');
-      console.log('Cleared conversation history from localStorage on startup');
     }
   }, []);
 
@@ -32,25 +34,79 @@ export function useConversation() {
 
   // Update the current conversation ID when it changes in localStorage
   useEffect(() => {
+    // Initial check
+    const newId = localStorage.getItem('current-conversation-id');
+    if (newId !== currentConversationId) {
+      // Clear messages when switching conversations
+      setMessages([]);
+      setCurrentConversationId(newId);
+      // Initial conversation ID set
+    }
+
+    // Set up event listener for storage changes
+    const handleStorageChange = (e: StorageEvent) => {
+      if (e.key === 'current-conversation-id') {
+        const newId = e.newValue;
+        if (newId !== currentConversationId) {
+          // Clear messages when switching conversations
+          setMessages([]);
+          setCurrentConversationId(newId);
+          // Conversation ID changed
+        }
+      }
+    };
+
+    // Also check periodically in case the storage event doesn't fire
     const checkForConversationChanges = () => {
       const newId = localStorage.getItem('current-conversation-id');
       if (newId !== currentConversationId) {
         // Clear messages when switching conversations
         setMessages([]);
         setCurrentConversationId(newId);
+        // Conversation ID changed from interval check
       }
     };
 
-    // Check for changes every 500ms
-    const interval = setInterval(checkForConversationChanges, 500);
+    // Add event listener for storage changes
+    window.addEventListener('storage', handleStorageChange);
 
-    return () => clearInterval(interval);
+    // Check for changes every 300ms as a fallback
+    const interval = setInterval(checkForConversationChanges, 300);
+
+    return () => {
+      window.removeEventListener('storage', handleStorageChange);
+      clearInterval(interval);
+    };
   }, [currentConversationId]);
 
   const [messages, setMessages] = useState<Message[]>([]);
   const room = useMaybeRoomContext();
   const { responses } = useAIResponses();
   const { transcriptions } = useTranscriber();
+
+  /**
+   * Trigger conversation loading when room is available
+   * This ensures we automatically load conversations when the connection is established
+   */
+  useEffect(() => {
+    if (!room) return;
+
+    // Check if we have a conversation ID in localStorage
+    const currentId = localStorage.getItem('current-conversation-id');
+
+    // If we don't have a conversation ID, we'll trigger the conversation manager
+    // to load the most recent conversation or create a new one
+    if (!currentId) {
+      // Request the conversation list from the server
+      // The conversation manager will handle creating a new conversation if none exist
+      const message = {
+        type: "list_conversations"
+      };
+      room.localParticipant.publishData(
+        new TextEncoder().encode(JSON.stringify(message))
+      );
+    }
+  }, [room]);
 
   // Track the last processed transcription and response
   const [lastProcessedTranscription, setLastProcessedTranscription] = useState<string>('');
@@ -64,7 +120,7 @@ export function useConversation() {
       try {
         // Handle binary audio data with specific topic
         if (topic === "binary_audio") {
-          console.log("Received binary audio data with topic 'binary_audio'", payload.length);
+          // Received binary audio data with topic 'binary_audio'
           // We'll let the use-ai-responses hook handle the audio playback
           return;
         }
@@ -73,7 +129,7 @@ export function useConversation() {
         if (topic === "audio_info") {
           const dataString = new TextDecoder().decode(payload);
           const data = JSON.parse(dataString);
-          console.log("Received audio info:", data);
+          // Received audio info
           return;
         }
 
@@ -86,30 +142,30 @@ export function useConversation() {
 
           // Handle audio data info message
           if (data.type === "audio_data_info") {
-            console.log("Received audio data info:", data);
+            // Received audio data info
             return;
           }
 
           // Handle audio data message
           if (data.type === "audio_data") {
-            console.log("Received audio data info");
+            // Received audio data info
             return;
           }
 
           // Handle audio URL message
           if (data.type === "tts_audio_url") {
-            console.log("Received TTS audio URL for text:", data.text);
+            // Received TTS audio URL for text
             return;
           }
         } catch (e) {
           // If it's not valid JSON, it might be binary audio data without a topic
-          console.log("Received possible binary audio data without topic", payload.length);
+          // Received possible binary audio data without topic
           // We'll let the use-ai-responses hook handle the audio playback
           return;
         }
 
         if (data.type === "conversation_data") {
-          console.log("Received conversation data in conversation hook", data.conversation.id);
+          // Received conversation data from server
 
           // Clear existing messages and load the conversation messages
           const conversationMessages: Message[] = data.conversation.messages.map((msg: any) => ({
@@ -123,6 +179,9 @@ export function useConversation() {
           // Replace all messages with the ones from the selected conversation
           setMessages(conversationMessages);
 
+          // Directly update the current conversation ID in state
+          setCurrentConversationId(data.conversation.id);
+
           // Reset tracking variables
           setLastProcessedTranscription('');
           setLastProcessedResponseId('');
@@ -130,7 +189,7 @@ export function useConversation() {
           // Store the current conversation ID
           localStorage.setItem('current-conversation-id', data.conversation.id);
         } else if (data.type === "user_message_echo") {
-          console.log("Received user message echo in conversation hook:", data.text);
+          // Received user message echo from server
 
           // Get the current conversation ID
           const currentConversationId = localStorage.getItem('current-conversation-id') || data.conversation_id;
@@ -151,7 +210,7 @@ export function useConversation() {
             return newMessages;
           });
         } else if (data.type === "ai_response") {
-          console.log("Received AI response in conversation hook:", data.text.substring(0, 30) + '...');
+          // Received AI response from server
 
           // Get the current conversation ID
           const currentConversationId = localStorage.getItem('current-conversation-id') || data.conversation_id;
@@ -172,7 +231,7 @@ export function useConversation() {
           });
         }
       } catch (e) {
-        console.error("Error parsing data message in conversation hook:", e);
+        console.error("Error parsing data message:", e);
       }
     };
 
@@ -194,7 +253,7 @@ export function useConversation() {
 
       // We'll let the server handle adding the message to the conversation
       // The message will be added when we receive the echo from the server
-      console.log('Processed transcription, waiting for server echo:', transcriptionText);
+      // Processed transcription, waiting for server echo
     }
   }, [transcriptions, lastProcessedTranscription]);
 
@@ -207,7 +266,7 @@ export function useConversation() {
 
       if (lastResponse.id !== lastProcessedResponseId) {
         setLastProcessedResponseId(lastResponse.id);
-        console.log('Processed AI response, waiting for server message:', lastResponse.text.substring(0, 30) + '...');
+        // Processed AI response, waiting for server message
       }
     }
   }, [responses, lastProcessedResponseId]);
@@ -216,7 +275,7 @@ export function useConversation() {
   const addUserMessage = useCallback(async (text: string) => {
     if (!text.trim()) return;
 
-    console.log('Sending text input to backend:', text.trim());
+    // Sending text input to backend
 
     // Send the message to the backend
     if (room) {
@@ -248,7 +307,7 @@ export function useConversation() {
     return undefined;
   }, [room]);
 
-  // Clear all messages
+  // Clear all messages and create a new conversation
   const clearMessages = useCallback(() => {
     setMessages([]);
     setLastProcessedTranscription('');
@@ -257,7 +316,11 @@ export function useConversation() {
     // Clear localStorage
     if (typeof window !== 'undefined') {
       localStorage.removeItem('conversation-messages');
+      localStorage.removeItem('current-conversation-id');
     }
+
+    // Reset the current conversation ID
+    setCurrentConversationId(null);
 
     // Create a new conversation
     if (room) {
@@ -265,6 +328,7 @@ export function useConversation() {
         type: "new_conversation",
         title: `New Conversation`
       };
+      // Creating new conversation from clearMessages
       room.localParticipant.publishData(new TextEncoder().encode(JSON.stringify(message)));
     }
   }, [room]);

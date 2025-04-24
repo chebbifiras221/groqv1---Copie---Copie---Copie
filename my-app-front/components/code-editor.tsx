@@ -1,7 +1,6 @@
 "use client";
 
-import React, { useState } from 'react';
-import { motion } from 'framer-motion';
+import React, { useState, useCallback, useMemo } from 'react';
 
 interface CodeEditorProps {
   initialCode?: string;
@@ -18,21 +17,92 @@ export function CodeEditor({
 }: CodeEditorProps) {
   const [code, setCode] = useState(initialCode);
   const [lineCount, setLineCount] = useState(initialCode.split('\n').length);
+  const [isFormatting, setIsFormatting] = useState(false);
 
-  const handleChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+  /**
+   * Debounced change handler to prevent excessive re-renders
+   * Uses requestAnimationFrame to optimize performance
+   */
+  const handleChange = useCallback((e: React.ChangeEvent<HTMLTextAreaElement>) => {
     const newCode = e.target.value;
     setCode(newCode);
-    setLineCount(newCode.split('\n').length);
-    if (onChange) {
-      onChange(newCode);
-    }
-  };
 
-  // Generate line numbers
-  const lineNumbers = Array.from({ length: Math.max(1, lineCount) }, (_, i) => i + 1);
+    // Use requestAnimationFrame to debounce line count updates
+    requestAnimationFrame(() => {
+      setLineCount(newCode.split('\n').length);
+      if (onChange) {
+        onChange(newCode);
+      }
+    });
+  }, [onChange]);
 
-  // Get language-specific colors
-  const getLanguageColors = (lang: string) => {
+  /**
+   * Format code based on language with performance optimizations
+   *
+   * This function applies basic formatting to the code based on the selected language.
+   * It handles indentation, spacing, and other formatting rules.
+   * Uses requestAnimationFrame to avoid blocking the main thread.
+   */
+  const formatCode = useCallback(() => {
+    setIsFormatting(true);
+
+    // Use requestAnimationFrame to avoid blocking the main thread
+    requestAnimationFrame(() => {
+      try {
+        let formattedCode = code;
+
+        // Basic indentation for JavaScript/TypeScript
+        if (['javascript', 'typescript', 'jsx', 'tsx'].includes(language)) {
+          // Replace multiple spaces with a single space
+          formattedCode = formattedCode.replace(/\s{2,}/g, ' ');
+
+          // Add proper indentation after opening braces
+          formattedCode = formattedCode.replace(/{\s*\n/g, '{\n  ');
+
+          // Add proper indentation for nested blocks
+          let lines = formattedCode.split('\n');
+          let indentLevel = 0;
+
+          formattedCode = lines.map(line => {
+            // Adjust indent level based on braces
+            const openBraces = (line.match(/{/g) || []).length;
+            const closeBraces = (line.match(/}/g) || []).length;
+
+            // Calculate the indent for this line (before adjusting indentLevel)
+            const indent = '  '.repeat(Math.max(0, indentLevel));
+
+            // Update indent level for the next line
+            indentLevel += openBraces - closeBraces;
+
+            return indent + line.trim();
+          }).join('\n');
+        }
+
+        // Update the code state
+        setCode(formattedCode);
+        setLineCount(formattedCode.split('\n').length);
+
+        if (onChange) {
+          onChange(formattedCode);
+        }
+      } catch (error) {
+        console.error('Error formatting code:', error);
+      } finally {
+        setIsFormatting(false);
+      }
+    });
+  }, [code, language, onChange]);
+
+  // Generate line numbers - memoize this to avoid unnecessary re-renders
+  const lineNumbers = React.useMemo(() => {
+    return Array.from({ length: Math.max(1, lineCount) }, (_, i) => i + 1);
+  }, [lineCount]);
+
+  /**
+   * Memoize language colors to prevent unnecessary calculations
+   * This improves performance by avoiding recalculating colors on every render
+   */
+  const langColors = useMemo(() => {
     const colors = {
       javascript: { primary: '#f7df1e', secondary: '#323330', text: '#323330' },
       typescript: { primary: '#3178c6', secondary: '#235a97', text: '#ffffff' },
@@ -45,17 +115,16 @@ export function CodeEditor({
       default: { primary: '#6e40c9', secondary: '#5a32a3', text: '#ffffff' }
     };
 
-    return colors[lang as keyof typeof colors] || colors.default;
-  };
-
-  const langColors = getLanguageColors(language);
+    return colors[language as keyof typeof colors] || colors.default;
+  }, [language]);
 
   return (
-    <motion.div
+    <div
       className="code-editor-container"
-      initial={{ opacity: 0, y: 10 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.3 }}
+      style={{
+        contain: 'content',
+        transform: 'translateZ(0)' // Force GPU acceleration
+      }}
     >
       <div className="code-editor-header">
         <div className="language-indicator">
@@ -63,13 +132,21 @@ export function CodeEditor({
           <div className="language-tag">{language}</div>
         </div>
         <div className="editor-actions">
-          <button className="format-button">Format</button>
+          <button
+            className={`format-button ${isFormatting || !code.trim() ? 'disabled' : ''}`}
+            onClick={formatCode}
+            disabled={isFormatting || !code.trim()}
+            title="Format code with proper indentation"
+          >
+            {isFormatting ? 'Formatting...' : 'Format'}
+          </button>
         </div>
       </div>
       <div className="code-editor-content">
-        <div className="line-numbers">
+        <div className="line-numbers" style={{ contain: 'content' }}>
+          {/* Render line numbers with optimized rendering */}
           {lineNumbers.map(num => (
-            <div key={num} className="line-number">{num}</div>
+            <div key={num} className="line-number" style={{ contain: 'content' }}>{num}</div>
           ))}
         </div>
         <textarea
@@ -78,6 +155,14 @@ export function CodeEditor({
           placeholder={placeholder}
           className="code-textarea"
           spellCheck="false"
+          autoCorrect="off"
+          autoCapitalize="off"
+          autoComplete="off"
+          style={{
+            contain: 'strict',
+            transform: 'translateZ(0)',
+            caretColor: langColors.primary
+          }}
         />
       </div>
       <style jsx>{`
@@ -90,18 +175,20 @@ export function CodeEditor({
           font-family: var(--font-geist-mono), 'Consolas', 'Monaco', 'Andale Mono', monospace;
           font-size: 14px;
           line-height: 1.6;
-          box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
-          transition: all 0.3s ease;
+          box-shadow: none;
+          transition: none;
+          contain: layout style;
         }
 
-        .light-theme .code-editor-container {
-          background-color: #f6f8fa;
-          border-color: #d0d7de;
+        :global(.light-theme) .code-editor-container {
+          background-color: #f8fafc;
+          border-color: #e2e8f0;
+          box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
         }
 
         .code-editor-container:focus-within {
-          border-color: ${langColors.primary}80;
-          box-shadow: 0 0 0 2px ${langColors.primary}20;
+          border-color: ${langColors.primary}60;
+          box-shadow: 0 0 0 1px ${langColors.primary}15;
         }
 
         .code-editor-header {
@@ -109,13 +196,13 @@ export function CodeEditor({
           justify-content: space-between;
           align-items: center;
           padding: 12px 16px;
-          background: #161b22;
+          background-color: #161b22;
           border-bottom: 1px solid #21262d;
         }
 
-        .light-theme .code-editor-header {
-          background: #eaeef2;
-          border-bottom: 1px solid #d0d7de;
+        :global(.light-theme) .code-editor-header {
+          background-color: #f1f5f9;
+          border-bottom: 1px solid #e2e8f0;
         }
 
         .language-indicator {
@@ -140,8 +227,8 @@ export function CodeEditor({
           letter-spacing: 0.5px;
         }
 
-        .light-theme .language-tag {
-          color: #24292f;
+        :global(.light-theme) .language-tag {
+          color: #334155;
         }
 
         .editor-actions {
@@ -150,7 +237,7 @@ export function CodeEditor({
         }
 
         .format-button {
-          background: linear-gradient(to right, #6e40c9, #5a32a3);
+          background-color: var(--secondary);
           color: white;
           border: none;
           border-radius: 4px;
@@ -158,13 +245,25 @@ export function CodeEditor({
           font-size: 12px;
           font-weight: 500;
           cursor: pointer;
-          transition: all 0.2s ease;
+          transition: none;
+        }
+
+        :global(.light-theme) .format-button {
+          background-color: var(--secondary);
         }
 
         .format-button:hover {
-          background: linear-gradient(to right, #5a32a3, #4c2889);
-          transform: translateY(-1px);
-          box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
+          background-color: var(--secondary-hover);
+          opacity: 0.95;
+        }
+
+        :global(.light-theme) .format-button:hover {
+          background-color: var(--secondary-hover);
+        }
+
+        .format-button.disabled {
+          opacity: 0.5;
+          cursor: not-allowed;
         }
 
         .format-button:active {
@@ -174,6 +273,7 @@ export function CodeEditor({
         .code-editor-content {
           display: flex;
           height: 250px;
+          contain: layout;
         }
 
         .line-numbers {
@@ -185,12 +285,15 @@ export function CodeEditor({
           user-select: none;
           text-align: right;
           background-color: #0d1117;
+          contain: content;
+          width: 3em;
+          flex-shrink: 0;
         }
 
-        .light-theme .line-numbers {
-          border-right: 1px solid #d0d7de;
-          color: #6e7781;
-          background-color: #f6f8fa;
+        :global(.light-theme) .line-numbers {
+          border-right: 1px solid #e2e8f0;
+          color: #94a3b8;
+          background-color: #f8fafc;
         }
 
         .line-number {
@@ -215,12 +318,14 @@ export function CodeEditor({
           tab-size: 2;
           scrollbar-width: thin;
           scrollbar-color: #30363d transparent;
+          contain: strict;
+          white-space: pre;
         }
 
-        .light-theme .code-textarea {
-          background-color: #f6f8fa;
-          color: #24292f;
-          scrollbar-color: #d0d7de transparent;
+        :global(.light-theme) .code-textarea {
+          background-color: #f8fafc;
+          color: #334155;
+          scrollbar-color: #cbd5e1 transparent;
         }
 
         .code-textarea::-webkit-scrollbar {
@@ -241,13 +346,13 @@ export function CodeEditor({
           background-color: #6e7681;
         }
 
-        .light-theme .code-textarea::-webkit-scrollbar-thumb {
-          background-color: #d0d7de;
+        :global(.light-theme) .code-textarea::-webkit-scrollbar-thumb {
+          background-color: #cbd5e1;
           border-radius: 4px;
         }
 
-        .light-theme .code-textarea::-webkit-scrollbar-thumb:hover {
-          background-color: #6e7781;
+        :global(.light-theme) .code-textarea::-webkit-scrollbar-thumb:hover {
+          background-color: #94a3b8;
         }
 
         .code-textarea::placeholder {
@@ -255,11 +360,11 @@ export function CodeEditor({
           opacity: 0.6;
         }
 
-        .light-theme .code-textarea::placeholder {
-          color: #6e7781;
-          opacity: 0.6;
+        :global(.light-theme) .code-textarea::placeholder {
+          color: #94a3b8;
+          opacity: 0.7;
         }
       `}</style>
-    </motion.div>
+    </div>
   );
 }

@@ -9,6 +9,7 @@ import { useAIResponses } from "@/hooks/use-ai-responses";
 import { useConversation } from "@/hooks/use-conversation";
 import { CodeBlock } from "./code-block";
 import { CodeEditor } from "./code-editor";
+import { SimpleBotFace } from "./ui/simple-bot-face";
 
 export interface TypewriterProps {
   typingSpeed?: number;
@@ -93,19 +94,61 @@ export function Typewriter({ typingSpeed = 50 }: TypewriterProps) {
   const conversationContainerRef = useRef<HTMLDivElement>(null);
   const transcriptionEndRef = useRef<HTMLDivElement>(null);
 
-  // Auto-scroll to bottom when new messages arrive
+  /**
+   * Auto-select the first conversation when the component mounts
+   * This ensures that a conversation is loaded automatically when the user connects
+   */
+  useEffect(() => {
+    // Only proceed if we're connected
+    if (state !== ConnectionState.Connected) return;
+
+    // Use a short delay to ensure everything is initialized
+    const timer = setTimeout(() => {
+      // Check if we have a conversation ID in localStorage
+      const storedConversationId = localStorage.getItem('current-conversation-id');
+
+      // If we don't have a conversation ID and we're connected, we need to trigger the conversation display
+      if (!storedConversationId) {
+        // This will force the conversation manager to load the most recent conversation
+        // or create a new one if none exist
+        const event = new Event('storage');
+        window.dispatchEvent(event);
+      }
+    }, 1000); // 1 second delay
+
+    return () => clearTimeout(timer);
+  }, [state]);
+
+  /**
+   * Auto-scroll to bottom when new messages arrive
+   * This ensures the user always sees the latest messages
+   */
   useEffect(() => {
     if (messages.length > 0 && conversationContainerRef.current) {
       if (transcriptionEndRef.current) {
-        transcriptionEndRef.current.scrollIntoView({ behavior: "smooth" });
+        // Use requestAnimationFrame for smoother scrolling
+        requestAnimationFrame(() => {
+          transcriptionEndRef.current?.scrollIntoView({ behavior: "smooth" });
+        });
       }
     }
   }, [messages]);
 
-  // Force re-render when messages change
+  /**
+   * Force re-render when messages change
+   * This ensures the UI updates properly when new messages arrive
+   */
   useEffect(() => {
     // This is just to force a re-render when messages change
-    console.log('Messages updated, total count:', messages.length);
+    if (messages.length > 0) {
+      // Use requestIdleCallback for non-critical updates
+      if (typeof window !== 'undefined' && 'requestIdleCallback' in window) {
+        // @ts-ignore - TypeScript doesn't recognize requestIdleCallback
+        window.requestIdleCallback(() => {
+          // Messages updated
+        });
+      }
+    }
   }, [messages]);
 
   // Animation for empty state text
@@ -131,7 +174,7 @@ export function Typewriter({ typingSpeed = 50 }: TypewriterProps) {
 
   return (
     <div className="relative h-full text-lg font-mono px-4 md:px-8 pt-6 pb-20 overflow-hidden">
-      <div className="pointer-events-none h-24 absolute top-0 left-0 w-full bg-gradient-to-b from-bg-primary to-transparent z-10"></div>
+
       {state === ConnectionState.Disconnected && (
         <div className="text-text-secondary h-full flex items-center justify-center pb-16 max-w-md mx-auto">
           <p>{emptyTextAnimation}</p>
@@ -145,7 +188,7 @@ export function Typewriter({ typingSpeed = 50 }: TypewriterProps) {
             {messages.length === 0 || !currentConversationId ? (
               <div className="text-text-secondary text-center py-12">
                 <div className="mb-4">
-                  <MessageSquare className="w-12 h-12 mx-auto text-text-tertiary opacity-50" />
+                  <MessageSquare className="w-12 h-12 mx-auto text-text-tertiary opacity-30" />
                 </div>
                 <p className="text-xl">No messages yet</p>
                 <p className="text-sm mt-2 text-text-tertiary">Start a conversation by typing a message or using your microphone</p>
@@ -156,25 +199,37 @@ export function Typewriter({ typingSpeed = 50 }: TypewriterProps) {
                 .map((item) => (
                 <motion.div
                   key={item.id}
-                  className={`mb-6 whitespace-pre-wrap ${item.type === "ai" ? "p-6 bg-bg-secondary/30 rounded-lg border-l-4 border-primary-DEFAULT/30" : "px-2"}`}
+                  className={`mb-6 whitespace-pre-wrap ${item.type === "ai" ? "p-6 bg-[#323a45]/40 rounded-lg border-l-2 border-primary-DEFAULT/20" : "px-2"}`}
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
                   transition={{ duration: 0.2, ease: "easeOut" }}
-                  style={{ willChange: "opacity" }}
+                  style={{
+                    willChange: "opacity",
+                    contain: "content",
+                    contentVisibility: "auto"
+                  }}
                 >
                   <div className="flex items-center gap-2 mb-3">
-                    <div className={`w-8 h-8 rounded-full flex items-center justify-center ${item.type === "user" ? "bg-primary-DEFAULT" : "bg-secondary-DEFAULT"}`}>
-                      <span className="text-white font-bold text-xs">{item.type === "user" ? "You" : "AI"}</span>
-                    </div>
-                    <div className="text-sm text-text-secondary font-medium">
-                      {item.type === "user" ? "You" : "Programming Teacher AI"}
-                    </div>
+                    {item.type === "user" ? (
+                      <>
+                        <div className="w-8 h-8 rounded-full flex items-center justify-center bg-primary-DEFAULT">
+                          <span className="text-white font-bold text-xs">You</span>
+                        </div>
+                      </>
+                    ) : (
+                      <>
+                        <SimpleBotFace size={32} animated={false} />
+                        <div className="text-sm text-text-secondary font-medium">
+                          Programming Teacher
+                        </div>
+                      </>
+                    )}
                   </div>
 
                   {item.type === "user" ? (
                     <div className="leading-relaxed pl-10 text-text-primary">{item.text}</div>
                   ) : (
-                    <div className="leading-relaxed text-text-primary">
+                    <div className="leading-relaxed pl-10 text-text-primary">
                       {renderAIResponseWithCodeBlocks(item.text)}
                     </div>
                   )}
@@ -184,7 +239,7 @@ export function Typewriter({ typingSpeed = 50 }: TypewriterProps) {
                       {isTtsSpeaking ? (
                         <button
                           onClick={stopSpeaking}
-                          className="text-xs bg-danger-DEFAULT text-white px-3 py-1.5 rounded-full hover:opacity-90 flex items-center gap-1"
+                          className="text-xs bg-danger-DEFAULT/90 text-white px-3 py-1.5 rounded-full hover:opacity-90 flex items-center gap-1 border border-danger-DEFAULT/20 shadow-none"
                         >
                           <span className="w-2 h-2 bg-white rounded-full animate-pulse"></span>
                           Stop TTS
@@ -200,7 +255,7 @@ export function Typewriter({ typingSpeed = 50 }: TypewriterProps) {
                       ) : (
                         <button
                           onClick={speakLastResponse}
-                          className="text-xs bg-primary-DEFAULT text-white px-3 py-1.5 rounded-full hover:opacity-90"
+                          className="text-xs bg-primary-DEFAULT/80 text-white px-3 py-1.5 rounded-full hover:opacity-90 border border-primary-DEFAULT/20 shadow-none"
                         >
                           Speak
                         </button>

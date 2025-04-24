@@ -16,7 +16,7 @@ interface HeaderProps {
   title?: string;
 }
 
-export function Header({ title = "Programming Teacher AI" }: HeaderProps) {
+export function Header({ title = "Programming Teacher" }: HeaderProps) {
   const { disconnect } = useConnection();
   const { theme, toggleTheme } = useTheme();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
@@ -43,8 +43,8 @@ export function Header({ title = "Programming Teacher AI" }: HeaderProps) {
 
   return (
     <>
-      <header className="h-16 bg-bg-secondary flex items-center justify-between px-4 z-20 relative shadow-sm overflow-hidden">
-        <div className="absolute top-0 left-0 w-full h-1 bg-primary-DEFAULT/20"></div>
+      <header className="h-16 bg-bg-secondary flex items-center justify-between px-4 z-20 relative overflow-hidden border-b border-bg-tertiary/30">
+        <div className="absolute top-0 left-0 w-full h-0.5 bg-primary-DEFAULT/20"></div>
         <div className="flex items-center gap-2">
           <Button
             variant="ghost"
@@ -55,7 +55,7 @@ export function Header({ title = "Programming Teacher AI" }: HeaderProps) {
             {isMobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
           </Button>
 
-          <SimpleBotFace size={32} animated={true} />
+          <SimpleBotFace size={32} />
           <h1 className="text-lg font-semibold text-text-primary hidden sm:block">{title}</h1>
         </div>
 
@@ -101,10 +101,10 @@ export function Header({ title = "Programming Teacher AI" }: HeaderProps) {
             variant="outline"
             size="sm"
             onClick={handleDisconnect}
-            className="text-danger-DEFAULT hover:text-danger-DEFAULT hover:border-danger-DEFAULT flex items-center gap-1.5"
+            className="text-danger-DEFAULT hover:text-danger-DEFAULT hover:border-danger-DEFAULT flex items-center justify-center"
+            title="Disconnect"
           >
-            <LogOut className="w-4 h-4 flex-shrink-0" />
-            <span className="hidden sm:inline">Disconnect</span>
+            <LogOut className="w-4 h-4" />
           </Button>
         </div>
       </header>

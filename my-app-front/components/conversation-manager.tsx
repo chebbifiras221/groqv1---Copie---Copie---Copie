@@ -7,6 +7,7 @@ import { useConnectionState } from "@livekit/components-react";
 import { Button } from "./ui/button";
 import { Trash2, Edit, Check, X, Plus, MessageSquare, Calendar, Clock } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
+import { useErrorHandler } from "@/hooks/use-error-handler";
 
 interface Conversation {
   id: string;
@@ -51,8 +52,97 @@ export function ConversationManager() {
   const room = useMaybeRoomContext();
   const connectionState = useConnectionState();
   const isConnected = connectionState === ConnectionState.Connected;
+  const { handleError } = useErrorHandler();
 
-  // Fetch conversations when connected
+  /**
+   * Function to fetch the list of conversations from the server
+   */
+  const fetchConversations = async () => {
+    if (!room) return;
+
+    setIsLoading(true);
+    try {
+      const message = {
+        type: "list_conversations"
+      };
+      await room.localParticipant.publishData(
+        new TextEncoder().encode(JSON.stringify(message))
+      );
+    } catch (error) {
+      handleError(error, 'conversation', 'Error loading conversations');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  /**
+   * Function to fetch a specific conversation by ID
+   */
+  const fetchConversation = async (conversationId: string) => {
+    if (!room) return;
+
+    setIsLoading(true);
+    try {
+      // Store the conversation ID in localStorage so the useConversation hook can pick it up
+      localStorage.setItem('current-conversation-id', conversationId);
+
+      // Prepare to load the conversation
+
+      const message = {
+        type: "get_conversation",
+        conversation_id: conversationId
+      };
+
+      // Send the request to the server
+      await room.localParticipant.publishData(
+        new TextEncoder().encode(JSON.stringify(message))
+      );
+
+      // Store the current conversation ID in memory for better state tracking
+      // This helps with UI updates and prevents loading issues
+      setCurrentConversation(prev => {
+        if (prev?.id === conversationId) return prev;
+        return null; // Clear current conversation while loading the new one
+      });
+    } catch (error) {
+      handleError(error, 'conversation', 'Error loading conversation');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  /**
+   * Function to create a new conversation
+   */
+  const createNewConversation = async () => {
+    if (!room) return;
+
+    setIsLoading(true);
+    try {
+      // Clear the current conversation ID in localStorage
+      // The server will assign a new ID when it creates the conversation
+      localStorage.removeItem('current-conversation-id');
+
+      const message = {
+        type: "new_conversation",
+        title: `New Conversation`
+      };
+
+      // Send the request to create a new conversation
+      await room.localParticipant.publishData(
+        new TextEncoder().encode(JSON.stringify(message))
+      );
+    } catch (error) {
+      handleError(error, 'conversation', 'Error creating new conversation');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  /**
+   * Fetch conversations when connected to the room
+   * This ensures we load the conversation list as soon as the connection is established
+   */
   useEffect(() => {
     if (isConnected && room) {
       fetchConversations();
@@ -83,21 +173,55 @@ export function ConversationManager() {
         }
 
         if (data.type === "conversations_list") {
+          // Update the conversations list in state
           setConversations(data.conversations);
 
+          // Get the current conversation ID from localStorage
+          const currentId = localStorage.getItem('current-conversation-id');
+
           // Automatically load the most recent conversation if we don't have one loaded
-          if (data.conversations.length > 0 && !currentConversation) {
+          if (data.conversations.length > 0) {
             // Sort by updated_at and get the most recent one
             const sortedConversations = [...data.conversations].sort(
               (a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime()
             );
-            fetchConversation(sortedConversations[0].id);
+
+            // If we have a current ID, check if it exists in the conversations list
+            if (currentId) {
+              const conversationExists = data.conversations.some(c => c.id === currentId);
+
+              if (conversationExists) {
+                // If the current conversation exists but isn't loaded, load it
+                if (!currentConversation || currentConversation.id !== currentId) {
+                  // Load the conversation from localStorage
+                  fetchConversation(currentId);
+                }
+              } else {
+                // If the current conversation doesn't exist, load the most recent one
+                // Current ID not found, load the most recent conversation
+                fetchConversation(sortedConversations[0].id);
+              }
+            } else if (!currentConversation) {
+              // If we don't have a current ID and no conversation is loaded, load the most recent one
+              // No current conversation, load the most recent one
+              fetchConversation(sortedConversations[0].id);
+            }
           }
         } else if (data.type === "conversation_data") {
+          // Update the current conversation in state
           setCurrentConversation(data.conversation);
+
+          // Make sure localStorage is updated with the current conversation ID
+          localStorage.setItem('current-conversation-id', data.conversation.id);
         } else if (data.type === "new_conversation_created") {
+          // Handle new conversation creation
+
+          // Update localStorage with the new conversation ID
+          localStorage.setItem('current-conversation-id', data.conversation_id);
+
           // Refresh the conversation list
           fetchConversations();
+
           // Load the new conversation
           fetchConversation(data.conversation_id);
         } else if (data.type === "conversation_renamed") {
@@ -148,7 +272,7 @@ export function ConversationManager() {
           fetchConversations();
         }
       } catch (e) {
-        console.error("Error parsing data message:", e);
+        handleError(e, 'conversation', 'Error processing conversation data');
       }
     };
 
@@ -158,61 +282,7 @@ export function ConversationManager() {
     };
   }, [room, currentConversation]);
 
-  const fetchConversations = async () => {
-    if (!room) return;
 
-    setIsLoading(true);
-    try {
-      const message = {
-        type: "list_conversations"
-      };
-      await room.localParticipant.publishData(
-        new TextEncoder().encode(JSON.stringify(message))
-      );
-    } catch (error) {
-      console.error("Error fetching conversations:", error);
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const fetchConversation = async (conversationId: string) => {
-    if (!room) return;
-
-    setIsLoading(true);
-    try {
-      const message = {
-        type: "get_conversation",
-        conversation_id: conversationId
-      };
-      await room.localParticipant.publishData(
-        new TextEncoder().encode(JSON.stringify(message))
-      );
-    } catch (error) {
-      console.error("Error fetching conversation:", error);
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const createNewConversation = async () => {
-    if (!room) return;
-
-    setIsLoading(true);
-    try {
-      const message = {
-        type: "new_conversation",
-        title: `New Conversation`
-      };
-      await room.localParticipant.publishData(
-        new TextEncoder().encode(JSON.stringify(message))
-      );
-    } catch (error) {
-      console.error("Error creating new conversation:", error);
-    } finally {
-      setIsLoading(false);
-    }
-  };
 
   const startEditingTitle = (conversation: Conversation) => {
     setEditingId(conversation.id);
@@ -239,7 +309,7 @@ export function ConversationManager() {
       );
       setEditingId(null);
     } catch (error) {
-      console.error("Error renaming conversation:", error);
+      handleError(error, 'conversation', 'Error renaming conversation');
     } finally {
       setIsLoading(false);
     }
@@ -262,7 +332,7 @@ export function ConversationManager() {
         new TextEncoder().encode(JSON.stringify(message))
       );
     } catch (error) {
-      console.error("Error deleting conversation:", error);
+      handleError(error, 'conversation', 'Error deleting conversation');
     } finally {
       setIsLoading(false);
     }
@@ -284,7 +354,7 @@ export function ConversationManager() {
         new TextEncoder().encode(JSON.stringify(message))
       );
     } catch (error) {
-      console.error("Error clearing conversations:", error);
+      handleError(error, 'conversation', 'Error clearing all conversations');
     } finally {
       setIsLoading(false);
     }
@@ -293,8 +363,24 @@ export function ConversationManager() {
   const formatDate = (dateString: string) => {
     try {
       const date = new Date(dateString);
-      // Format as MM/DD HH:MM
-      return `${date.getMonth()+1}/${date.getDate()} ${date.getHours()}:${date.getMinutes().toString().padStart(2, '0')}`;
+      const now = new Date();
+      const isToday = date.getDate() === now.getDate() &&
+                     date.getMonth() === now.getMonth() &&
+                     date.getFullYear() === now.getFullYear();
+
+      // Format hours and minutes with leading zeros
+      const hours = date.getHours();
+      const minutes = date.getMinutes().toString().padStart(2, '0');
+      const ampm = hours >= 12 ? 'PM' : 'AM';
+      const hour12 = hours % 12 || 12; // Convert 0 to 12 for 12 AM
+
+      // If today, show only time, otherwise show date and time
+      if (isToday) {
+        return `Today at ${hour12}:${minutes} ${ampm}`;
+      } else {
+        // Format as MM/DD/YY, HH:MM AM/PM
+        return `${date.getMonth()+1}/${date.getDate()}/${date.getFullYear().toString().slice(-2)} · ${hour12}:${minutes} ${ampm}`;
+      }
     } catch (e) {
       return dateString;
     }
@@ -306,49 +392,53 @@ export function ConversationManager() {
 
   return (
     <div className="w-full h-full flex flex-col">
-      <div className="p-3">
-        <div className="flex justify-between items-center mb-2">
+      <div className="p-4 border-b border-bg-tertiary/30">
+        <div className="flex justify-between items-center gap-3">
           <Button
             onClick={createNewConversation}
             variant="primary"
-            className="flex-1 py-1.5 flex items-center justify-center gap-1.5 text-sm bg-primary-DEFAULT hover:opacity-90 rounded-md"
+            className="flex-1 py-2.5 flex items-center justify-center gap-2 text-sm font-medium bg-primary-DEFAULT hover:bg-primary-hover rounded-md shadow-sm transition-all duration-200 hover:shadow"
             disabled={isLoading}
           >
-            <Plus size={14} className="flex-shrink-0" />
-            <span>New Chat</span>
+            <span>+ &nbsp;New Chat</span>
           </Button>
           <Button
             onClick={clearAllConversations}
             variant="ghost"
             size="icon"
-            className="ml-2 text-danger-DEFAULT hover:text-danger-hover"
+            className="h-10 w-10 rounded-full text-danger-DEFAULT hover:text-danger-hover hover:bg-danger-DEFAULT/10 transition-colors duration-200"
             title="Clear All Conversations"
             disabled={isLoading || conversations.length === 0}
           >
-            <Trash2 size={16} />
+            <Trash2 size={18} />
           </Button>
         </div>
       </div>
 
       <div className="flex-1 overflow-y-auto">
-        <div className="p-2">
+        <div className="p-4">
           {isLoading && conversations.length === 0 && (
-            <div className="flex flex-col items-center justify-center py-8 gap-4">
-              <div className="w-10 h-10 rounded-full bg-bg-tertiary flex items-center justify-center animate-pulse">
-                <MessageSquare className="w-5 h-5 text-text-secondary" />
+            <div className="flex flex-col items-center justify-center py-12 gap-5">
+              <div className="w-14 h-14 rounded-full bg-bg-tertiary/50 flex items-center justify-center shadow-inner">
+                <div className="animate-pulse">
+                  <MessageSquare className="w-6 h-6 text-primary-DEFAULT/70" />
+                </div>
               </div>
-              <p className="text-text-secondary text-sm">Loading conversations...</p>
+              <div className="text-center">
+                <p className="text-text-secondary text-sm font-medium">Loading conversations...</p>
+                <p className="text-text-tertiary text-xs mt-1">Please wait a moment</p>
+              </div>
             </div>
           )}
 
           {!isLoading && conversations.length === 0 && (
-            <div className="flex flex-col items-center justify-center py-8 gap-4">
-              <div className="w-16 h-16 rounded-full bg-bg-tertiary flex items-center justify-center">
-                <MessageSquare className="w-8 h-8 text-text-secondary" />
+            <div className="flex flex-col items-center justify-center py-12 gap-5">
+              <div className="w-16 h-16 rounded-full bg-bg-tertiary/40 flex items-center justify-center shadow-sm border border-bg-tertiary/50">
+                <MessageSquare className="w-8 h-8 text-primary-DEFAULT/60" />
               </div>
-              <div className="text-center">
-                <p className="text-text-secondary text-sm mb-2">No conversations yet</p>
-                <p className="text-text-tertiary text-xs">Start a new conversation to begin</p>
+              <div className="text-center max-w-xs">
+                <p className="text-text-primary text-base font-medium mb-2">No conversations yet</p>
+                <p className="text-text-secondary text-sm">Start a new chat to begin your conversation with the AI assistant</p>
               </div>
             </div>
           )}
@@ -358,12 +448,12 @@ export function ConversationManager() {
               {conversations.map((conversation) => (
                 <motion.div
                   key={conversation.id}
-                  className={`p-1.5 rounded-md ${currentConversation?.id === conversation.id
-                    ? "bg-bg-tertiary/60 border-l-2 border-primary-DEFAULT/30"
-                    : "hover:bg-bg-tertiary/30 hover:border-l-2 hover:border-primary-DEFAULT/20"}`}
+                  className={`p-3 rounded-lg mb-2 shadow-sm border group cursor-pointer transition-all duration-200 ${currentConversation?.id === conversation.id
+                    ? "bg-bg-tertiary/30 border-primary-DEFAULT/30"
+                    : "hover:bg-bg-tertiary/10 border-bg-tertiary/30 hover:shadow-md hover:-translate-y-0.5"}`}
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
-                  transition={{ duration: 0.15, ease: "easeOut" }}
+                  transition={{ duration: 0.2, ease: "easeOut" }}
                   style={{ willChange: "opacity, transform" }}
                   onClick={() => fetchConversation(conversation.id)}
                 >
@@ -373,7 +463,8 @@ export function ConversationManager() {
                         type="text"
                         value={editTitle}
                         onChange={(e) => setEditTitle(e.target.value)}
-                        className="bg-bg-primary border-0 focus:ring-1 focus:ring-primary-DEFAULT rounded-md px-2 py-1 text-text-primary w-full text-sm shadow-sm"
+                        className="bg-bg-primary border-0 focus:ring-1 focus:ring-primary-DEFAULT rounded-md px-2 py-1 text-text-primary w-full text-sm"
+                        style={{ boxShadow: 'var(--shadow-sm)' }}
                         autoFocus
                         onClick={(e) => e.stopPropagation()}
                       />
@@ -405,9 +496,9 @@ export function ConversationManager() {
                     </div>
                   ) : (
                     <div>
-                      <div className="flex justify-between items-start mb-2">
-                        <h3 className="font-medium text-text-primary break-words pr-2 text-[11px]">{conversation.title}</h3>
-                        <div className="flex gap-1">
+                      <div className="flex justify-between items-start mb-3">
+                        <h3 className="font-medium text-text-primary break-words pr-2 text-sm">{conversation.title}</h3>
+                        <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                           <Button
                             onClick={(e) => {
                               e.stopPropagation();
@@ -415,9 +506,9 @@ export function ConversationManager() {
                             }}
                             variant="ghost"
                             size="icon"
-                            className="h-5 w-5 text-text-tertiary hover:text-text-primary"
+                            className="h-6 w-6 text-text-tertiary hover:text-text-primary hover:bg-bg-tertiary/50 rounded-full"
                           >
-                            <Edit size={10} />
+                            <Edit size={12} />
                           </Button>
                           <Button
                             onClick={(e) => {
@@ -426,47 +517,47 @@ export function ConversationManager() {
                             }}
                             variant="ghost"
                             size="icon"
-                            className="h-5 w-5 text-danger-DEFAULT hover:text-danger-hover"
+                            className="h-6 w-6 text-danger-DEFAULT hover:text-danger-hover hover:bg-danger-DEFAULT/10 rounded-full"
                           >
-                            <Trash2 size={10} />
+                            <Trash2 size={12} />
                           </Button>
                         </div>
                       </div>
 
-                      <div className="flex items-center gap-1 text-[8px] text-text-tertiary mb-0.5">
-                        <Clock size={10} />
+                      <div className="flex items-center gap-1.5 text-xs text-text-tertiary mb-2">
+                        <Clock size={12} className="flex-shrink-0" />
                         <span>{formatDate(conversation.updated_at)}</span>
                       </div>
 
                       {/* Message preview */}
                       {(currentConversation?.id === conversation.id && currentConversation.messages && currentConversation.messages.length > 0) ? (
-                        <div className="mt-1 text-[9px] text-text-secondary bg-bg-primary/30 backdrop-blur-sm p-1 rounded-md shadow-sm">
-                          <span className="font-medium">
+                        <div className="text-xs text-text-secondary bg-bg-tertiary/20 p-2.5 rounded-md border border-bg-tertiary/30 shadow-sm">
+                          <span className="font-medium text-primary-DEFAULT">
                             {currentConversation.messages[currentConversation.messages.length - 1].type === 'user' ? 'You: ' : 'AI: '}
                           </span>
                           <span className="line-clamp-2">
-                            {currentConversation.messages[currentConversation.messages.length - 1].content.substring(0, 80)}
-                            {currentConversation.messages[currentConversation.messages.length - 1].content.length > 80 ? '...' : ''}
+                            {currentConversation.messages[currentConversation.messages.length - 1].content.substring(0, 100)}
+                            {currentConversation.messages[currentConversation.messages.length - 1].content.length > 100 ? '...' : ''}
                           </span>
                         </div>
                       ) : conversation.messages && conversation.messages.length > 0 ? (
-                        <div className="mt-1 text-[9px] text-text-secondary bg-bg-primary/30 backdrop-blur-sm p-1 rounded-md shadow-sm">
-                          <span className="font-medium">
+                        <div className="text-xs text-text-secondary bg-bg-tertiary/20 p-2.5 rounded-md border border-bg-tertiary/30 shadow-sm">
+                          <span className="font-medium text-primary-DEFAULT">
                             {conversation.messages[conversation.messages.length - 1].type === 'user' ? 'You: ' : 'AI: '}
                           </span>
                           <span className="line-clamp-2">
-                            {conversation.messages[conversation.messages.length - 1].content.substring(0, 80)}
-                            {conversation.messages[conversation.messages.length - 1].content.length > 80 ? '...' : ''}
+                            {conversation.messages[conversation.messages.length - 1].content.substring(0, 100)}
+                            {conversation.messages[conversation.messages.length - 1].content.length > 100 ? '...' : ''}
                           </span>
                         </div>
                       ) : conversation.last_message ? (
-                        <div className="mt-1 text-[9px] text-text-secondary bg-bg-primary/30 backdrop-blur-sm p-1 rounded-md shadow-sm">
-                          <span className="font-medium">
+                        <div className="text-xs text-text-secondary bg-bg-tertiary/20 p-2.5 rounded-md border border-bg-tertiary/30 shadow-sm">
+                          <span className="font-medium text-primary-DEFAULT">
                             {conversation.last_message.type === 'user' ? 'You: ' : 'AI: '}
                           </span>
                           <span className="line-clamp-2">
-                            {conversation.last_message.content.substring(0, 80)}
-                            {conversation.last_message.content.length > 80 ? '...' : ''}
+                            {conversation.last_message.content.substring(0, 100)}
+                            {conversation.last_message.content.length > 100 ? '...' : ''}
                           </span>
                         </div>
                       ) : null}

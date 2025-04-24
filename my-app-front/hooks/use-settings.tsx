@@ -4,6 +4,7 @@ import React, { createContext, useContext, useEffect, useState } from "react";
 
 interface Settings {
   volume: number;
+  autoSpeak: boolean;
   // Add more settings as needed
 }
 
@@ -15,6 +16,7 @@ interface SettingsContextType {
 
 const defaultSettings: Settings = {
   volume: 0.5, // Default volume is 50%
+  autoSpeak: true, // Auto-speak AI responses by default
 };
 
 const SettingsContext = createContext<SettingsContextType | undefined>(undefined);
