@@ -17,91 +17,27 @@ export function CodeEditor({
 }: CodeEditorProps) {
   const [code, setCode] = useState(initialCode);
   const [lineCount, setLineCount] = useState(initialCode.split('\n').length);
-  const [isFormatting, setIsFormatting] = useState(false);
 
   /**
    * Debounced change handler to prevent excessive re-renders
-   * Uses requestAnimationFrame to optimize performance
    */
   const handleChange = useCallback((e: React.ChangeEvent<HTMLTextAreaElement>) => {
     const newCode = e.target.value;
     setCode(newCode);
 
-    // Use requestAnimationFrame to debounce line count updates
-    requestAnimationFrame(() => {
-      setLineCount(newCode.split('\n').length);
-      if (onChange) {
-        onChange(newCode);
-      }
-    });
+    // Update line count and call onChange
+    setLineCount(newCode.split('\n').length);
+    if (onChange) {
+      onChange(newCode);
+    }
   }, [onChange]);
 
-  /**
-   * Format code based on language with performance optimizations
-   *
-   * This function applies basic formatting to the code based on the selected language.
-   * It handles indentation, spacing, and other formatting rules.
-   * Uses requestAnimationFrame to avoid blocking the main thread.
-   */
-  const formatCode = useCallback(() => {
-    setIsFormatting(true);
-
-    // Use requestAnimationFrame to avoid blocking the main thread
-    requestAnimationFrame(() => {
-      try {
-        let formattedCode = code;
-
-        // Basic indentation for JavaScript/TypeScript
-        if (['javascript', 'typescript', 'jsx', 'tsx'].includes(language)) {
-          // Replace multiple spaces with a single space
-          formattedCode = formattedCode.replace(/\s{2,}/g, ' ');
-
-          // Add proper indentation after opening braces
-          formattedCode = formattedCode.replace(/{\s*\n/g, '{\n  ');
-
-          // Add proper indentation for nested blocks
-          let lines = formattedCode.split('\n');
-          let indentLevel = 0;
-
-          formattedCode = lines.map(line => {
-            // Adjust indent level based on braces
-            const openBraces = (line.match(/{/g) || []).length;
-            const closeBraces = (line.match(/}/g) || []).length;
-
-            // Calculate the indent for this line (before adjusting indentLevel)
-            const indent = '  '.repeat(Math.max(0, indentLevel));
-
-            // Update indent level for the next line
-            indentLevel += openBraces - closeBraces;
-
-            return indent + line.trim();
-          }).join('\n');
-        }
-
-        // Update the code state
-        setCode(formattedCode);
-        setLineCount(formattedCode.split('\n').length);
-
-        if (onChange) {
-          onChange(formattedCode);
-        }
-      } catch (error) {
-        console.error('Error formatting code:', error);
-      } finally {
-        setIsFormatting(false);
-      }
-    });
-  }, [code, language, onChange]);
-
-  // Generate line numbers - memoize this to avoid unnecessary re-renders
-  const lineNumbers = React.useMemo(() => {
+  // Generate line numbers
+  const lineNumbers = useMemo(() => {
     return Array.from({ length: Math.max(1, lineCount) }, (_, i) => i + 1);
   }, [lineCount]);
 
-  /**
-   * Memoize language colors to prevent unnecessary calculations
-   * This improves performance by avoiding recalculating colors on every render
-   */
+  // Language colors
   const langColors = useMemo(() => {
     const colors = {
       javascript: { primary: '#f7df1e', secondary: '#323330', text: '#323330' },
@@ -131,20 +67,13 @@ export function CodeEditor({
           <div className="language-dot" style={{ backgroundColor: langColors.primary }}></div>
           <div className="language-tag">{language}</div>
         </div>
+        {/* Format button removed */}
         <div className="editor-actions">
-          <button
-            className={`format-button ${isFormatting || !code.trim() ? 'disabled' : ''}`}
-            onClick={formatCode}
-            disabled={isFormatting || !code.trim()}
-            title="Format code with proper indentation"
-          >
-            {isFormatting ? 'Formatting...' : 'Format'}
-          </button>
+          {/* Empty div kept for layout consistency */}
         </div>
       </div>
       <div className="code-editor-content">
         <div className="line-numbers" style={{ contain: 'content' }}>
-          {/* Render line numbers with optimized rendering */}
           {lineNumbers.map(num => (
             <div key={num} className="line-number" style={{ contain: 'content' }}>{num}</div>
           ))}
@@ -170,20 +99,20 @@ export function CodeEditor({
           margin: 0;
           border-radius: 8px;
           overflow: hidden;
-          background-color: #0d1117;
-          border: 1px solid #30363d;
+          background-color: #1a1f24; /* Match app's dark theme */
+          border: 1px solid #2d333b;
           font-family: var(--font-geist-mono), 'Consolas', 'Monaco', 'Andale Mono', monospace;
           font-size: 14px;
           line-height: 1.6;
-          box-shadow: none;
-          transition: none;
+          box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
+          transition: all 0.2s ease;
           contain: layout style;
         }
 
         :global(.light-theme) .code-editor-container {
-          background-color: #f8fafc;
-          border-color: #e2e8f0;
-          box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+          background-color: #ffffff;
+          border-color: #d0d7de;
+          box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
         }
 
         .code-editor-container:focus-within {
@@ -196,13 +125,13 @@ export function CodeEditor({
           justify-content: space-between;
           align-items: center;
           padding: 12px 16px;
-          background-color: #161b22;
-          border-bottom: 1px solid #21262d;
+          background-color: #242a33; /* Match app's dark theme */
+          border-bottom: 1px solid #2d333b;
         }
 
         :global(.light-theme) .code-editor-header {
-          background-color: #f1f5f9;
-          border-bottom: 1px solid #e2e8f0;
+          background-color: #f3f3f3;
+          border-bottom: 1px solid #d0d7de;
         }
 
         .language-indicator {
@@ -220,7 +149,7 @@ export function CodeEditor({
         }
 
         .language-tag {
-          color: #e6edf3;
+          color: #e6edf3; /* Brighter text for better contrast */
           font-size: 12px;
           font-weight: 500;
           text-transform: uppercase;
@@ -228,46 +157,12 @@ export function CodeEditor({
         }
 
         :global(.light-theme) .language-tag {
-          color: #334155;
+          color: #57606a;
         }
 
         .editor-actions {
           display: flex;
           gap: 8px;
-        }
-
-        .format-button {
-          background-color: var(--secondary);
-          color: white;
-          border: none;
-          border-radius: 4px;
-          padding: 6px 12px;
-          font-size: 12px;
-          font-weight: 500;
-          cursor: pointer;
-          transition: none;
-        }
-
-        :global(.light-theme) .format-button {
-          background-color: var(--secondary);
-        }
-
-        .format-button:hover {
-          background-color: var(--secondary-hover);
-          opacity: 0.95;
-        }
-
-        :global(.light-theme) .format-button:hover {
-          background-color: var(--secondary-hover);
-        }
-
-        .format-button.disabled {
-          opacity: 0.5;
-          cursor: not-allowed;
-        }
-
-        .format-button:active {
-          transform: translateY(1px);
         }
 
         .code-editor-content {
@@ -304,8 +199,8 @@ export function CodeEditor({
 
         .code-textarea {
           flex: 1;
-          background-color: #0d1117;
-          color: #e6edf3;
+          background-color: #1a1f24; /* Match app's dark theme */
+          color: #e6edf3; /* Brighter text for better contrast */
           border: none;
           padding: 12px 16px;
           font-family: inherit;
@@ -317,15 +212,15 @@ export function CodeEditor({
           height: 100%;
           tab-size: 2;
           scrollbar-width: thin;
-          scrollbar-color: #30363d transparent;
+          scrollbar-color: #2d333b transparent;
           contain: strict;
           white-space: pre;
         }
 
         :global(.light-theme) .code-textarea {
-          background-color: #f8fafc;
-          color: #334155;
-          scrollbar-color: #cbd5e1 transparent;
+          background-color: #ffffff;
+          color: #24292f;
+          scrollbar-color: #d0d7de transparent;
         }
 
         .code-textarea::-webkit-scrollbar {
@@ -338,30 +233,30 @@ export function CodeEditor({
         }
 
         .code-textarea::-webkit-scrollbar-thumb {
-          background-color: #30363d;
+          background-color: #2d333b;
           border-radius: 4px;
         }
 
         .code-textarea::-webkit-scrollbar-thumb:hover {
-          background-color: #6e7681;
+          background-color: #3a424e;
         }
 
         :global(.light-theme) .code-textarea::-webkit-scrollbar-thumb {
-          background-color: #cbd5e1;
+          background-color: #d0d7de;
           border-radius: 4px;
         }
 
         :global(.light-theme) .code-textarea::-webkit-scrollbar-thumb:hover {
-          background-color: #94a3b8;
+          background-color: #bbc6d0;
         }
 
         .code-textarea::placeholder {
-          color: #6e7681;
+          color: #7d8590; /* Slightly brighter for better visibility */
           opacity: 0.6;
         }
 
         :global(.light-theme) .code-textarea::placeholder {
-          color: #94a3b8;
+          color: #6e7781;
           opacity: 0.7;
         }
       `}</style>

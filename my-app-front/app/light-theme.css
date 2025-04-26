@@ -14,6 +14,7 @@
   --text-primary: #24292f;
   --text-secondary: #57606a;
   --text-tertiary: #6e7781;
+  --text-disabled: #a1a1aa;
 
   /* Border colors */
   --border-default: #d0d7de;
@@ -38,6 +39,11 @@
 .light-theme body {
   background-color: var(--bg-primary);
   color: var(--text-primary);
+}
+
+/* Main background in light theme */
+.light-theme .bg-bg-secondary {
+  background-color: #f8fafc !important;
 }
 
 .light-theme .bg-bg-primary {
@@ -87,28 +93,75 @@
   background-color: var(--bg-secondary) !important;
 }
 
-/* Code editor styling */
+/* Code block styling */
 .light-theme .code-block-container {
-  background-color: var(--code-bg) !important;
-  border-color: var(--code-border) !important;
+  background-color: #ffffff !important;
+  border: 1px solid #d0d7de !important;
 }
 
 .light-theme .code-header {
-  background-color: var(--bg-tertiary) !important;
-  border-bottom-color: var(--code-border) !important;
+  background-color: #f3f3f3 !important;
+  border-bottom: 1px solid #d0d7de !important;
 }
 
 .light-theme .language-tag {
-  color: var(--text-secondary) !important;
+  color: #57606a !important;
 }
 
 .light-theme .code-content {
-  color: var(--code-text) !important;
+  background-color: #ffffff !important;
+  color: #24292f !important;
 }
 
 .light-theme .line-numbers {
-  border-right-color: var(--code-border) !important;
-  color: var(--text-tertiary) !important;
+  background-color: #ffffff !important;
+  border-right: 1px solid #d0d7de !important;
+  color: #6e7781 !important;
+}
+
+.light-theme .copy-button {
+  background-color: #0969da !important;
+  color: white !important;
+}
+
+/* Syntax highlighting for light theme */
+.light-theme .keyword {
+  color: #0000ff !important;
+  font-weight: 500 !important;
+}
+
+.light-theme .string {
+  color: #a31515 !important;
+}
+
+.light-theme .boolean {
+  color: #0000ff !important;
+  font-weight: 500 !important;
+}
+
+.light-theme .number {
+  color: #098658 !important;
+}
+
+.light-theme .comment {
+  color: #008000 !important;
+  font-style: italic !important;
+}
+
+.light-theme .selector {
+  color: #800000 !important;
+}
+
+.light-theme .property {
+  color: #795e26 !important;
+}
+
+.light-theme .value {
+  color: #a31515 !important;
+}
+
+.light-theme .bracket {
+  color: #000000 !important;
 }
 
 /* Button styling */
@@ -139,7 +192,7 @@
 
 /* Fix for space button in light theme */
 .light-theme kbd {
-  background-color: #f6f8fa !important;
+  background-color: #e9ecef !important;
   color: #24292e !important;
   border-color: #d0d7de !important;
   box-shadow: none !important;
@@ -156,6 +209,21 @@
   border-color: var(--primary-default) !important;
   background-color: #f0f2f5 !important;
   box-shadow: none !important;
+}
+
+/* New microphone button styling */
+.light-theme button[class*="rounded-full"][class*="bg-bg-tertiary"] {
+  background-color: #f1f5f9 !important;
+  color: #64748b !important;
+}
+
+.light-theme button[class*="rounded-full"][class*="bg-primary-DEFAULT"] {
+  background-color: #0969da !important;
+  color: white !important;
+}
+
+.light-theme .animate-ping-slow {
+  background-color: rgba(9, 105, 218, 0.1) !important;
 }
 
 /* Fix for microphone button in light theme */
@@ -208,6 +276,16 @@
   color: var(--text-primary) !important;
 }
 
+/* Clear button styling */
+.light-theme button[class*="hover:text-danger-DEFAULT"] {
+  color: #64748b !important;
+}
+
+.light-theme button[class*="hover:text-danger-DEFAULT"]:hover {
+  background-color: #fee2e2 !important;
+  color: #dc2626 !important;
+}
+
 /* Fix for code editor buttons in light theme */
 .light-theme button[class*="bg-primary-DEFAULT"],
 .light-theme button[class*="bg-gradient-to-r from-primary-DEFAULT"] {
@@ -238,6 +316,19 @@
 
 .light-theme input::placeholder {
   color: var(--text-tertiary) !important;
+}
+
+/* Chat input container styling */
+.light-theme .relative.flex-1.rounded-lg.overflow-hidden {
+  background-color: white !important;
+  border: 1px solid #e2e8f0 !important;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05) !important;
+}
+
+/* Bottom action bar styling */
+.light-theme div[class*="border-t border-bg-tertiary"] {
+  background-color: #f8fafc !important;
+  border-top: 1px solid #e2e8f0 !important;
 }
 
 /* Conversation list styling */
@@ -271,10 +362,16 @@
 }
 
 /* Device selector dropdown styling */
-.light-theme div[class*="absolute bg-bg-secondary left-0 bottom-8"] {
+.light-theme div[class*="absolute bg-bg-secondary"] {
   background-color: var(--bg-secondary) !important;
   border-color: var(--border-default) !important;
   box-shadow: var(--shadow-sm) !important;
+  transform: none !important;
+}
+
+/* Fix for device selector text orientation */
+.light-theme .relative.z-10 .absolute {
+  transform: none !important;
 }
 
 /* Scrollbar styling */
@@ -287,10 +384,25 @@
 }
 
 /* Fix for language selector in light theme */
-.light-theme button[class*="rounded-full bg-bg-tertiary"] {
+.light-theme button[class*="rounded-full bg-bg-tertiary"],
+.light-theme button[class*="rounded-full text-text-secondary"] {
   background-color: #f1f5f9 !important;
-  color: var(--text-primary) !important;
+  color: #64748b !important;
   border: 1px solid #e2e8f0 !important;
+}
+
+/* Send button styling */
+.light-theme button[class*="text-primary-DEFAULT"] {
+  color: #0969da !important;
+}
+
+.light-theme button[class*="text-primary-DEFAULT"]:hover {
+  background-color: rgba(9, 105, 218, 0.1) !important;
+}
+
+/* Disabled send button */
+.light-theme button[class*="text-text-tertiary"] {
+  color: var(--text-disabled) !important;
 }
 
 .light-theme button[class*="rounded-full bg-bg-tertiary"]:hover {

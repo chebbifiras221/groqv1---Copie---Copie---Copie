@@ -2,12 +2,18 @@
 
 import { useState, useEffect } from "react";
 import { useMaybeRoomContext } from "@livekit/components-react";
-import { ConnectionState } from "livekit-client";
+import { ConnectionState, Room } from "livekit-client";
 import { useConnectionState } from "@livekit/components-react";
 import { Button } from "./ui/button";
-import { Trash2, Edit, Check, X, Plus, MessageSquare, Calendar, Clock } from "lucide-react";
-import { motion, AnimatePresence } from "framer-motion";
+import { Trash2, Edit, Check, X, MessageSquare, Clock } from "lucide-react";
+import { motion } from "framer-motion";
 import { useErrorHandler } from "@/hooks/use-error-handler";
+
+// Helper function to check if a room is connected
+// This avoids TypeScript errors with ConnectionState comparison
+function isRoomConnected(room: Room): boolean {
+  return room.state === ConnectionState.Connected;
+}
 
 interface Conversation {
   id: string;
@@ -65,9 +71,53 @@ export function ConversationManager() {
       const message = {
         type: "list_conversations"
       };
-      await room.localParticipant.publishData(
-        new TextEncoder().encode(JSON.stringify(message))
-      );
+
+      // Check if the room is connected before attempting to publish
+      if (room.state !== ConnectionState.Connected) {
+        console.warn('Room not connected, attempting to reconnect...');
+
+        // Wait for the room to reconnect (up to 5 seconds)
+        for (let i = 0; i < 5; i++) {
+          await new Promise(resolve => setTimeout(resolve, 1000));
+
+          // Need to check the current state each time
+          // Using a function to check the state to avoid TypeScript errors
+          if (isRoomConnected(room)) {
+            console.log('Room reconnected successfully');
+            break;
+          }
+
+          // If we've waited 5 seconds and still not connected, throw an error
+          if (i === 4) {
+            throw new Error('Room failed to reconnect after 5 seconds');
+          }
+        }
+      }
+
+      // Send the request to the server with retry logic
+      let retryCount = 0;
+      const maxRetries = 3;
+
+      while (retryCount < maxRetries) {
+        try {
+          await room.localParticipant.publishData(
+            new TextEncoder().encode(JSON.stringify(message))
+          );
+          console.log('Successfully requested conversation list');
+          break; // Success, exit the loop
+        } catch (publishError) {
+          retryCount++;
+          console.warn(`Publish attempt ${retryCount} failed:`, publishError);
+
+          if (retryCount >= maxRetries) {
+            throw publishError; // Rethrow after max retries
+          }
+
+          // Wait with exponential backoff before retrying
+          const delay = 300 * Math.pow(2, retryCount - 1);
+          await new Promise(resolve => setTimeout(resolve, delay));
+        }
+      }
     } catch (error) {
       handleError(error, 'conversation', 'Error loading conversations');
     } finally {
@@ -87,16 +137,54 @@ export function ConversationManager() {
       localStorage.setItem('current-conversation-id', conversationId);
 
       // Prepare to load the conversation
-
       const message = {
         type: "get_conversation",
         conversation_id: conversationId
       };
 
-      // Send the request to the server
-      await room.localParticipant.publishData(
-        new TextEncoder().encode(JSON.stringify(message))
-      );
+      // Check if the room is connected before attempting to publish
+      if (room.state !== ConnectionState.Connected) {
+        console.warn('Room not connected, attempting to reconnect...');
+
+        // Wait for the room to reconnect (up to 5 seconds)
+        for (let i = 0; i < 5; i++) {
+          await new Promise(resolve => setTimeout(resolve, 1000));
+          if (isRoomConnected(room)) {
+            console.log('Room reconnected successfully');
+            break;
+          }
+
+          // If we've waited 5 seconds and still not connected, throw an error
+          if (i === 4) {
+            throw new Error('Room failed to reconnect after 5 seconds');
+          }
+        }
+      }
+
+      // Send the request to the server with retry logic
+      let retryCount = 0;
+      const maxRetries = 3;
+
+      while (retryCount < maxRetries) {
+        try {
+          await room.localParticipant.publishData(
+            new TextEncoder().encode(JSON.stringify(message))
+          );
+          console.log(`Successfully requested conversation: ${conversationId}`);
+          break; // Success, exit the loop
+        } catch (publishError) {
+          retryCount++;
+          console.warn(`Publish attempt ${retryCount} failed:`, publishError);
+
+          if (retryCount >= maxRetries) {
+            throw publishError; // Rethrow after max retries
+          }
+
+          // Wait with exponential backoff before retrying
+          const delay = 300 * Math.pow(2, retryCount - 1);
+          await new Promise(resolve => setTimeout(resolve, delay));
+        }
+      }
 
       // Store the current conversation ID in memory for better state tracking
       // This helps with UI updates and prevents loading issues
@@ -153,7 +241,10 @@ export function ConversationManager() {
   useEffect(() => {
     if (!room) return;
 
-    const handleDataReceived = (payload: Uint8Array, topic?: string) => {
+    // Using any for the parameters to avoid TypeScript errors with LiveKit's event handler
+    // The actual implementation only uses the payload and topic
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const handleDataReceived = (payload: any, _participant?: any, _kind?: any, topic?: any) => {
       // Skip binary audio data
       if (topic === "binary_audio" || payload[0] === 73 && payload[1] === 68 && payload[2] === 51) { // "ID3" header for MP3
         // This is binary audio data, not JSON - skip it
@@ -188,7 +279,7 @@ export function ConversationManager() {
 
             // If we have a current ID, check if it exists in the conversations list
             if (currentId) {
-              const conversationExists = data.conversations.some(c => c.id === currentId);
+              const conversationExists = data.conversations.some((c: Conversation) => c.id === currentId);
 
               if (conversationExists) {
                 // If the current conversation exists but isn't loaded, load it

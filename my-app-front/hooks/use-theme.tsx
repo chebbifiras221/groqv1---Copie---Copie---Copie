@@ -44,6 +44,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     if (newTheme === "dark") {
       // Apply dark theme
       html.classList.remove("light-theme");
+      html.classList.add("dark");
       document.body.style.backgroundColor = "#0d1117";
       document.body.style.color = "#e6edf3";
       document.documentElement.style.setProperty('--shadow-color', 'rgba(0, 0, 0, 0.3)');
@@ -53,6 +54,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     } else {
       // Apply light theme
       html.classList.add("light-theme");
+      html.classList.remove("dark");
       document.body.style.backgroundColor = "#ffffff";
       document.body.style.color = "#24292f";
       document.documentElement.style.setProperty('--shadow-color', 'rgba(0, 0, 0, 0.05)');

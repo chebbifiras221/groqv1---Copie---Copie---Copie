@@ -2,10 +2,11 @@
 
 import React, { useState } from 'react';
 import { motion } from 'framer-motion';
-import { Settings, Volume2, RefreshCw } from 'lucide-react';
+import { Settings, Volume2, RefreshCw, Mic } from 'lucide-react';
 import { Modal } from './modal';
 import { Button } from './button';
 import { useSettings } from '@/hooks/use-settings';
+import { DeviceSelector } from '@/components/device-selector';
 
 // Default settings for reference
 const defaultSettings = {
@@ -113,6 +114,27 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
             </div>
             <p className="text-text-tertiary text-xs mt-1">
               When enabled, AI responses will be automatically read aloud
+            </p>
+          </div>
+
+          {/* Microphone Device Selector */}
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <label className="flex items-center gap-2 text-text-primary">
+                <Mic size={18} />
+                <span>Microphone Device</span>
+              </label>
+            </div>
+            <div className="flex items-center justify-between p-2 bg-bg-tertiary/30 rounded-md">
+              <div className="flex-1 text-sm text-text-secondary">
+                Select your microphone
+              </div>
+              <div className="relative z-10">
+                <DeviceSelector kind="audioinput" />
+              </div>
+            </div>
+            <p className="text-text-tertiary text-xs mt-1">
+              Choose which microphone to use for voice input
             </p>
           </div>
 

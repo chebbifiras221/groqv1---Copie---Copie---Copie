@@ -68,7 +68,7 @@ export function LanguageSelector({ value, onChange, className = '' }: LanguageSe
     <div className={`relative ${className}`} ref={containerRef}>
       <button
         type="button"
-        className="flex items-center gap-2 px-3 py-2 rounded-full bg-bg-tertiary/50 hover:bg-bg-tertiary text-sm font-medium shadow-none"
+        className="flex items-center gap-2 px-3 py-2 rounded-full bg-bg-tertiary/50 hover:bg-bg-tertiary text-sm font-medium shadow-none dark:bg-[#242a33] dark:hover:bg-[#2d333b] dark:text-white"
         onClick={() => setIsOpen(!isOpen)}
         aria-haspopup="listbox"
         aria-expanded={isOpen}
@@ -86,7 +86,7 @@ export function LanguageSelector({ value, onChange, className = '' }: LanguageSe
 
       {isOpen && (
           <div
-            className="absolute z-10 mt-1 w-full bg-bg-primary rounded-md shadow-sm border border-border-DEFAULT/30 overflow-hidden"
+            className="absolute z-10 mt-1 w-full bg-bg-primary rounded-md shadow-sm border border-border-DEFAULT/30 overflow-hidden dark:bg-[#1a1f24] dark:border-[#2d333b]"
             style={{ contain: 'content', transform: 'translateZ(0)' }}
           >
             <ul
@@ -102,7 +102,10 @@ export function LanguageSelector({ value, onChange, className = '' }: LanguageSe
                   aria-selected={value === language.value}
                   className={`
                     flex items-center gap-2 px-3 py-2 cursor-pointer
-                    ${value === language.value ? 'bg-bg-tertiary/70' : 'hover:bg-bg-tertiary/30'}
+                    ${value === language.value
+                      ? 'bg-bg-tertiary/70 dark:bg-[#2d333b]'
+                      : 'hover:bg-bg-tertiary/30 dark:hover:bg-[#242a33]'}
+                    dark:text-[#e6edf3]
                   `}
                   onClick={() => handleSelect(language.value)}
                   style={{ contain: 'layout' }}

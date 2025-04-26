@@ -37,18 +37,22 @@ export const DeviceSelector = ({ kind }: DeviceSelectorProps) => {
   return (
     <div className="relative">
       <button
-        className={`flex hover:opacity-50 ${activeClassName} transition-all duration-100`}
+        className={`flex items-center gap-1 px-2 py-1 rounded hover:bg-bg-tertiary/50 ${activeClassName} transition-all duration-100`}
         onClick={(e) => {
           setShowMenu(!showMenu);
           e.stopPropagation();
         }}
       >
-        <ChevronDown className="w-4 h-4 text-text-secondary" />
+        <span className="text-xs text-text-primary truncate max-w-[120px]">
+          {selectedDeviceName || "Select device"}
+        </span>
+        <ChevronDown className="w-4 h-4 text-text-secondary flex-shrink-0" />
       </button>
       <div
-        className="absolute bg-bg-secondary left-0 bottom-8 text-text-primary text-left border border-border-DEFAULT box-border rounded-md z-10 w-[280px] shadow-md"
+        className="absolute bg-bg-secondary right-0 top-auto bottom-8 text-text-primary text-left border border-border-DEFAULT box-border rounded-md z-10 w-[280px] shadow-md"
         style={{
           display: showMenu ? "block" : "none",
+          transform: "none"
         }}
       >
         {deviceSelect.devices.map((device, index) => {
@@ -73,6 +77,7 @@ export const DeviceSelector = ({ kind }: DeviceSelectorProps) => {
                 ? "bg-bg-tertiary font-medium"
                 : ""
                 } text-text-primary text-xs py-2 px-2 cursor-pointer hover:bg-bg-tertiary ${roundedStyles}`}
+              style={{ transform: "none" }}
               key={index}
             >
               {device.label}

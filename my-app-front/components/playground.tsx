@@ -1,38 +1,32 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import {
   useConnectionState,
   useLocalParticipant,
-  useTracks,
 } from "@livekit/components-react";
-import { AnimatePresence, motion } from "framer-motion";
-import { ConnectionState, LocalParticipant, Track } from "livekit-client";
+import { AnimatePresence } from "framer-motion";
+import { ConnectionState } from "livekit-client";
 import { MessageSquare } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Header } from "@/components/ui/header";
-import { MicrophoneButton } from "@/components/microphone-button";
-import { useMultibandTrackVolume } from "@/hooks/use-track-volume";
 import { Typewriter } from "./typewriter";
 import { TextInput } from "./text-input";
 import { ConversationManager } from "./conversation-manager";
-import { StatusIndicator, ConnectionToast } from "./ui/status-indicator";
+import { ConnectionToast } from "./ui/status-indicator";
 import { MobileConversationDrawer } from "./ui/mobile-conversation-drawer";
-import { useErrorHandler } from "@/hooks/use-error-handler";
 
 export interface PlaygroundProps {
   onConnect?: (connect: boolean) => void;
 }
 
-export function Playground({ onConnect }: PlaygroundProps) {
+export function Playground({ onConnect: _ }: PlaygroundProps) {
   const { localParticipant } = useLocalParticipant();
   const roomState = useConnectionState();
-  const tracks = useTracks();
   const [showConnectionToast, setShowConnectionToast] = useState(false);
   const [lastConnectionState, setLastConnectionState] = useState<ConnectionState | null>(null);
   const [showMobileConversations, setShowMobileConversations] = useState(false);
-  const { handleError } = useErrorHandler();
 
   /**
    * Show connection toast when connection state changes
@@ -89,91 +83,30 @@ export function Playground({ onConnect }: PlaygroundProps) {
     };
 
     try {
-      // Check if tracks property exists and is initialized
-      if (localParticipant.tracks && typeof localParticipant.tracks.size === 'number' && localParticipant.tracks.size > 0) {
-        // Execute immediately if tracks are already published
+      // Simply mute the microphone
+      muteOnConnection();
+
+      // Listen for track published events to ensure mic stays muted
+      const handleTrackPublished = () => {
         muteOnConnection();
-      } else {
-        // Otherwise listen for the trackPublished event
-        const handleTrackPublished = () => {
-          muteOnConnection();
-          // Remove listener after execution to prevent multiple mutes
+      };
+
+      // Add event listener safely
+      if (localParticipant && localParticipant.on) {
+        localParticipant.on('trackPublished', handleTrackPublished);
+
+        // Cleanup listener if component unmounts
+        return () => {
           if (localParticipant && localParticipant.off) {
             localParticipant.off('trackPublished', handleTrackPublished);
           }
         };
-
-        // Add event listener safely
-        if (localParticipant && localParticipant.on) {
-          localParticipant.on('trackPublished', handleTrackPublished);
-
-          // Cleanup listener if component unmounts before track is published
-          return () => {
-            if (localParticipant && localParticipant.off) {
-              localParticipant.off('trackPublished', handleTrackPublished);
-            }
-          };
-        }
       }
     } catch (error) {
       console.error('Error in microphone muting effect:', error);
     }
   }, [localParticipant, roomState]);
-
-  const localTracks = tracks.filter(
-    ({ participant }) => participant instanceof LocalParticipant
-  );
-
-  const localMicTrack = localTracks.find(
-    ({ source }) => source === Track.Source.Microphone
-  );
-
-  const localMultibandVolume = useMultibandTrackVolume(
-    localMicTrack?.publication.track,
-    9
-  );
-
-  const audioTileContent = useMemo(() => {
-    const isLoading = roomState === ConnectionState.Connecting;
-    const isActive = !isLoading && roomState !== ConnectionState.Disconnected;
-
-    const conversationToolbar = (
-      <div className="w-full absolute left-1/2 top-1/2 -translate-y-1/2 -translate-x-1/2">
-        <motion.div
-          className="flex justify-center gap-3 px-2"
-          initial={{ opacity: 0, y: 25 }}
-          animate={{ opacity: 1, y: 0 }}
-          exit={{ opacity: 0, y: 25 }}
-          transition={{
-            type: "spring",
-            stiffness: 300,
-            damping: 25,
-            mass: 0.5
-          }}
-          style={{ willChange: 'opacity, transform' }}
-        >
-          <MicrophoneButton
-            localMultibandVolume={localMultibandVolume}
-            isSpaceBarEnabled={true}
-          />
-        </motion.div>
-      </div>
-    );
-
-
-
-    const visualizerContent = (
-      <div className="flex flex-col justify-space-between h-full w-full">
-        <div className="min-h-12 h-12 w-full relative">
-          <AnimatePresence>
-            {isActive ? conversationToolbar : null}
-          </AnimatePresence>
-        </div>
-      </div>
-    );
-
-    return visualizerContent;
-  }, [localMultibandVolume, roomState]);
+  // to the text input component
 
   const isConnected = roomState === ConnectionState.Connected;
 
@@ -223,9 +156,7 @@ export function Playground({ onConnect }: PlaygroundProps) {
             <Typewriter typingSpeed={25} />
           </div>
           <div className="absolute left-0 bottom-0 w-full bg-bg-secondary border-t border-bg-tertiary/30">
-            <div className="pt-4 pb-2 px-4">
-              {audioTileContent}
-            </div>
+            {/* Removed the audio tile content with the microphone button */}
             <div className="bg-bg-secondary">
               <TextInput isConnected={isConnected} />
             </div>

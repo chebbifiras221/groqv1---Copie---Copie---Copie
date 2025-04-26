@@ -1,12 +1,11 @@
 "use client";
 
-import { useState, KeyboardEvent } from "react";
+import { useState, KeyboardEvent, useEffect } from "react";
 import { Button } from "@/components/ui/button";
-import { Send, Trash2, Code, MessageSquare } from "lucide-react";
+import { Send, Trash2, Code, Mic, MicOff } from "lucide-react";
 import { useConversation } from "@/hooks/use-conversation";
-import { useMaybeRoomContext } from "@livekit/components-react";
 import { CodeEditorModal } from "./code-editor-modal";
-import { motion } from "framer-motion";
+import { useLocalParticipant } from "@livekit/components-react";
 
 export interface TextInputProps {
   isConnected: boolean;
@@ -16,8 +15,63 @@ export function TextInput({ isConnected }: TextInputProps) {
   const [inputText, setInputText] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isCodeEditorOpen, setIsCodeEditorOpen] = useState(false);
+  const [isMicMuted, setIsMicMuted] = useState(true);
+  const [isSpacePressed, setIsSpacePressed] = useState(false);
   const { addUserMessage, clearMessages } = useConversation();
-  const room = useMaybeRoomContext();
+  const { localParticipant } = useLocalParticipant();
+
+  // Keep track of microphone state
+  useEffect(() => {
+    if (localParticipant && typeof localParticipant.isMicrophoneEnabled !== 'undefined') {
+      setIsMicMuted(!localParticipant.isMicrophoneEnabled);
+
+      // Add event listener for microphone state changes
+      const handleMicrophoneUpdate = () => {
+        setIsMicMuted(!localParticipant.isMicrophoneEnabled);
+      };
+
+      // Listen for track mute/unmute events
+      localParticipant.on('trackMuted', handleMicrophoneUpdate);
+      localParticipant.on('trackUnmuted', handleMicrophoneUpdate);
+
+      return () => {
+        // Clean up event listeners
+        localParticipant.off('trackMuted', handleMicrophoneUpdate);
+        localParticipant.off('trackUnmuted', handleMicrophoneUpdate);
+      };
+    }
+  }, [localParticipant]);
+
+  // Track spacebar press for animation
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.code === 'Space') {
+        const target = e.target as HTMLElement;
+        const isInputElement =
+          target.tagName === 'INPUT' ||
+          target.tagName === 'TEXTAREA' ||
+          target.isContentEditable;
+
+        if (!isInputElement) {
+          setIsSpacePressed(true);
+        }
+      }
+    };
+
+    const handleKeyUp = (e: KeyboardEvent) => {
+      if (e.code === 'Space') {
+        setIsSpacePressed(false);
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown as any);
+    window.addEventListener('keyup', handleKeyUp as any);
+
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown as any);
+      window.removeEventListener('keyup', handleKeyUp as any);
+    };
+  }, []);
 
   const handleSubmit = async () => {
     if (!inputText.trim() || !isConnected) return;
@@ -70,60 +124,124 @@ export function TextInput({ isConnected }: TextInputProps) {
     }
   };
 
+  const toggleMicrophone = () => {
+    if (localParticipant && localParticipant.setMicrophoneEnabled) {
+      const currentState = localParticipant.isMicrophoneEnabled;
+      localParticipant.setMicrophoneEnabled(!currentState);
+    }
+  };
+
   // Removed createNewConversation function as it's already in ConversationManager
 
   return (
     <div className="flex flex-col w-full px-6 py-4 gap-2 relative">
 
-      <div className="flex items-center gap-5 w-full max-w-4xl mx-auto flex-nowrap">
-        <Button
-          onClick={openCodeEditor}
-          variant="ghost"
-          size="sm"
-          className="text-text-secondary hover:text-primary-DEFAULT/90 hover:bg-bg-tertiary/50 inline-flex items-center gap-1.5 px-4 py-2 rounded-md transition-colors duration-150 whitespace-nowrap"
-          title="Open code editor"
-        >
-          <Code size={16} className="flex-shrink-0" />
-          <span className="sm:inline hidden">Code</span>
-        </Button>
+      <div className="flex items-center gap-3 w-full max-w-4xl mx-auto flex-nowrap">
+        {/* Animated microphone button on the left */}
+        <div className="relative">
+          {/* Ping animation when mic is active */}
+          {!isMicMuted && (
+            <div className="absolute inset-0 rounded-full bg-primary-DEFAULT/10 animate-ping-slow" />
+          )}
 
-        <div className="relative flex-1">
-          <input
-            type="text"
-            value={inputText}
-            onChange={(e) => setInputText(e.target.value)}
-            onKeyDown={handleKeyDown}
-            placeholder={isConnected ? "Type your message here..." : "Connect to start chatting"}
-            disabled={!isConnected || isSubmitting}
-            className="w-full bg-bg-primary/80 border border-bg-tertiary/10 rounded-full px-4 py-3.5 text-text-primary placeholder:text-text-tertiary focus:outline-none focus:ring-1 focus:ring-primary-DEFAULT/30 shadow-none"
-            aria-label="Message input"
-            autoComplete="off"
-          />
+          <div
+            className={`relative z-10 transition-all duration-200 ${
+              isSpacePressed || !isMicMuted ? 'scale-95' : 'scale-100'
+            }`}
+          >
+            <Button
+              onClick={toggleMicrophone}
+              variant="ghost"
+              size="icon"
+              className={`h-10 w-10 rounded-full transition-all duration-200 ${
+                !isMicMuted
+                  ? "bg-primary-DEFAULT text-white shadow-md"
+                  : isSpacePressed
+                    ? "bg-bg-tertiary/80"
+                    : "bg-bg-tertiary/50 hover:bg-bg-tertiary/70"
+              }`}
+              title="Toggle microphone"
+            >
+              {isMicMuted ? (
+                <MicOff size={18} className="text-text-secondary" />
+              ) : (
+                <div className="animate-pulse-slow">
+                  <Mic size={18} className="text-white" />
+                </div>
+              )}
+            </Button>
+          </div>
         </div>
 
-        <Button
-          onClick={handleSubmit}
-          disabled={!isConnected || !inputText.trim() || isSubmitting}
-          isLoading={isSubmitting}
-          variant="primary"
-          size="lg"
-          className="rounded-full p-3 bg-primary-DEFAULT/80 hover:opacity-90 flex items-center justify-center border border-primary-DEFAULT/20 shadow-none"
-          title="Send message"
-          aria-label="Send message"
-        >
-          <Send size={20} aria-hidden="true" />
-        </Button>
+        <div className="relative flex-1 rounded-lg overflow-hidden shadow-sm bg-bg-primary/90 border border-bg-tertiary/20 hover:border-bg-tertiary/30 transition-all duration-200">
+          <div className="flex items-center">
+            <input
+              type="text"
+              value={inputText}
+              onChange={(e) => setInputText(e.target.value)}
+              onKeyDown={handleKeyDown}
+              placeholder={isConnected ? "What can I help you with today?" : "Connect to start chatting"}
+              disabled={!isConnected || isSubmitting}
+              className="w-full bg-transparent px-4 py-3.5 text-text-primary placeholder:text-text-tertiary focus:outline-none"
+              aria-label="Message input"
+              autoComplete="off"
+            />
 
-        <Button
-          onClick={handleClearMessages}
-          variant="ghost"
-          size="sm"
-          className="text-text-secondary hover:text-danger-DEFAULT/90 hover:bg-bg-tertiary/70 inline-flex items-center gap-1.5 px-4 py-2 rounded-md whitespace-nowrap"
-          title="Clear chat history"
-        >
-          <Trash2 size={16} className="flex-shrink-0" />
-          <span className="sm:inline hidden">Clear Chat</span>
-        </Button>
+            <div className="flex items-center gap-1 pr-2">
+              <Button
+                onClick={openCodeEditor}
+                variant="ghost"
+                size="icon"
+                className="h-9 w-9 rounded-full text-text-secondary hover:text-primary-DEFAULT hover:bg-bg-tertiary/30 transition-colors"
+                title="Open code editor"
+              >
+                <Code size={18} />
+              </Button>
+
+              <Button
+                onClick={handleSubmit}
+                disabled={!isConnected || !inputText.trim() || isSubmitting}
+                isLoading={isSubmitting}
+                variant="ghost"
+                size="icon"
+                className={`h-9 w-9 rounded-full flex items-center justify-center transition-colors ${
+                  !isConnected || !inputText.trim() || isSubmitting
+                    ? "text-text-tertiary"
+                    : "text-primary-DEFAULT hover:bg-primary-DEFAULT/20"
+                }`}
+                title="Send message"
+                aria-label="Send message"
+              >
+                <Send size={18} aria-hidden="true" />
+              </Button>
+            </div>
+          </div>
+
+          {/* Bottom action bar */}
+          <div className="flex items-center justify-between px-3 py-1.5 border-t border-bg-tertiary/10 bg-bg-tertiary/5">
+            <div className="flex-1"></div>
+
+            {/* Centered Space to speak instruction */}
+            <div className="flex items-center gap-1 text-xs text-text-tertiary">
+              <span className="opacity-70">Press</span>
+              <kbd className="px-1.5 py-0.5 rounded bg-bg-tertiary/30 text-text-secondary text-xs font-mono">Space</kbd>
+              <span className="opacity-70">to speak</span>
+            </div>
+
+            <div className="flex-1 flex justify-end">
+              <Button
+                onClick={handleClearMessages}
+                variant="ghost"
+                size="sm"
+                className="h-7 px-2 text-xs text-text-secondary hover:text-danger-DEFAULT/90 hover:bg-bg-tertiary/30 rounded-md"
+                title="Clear chat history"
+              >
+                <Trash2 size={14} className="mr-1" />
+                <span>Clear</span>
+              </Button>
+            </div>
+          </div>
+        </div>
       </div>
 
       {/* Code Editor Modal */}

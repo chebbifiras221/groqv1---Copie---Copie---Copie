@@ -179,9 +179,56 @@ body {
   }
 }
 
+/* Fix for device selector dropdown */
+.absolute.bg-bg-secondary {
+  transform: none !important;
+}
+
+.absolute.bg-bg-secondary * {
+  transform: none !important;
+}
+
 .animate-gradient-x {
   background-size: 200% 100%;
   animation: gradient-x 8s ease infinite;
+}
+
+@keyframes pulse {
+  0% {
+    transform: scale(1);
+    opacity: 0.8;
+  }
+  50% {
+    transform: scale(1.1);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1);
+    opacity: 0.8;
+  }
+}
+
+.animate-pulse-slow {
+  animation: pulse 2s ease-in-out infinite;
+}
+
+@keyframes ping-slow {
+  0% {
+    transform: scale(0.95);
+    opacity: 0.8;
+  }
+  50% {
+    transform: scale(1.2);
+    opacity: 0.2;
+  }
+  100% {
+    transform: scale(0.95);
+    opacity: 0.8;
+  }
+}
+
+.animate-ping-slow {
+  animation: ping-slow 2s cubic-bezier(0, 0, 0.2, 1) infinite;
 }
 
 /* Code block styling */
@@ -189,16 +236,18 @@ body {
   margin: 1rem 0;
   border-radius: 6px;
   overflow: hidden;
-  background-color: #2a303a;
-  border: 1px solid #3a424e;
+  background-color: #1a1f24; /* Darker background to match the app's dark theme */
+  border: 1px solid #2d333b;
   font-family: var(--font-geist-mono), 'Consolas', 'Monaco', 'Andale Mono', monospace;
   font-size: 14px;
   line-height: 1.5;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
 }
 
 html:not(.dark) .code-block-container {
-  background-color: #f6f8fa;
+  background-color: #ffffff;
   border: 1px solid #d0d7de;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
 }
 
 .code-header {
@@ -206,12 +255,12 @@ html:not(.dark) .code-block-container {
   justify-content: space-between;
   align-items: center;
   padding: 8px 16px;
-  background-color: #323a45;
-  border-bottom: 1px solid #3a424e;
+  background-color: #242a33; /* Match app's dark theme */
+  border-bottom: 1px solid #2d333b;
 }
 
 html:not(.dark) .code-header {
-  background-color: #eaeef2;
+  background-color: #f3f3f3;
   border-bottom: 1px solid #d0d7de;
 }
 
@@ -219,6 +268,7 @@ html:not(.dark) .code-header {
   color: #d4d4d4;
   font-size: 12px;
   text-transform: uppercase;
+  font-weight: 500;
 }
 
 html:not(.dark) .language-tag {
@@ -226,14 +276,18 @@ html:not(.dark) .language-tag {
 }
 
 .copy-button {
-  background-color: #0e639c;
+  background-color: #2188ff; /* Match app's primary color */
   color: white;
   border: none;
   border-radius: 4px;
-  padding: 4px 8px;
+  padding: 4px 10px;
   font-size: 12px;
   cursor: pointer;
-  transition: background-color 0.2s;
+  transition: all 0.2s ease;
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+  gap: 4px;
 }
 
 html:not(.dark) .copy-button {
@@ -242,15 +296,23 @@ html:not(.dark) .copy-button {
 }
 
 .copy-button:hover {
-  background-color: #1177bb;
+  background-color: #1f6feb; /* Match app's hover color */
+  transform: translateY(-1px);
+}
+
+.copy-button:active {
+  transform: translateY(0);
 }
 
 .code-content {
   padding: 16px;
   overflow-x: auto;
+  background-color: #1a1f24; /* Match container background */
+  color: #e6edf3; /* Brighter text for better contrast */
 }
 
 html:not(.dark) .code-content {
+  background-color: #ffffff;
   color: #24292f;
 }
 
@@ -262,16 +324,18 @@ html:not(.dark) .code-content {
   display: flex;
   flex-direction: column;
   padding-right: 16px;
-  border-right: 1px solid #3a424e;
-  color: #858585;
+  border-right: 1px solid #2d333b;
+  color: #7d8590; /* Slightly brighter for better visibility */
   user-select: none;
   text-align: right;
   min-width: 40px;
+  background-color: #1a1f24; /* Match container background */
 }
 
 html:not(.dark) .line-numbers {
   border-right: 1px solid #d0d7de;
   color: #6e7781;
+  background-color: #ffffff;
 }
 
 /* Code editor styling */
@@ -279,11 +343,18 @@ html:not(.dark) .line-numbers {
   margin: 1rem 0;
   border-radius: 6px;
   overflow: hidden;
-  background-color: #2a303a;
-  border: 1px solid #3a424e;
+  background-color: #1a1f24; /* Match app's dark theme */
+  border: 1px solid #2d333b;
   font-family: var(--font-geist-mono), 'Consolas', 'Monaco', 'Andale Mono', monospace;
   font-size: 14px;
   line-height: 1.5;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
+}
+
+html:not(.dark) .code-editor-container {
+  background-color: #ffffff;
+  border: 1px solid #d0d7de;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
 }
 
 .code-editor-header {
@@ -291,8 +362,13 @@ html:not(.dark) .line-numbers {
   justify-content: space-between;
   align-items: center;
   padding: 8px 16px;
-  background-color: #323a45;
-  border-bottom: 1px solid #3a424e;
+  background-color: #242a33; /* Match app's dark theme */
+  border-bottom: 1px solid #2d333b;
+}
+
+html:not(.dark) .code-editor-header {
+  background-color: #f3f3f3;
+  border-bottom: 1px solid #d0d7de;
 }
 
 .editor-actions {
@@ -322,8 +398,8 @@ html:not(.dark) .line-numbers {
 
 .code-textarea {
   flex: 1;
-  background-color: #2a303a;
-  color: #d4d4d4;
+  background-color: #1a1f24; /* Match app's dark theme */
+  color: #e6edf3; /* Brighter text for better contrast */
   border: none;
   padding: 8px 16px;
   font-family: inherit;
@@ -334,46 +410,128 @@ html:not(.dark) .line-numbers {
   width: 100%;
   height: 100%;
   tab-size: 2;
+  scrollbar-width: thin;
+  scrollbar-color: #2d333b transparent;
+}
+
+html:not(.dark) .code-textarea {
+  background-color: #ffffff;
+  color: #24292f;
+  scrollbar-color: #d0d7de transparent;
+}
+
+.code-textarea::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+.code-textarea::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.code-textarea::-webkit-scrollbar-thumb {
+  background-color: #2d333b;
+  border-radius: 4px;
+}
+
+.code-textarea::-webkit-scrollbar-thumb:hover {
+  background-color: #3a424e;
+}
+
+html:not(.dark) .code-textarea::-webkit-scrollbar-thumb {
+  background-color: #d0d7de;
+}
+
+html:not(.dark) .code-textarea::-webkit-scrollbar-thumb:hover {
+  background-color: #bbc6d0;
 }
 
 .code-textarea::placeholder {
-  color: #6a9955;
+  color: #7d8590; /* Slightly brighter for better visibility */
   opacity: 0.6;
 }
 
-/* Syntax highlighting */
+html:not(.dark) .code-textarea::placeholder {
+  color: #6e7781;
+  opacity: 0.7;
+}
+
+/* Syntax highlighting - Dark theme (GitHub Dark theme) */
 .keyword {
-  color: #569cd6;
+  color: #ff7b72; /* GitHub syntax theme */
+  font-weight: 500;
 }
 
 .string {
-  color: #ce9178;
+  color: #a5d6ff; /* GitHub syntax theme */
 }
 
 .boolean {
-  color: #569cd6;
+  color: #d2a8ff; /* GitHub syntax theme */
+  font-weight: 500;
 }
 
 .number {
-  color: #b5cea8;
+  color: #79c0ff; /* GitHub syntax theme */
 }
 
 .comment {
-  color: #6a9955;
+  color: #8b949e; /* GitHub syntax theme */
+  font-style: italic;
 }
 
 .selector {
-  color: #d7ba7d;
+  color: #7ee787; /* GitHub syntax theme */
 }
 
 .property {
-  color: #9cdcfe;
+  color: #d2a8ff; /* GitHub syntax theme */
 }
 
 .value {
-  color: #ce9178;
+  color: #a5d6ff; /* GitHub syntax theme */
 }
 
 .bracket {
-  color: #d4d4d4;
+  color: #e6edf3; /* GitHub syntax theme */
+}
+
+/* Syntax highlighting - Light theme (VS Code Light+) */
+html:not(.dark) .keyword {
+  color: #0000ff;
+  font-weight: 500;
+}
+
+html:not(.dark) .string {
+  color: #a31515;
+}
+
+html:not(.dark) .boolean {
+  color: #0000ff;
+  font-weight: 500;
+}
+
+html:not(.dark) .number {
+  color: #098658;
+}
+
+html:not(.dark) .comment {
+  color: #008000;
+  font-style: italic;
+}
+
+html:not(.dark) .selector {
+  color: #800000;
+}
+
+html:not(.dark) .property {
+  color: #795e26;
+}
+
+html:not(.dark) .value {
+  color: #a31515;
+}
+
+html:not(.dark) .bracket {
+  color: #000000;
 }

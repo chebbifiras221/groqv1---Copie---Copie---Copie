@@ -11,6 +11,33 @@ interface CodeBlockProps {
 export function CodeBlock({ code, language = 'javascript' }: CodeBlockProps) {
   const [copied, setCopied] = useState(false);
 
+  // Check for theme changes
+  const [isDarkTheme, setIsDarkTheme] = useState(true);
+
+  React.useEffect(() => {
+    // Initial theme check
+    if (typeof window !== 'undefined') {
+      setIsDarkTheme(!document.documentElement.classList.contains('light-theme'));
+    }
+
+    // Listen for theme changes
+    const observer = new MutationObserver((mutations) => {
+      mutations.forEach((mutation) => {
+        if (mutation.attributeName === 'class') {
+          setIsDarkTheme(!document.documentElement.classList.contains('light-theme'));
+        }
+      });
+    });
+
+    if (typeof window !== 'undefined') {
+      observer.observe(document.documentElement, { attributes: true });
+    }
+
+    return () => {
+      observer.disconnect();
+    };
+  }, []);
+
   const copyToClipboard = () => {
     navigator.clipboard.writeText(code);
     setCopied(true);
@@ -178,18 +205,19 @@ export function CodeBlock({ code, language = 'javascript' }: CodeBlockProps) {
           margin: 1.5rem 0;
           border-radius: 8px;
           overflow: hidden;
-          background-color: var(--bg-code);
-          border: 1px solid var(--border-code);
+          background-color: #1a1f24; /* Match app's dark theme */
+          border: 1px solid #2d333b;
           font-family: var(--font-geist-mono), 'Consolas', 'Monaco', 'Andale Mono', monospace;
           font-size: 14px;
           line-height: 1.6;
-          box-shadow: var(--shadow-sm);
+          box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
           transition: all 0.2s ease;
         }
 
         :global(.light-theme) .code-block-container {
-          background-color: var(--bg-code-light);
-          border: 1px solid var(--border-code-light);
+          background-color: #ffffff;
+          border: 1px solid #d0d7de;
+          box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
         }
 
         .code-block-container:hover {
@@ -203,13 +231,13 @@ export function CodeBlock({ code, language = 'javascript' }: CodeBlockProps) {
           justify-content: space-between;
           align-items: center;
           padding: 8px 16px;
-          background-color: var(--bg-code-header);
-          border-bottom: 1px solid var(--border-code);
+          background-color: #242a33; /* Match app's dark theme */
+          border-bottom: 1px solid #2d333b;
         }
 
         :global(.light-theme) .code-header {
-          background-color: var(--bg-code-header-light);
-          border-bottom: 1px solid var(--border-code-light);
+          background-color: #f3f3f3;
+          border-bottom: 1px solid #d0d7de;
         }
 
         .language-indicator {
@@ -227,7 +255,7 @@ export function CodeBlock({ code, language = 'javascript' }: CodeBlockProps) {
         }
 
         .language-tag {
-          color: var(--text-code-primary);
+          color: #e6edf3; /* Brighter text for better contrast */
           font-size: 12px;
           font-weight: 500;
           text-transform: uppercase;
@@ -235,48 +263,51 @@ export function CodeBlock({ code, language = 'javascript' }: CodeBlockProps) {
         }
 
         :global(.light-theme) .language-tag {
-          color: var(--text-code-primary-light);
+          color: #57606a;
         }
 
         .copy-button {
-          background-color: var(--primary-button);
+          background-color: #2188ff; /* Match app's primary color */
           color: white;
           border: none;
-          border-radius: 3px;
-          padding: 4px 8px;
+          border-radius: 4px;
+          padding: 4px 10px;
           font-size: 12px;
           font-weight: 500;
           cursor: pointer;
-          transition: all 0.15s ease;
+          transition: all 0.2s ease;
           display: flex;
           align-items: center;
-          gap: 6px;
+          gap: 4px;
         }
 
         :global(.light-theme) .copy-button {
-          background-color: var(--primary-button-light);
+          background-color: #0969da;
+          color: white;
         }
 
         .copy-button:hover {
-          background-color: #0062a3;
-          opacity: 0.95;
+          background-color: #1f6feb; /* Match app's hover color */
+          transform: translateY(-1px);
         }
 
         .copy-button:active {
-          transform: translateY(1px);
+          transform: translateY(0);
         }
 
         .code-content {
           padding: 16px;
           overflow-x: auto;
-          background-color: #1e1e1e;
+          background-color: #1a1f24; /* Match app's dark theme */
           scrollbar-width: thin;
-          scrollbar-color: #3e3e42 transparent;
+          scrollbar-color: #2d333b transparent;
+          color: #e6edf3; /* Brighter text for better contrast */
         }
 
         :global(.light-theme) .code-content {
           background-color: #ffffff;
           scrollbar-color: #d4d4d4 transparent;
+          color: #24292f;
         }
 
         .code-content::-webkit-scrollbar {
@@ -289,12 +320,12 @@ export function CodeBlock({ code, language = 'javascript' }: CodeBlockProps) {
         }
 
         .code-content::-webkit-scrollbar-thumb {
-          background-color: #30363d;
+          background-color: #2d333b;
           border-radius: 4px;
         }
 
         .code-content::-webkit-scrollbar-thumb:hover {
-          background-color: #6e7681;
+          background-color: #3a424e;
         }
 
         .code-container {
@@ -305,71 +336,73 @@ export function CodeBlock({ code, language = 'javascript' }: CodeBlockProps) {
           display: flex;
           flex-direction: column;
           padding-right: 16px;
-          border-right: 1px solid #3e3e42;
-          color: #858585;
+          border-right: 1px solid #2d333b;
+          color: #7d8590; /* Slightly brighter for better visibility */
           user-select: none;
           text-align: right;
           min-width: 40px;
+          background-color: #1a1f24; /* Match app's dark theme */
         }
 
         :global(.light-theme) .line-numbers {
           border-right: 1px solid #d4d4d4;
-          color: #858585;
+          color: #6e7781;
+          background-color: #ffffff;
         }
 
         pre {
           margin: 0;
           padding: 0;
           background-color: transparent;
-          color: #d4d4d4;
+          color: #e6edf3; /* Brighter text for better contrast */
         }
 
         :global(.light-theme) pre {
-          color: #000000;
+          color: #24292f;
         }
 
         code {
           font-family: inherit;
         }
 
-        /* Syntax highlighting with VS Code colors */
+        /* Syntax highlighting with GitHub Dark colors */
         .keyword {
-          color: #569cd6;
+          color: #ff7b72; /* GitHub syntax theme */
           font-weight: 500;
         }
 
         .string {
-          color: #ce9178;
+          color: #a5d6ff; /* GitHub syntax theme */
         }
 
         .boolean {
-          color: #569cd6;
+          color: #d2a8ff; /* GitHub syntax theme */
           font-weight: 500;
         }
 
         .number {
-          color: #b5cea8;
+          color: #79c0ff; /* GitHub syntax theme */
         }
 
         .comment {
-          color: #6a9955;
+          color: #8b949e; /* GitHub syntax theme */
           font-style: italic;
         }
 
         .selector {
-          color: #d7ba7d;
+          color: #7ee787; /* GitHub syntax theme */
         }
 
         .property {
-          color: #9cdcfe;
+          color: #d2a8ff; /* GitHub syntax theme */
         }
 
         .value {
-          color: #ce9178;
+          color: #a5d6ff; /* GitHub syntax theme */
         }
 
         .bracket {
-          color: #d4d4d4;
+          color: #e6edf3; /* GitHub syntax theme */
         }
 
         /* Light theme syntax highlighting - VS Code Light+ theme */

@@ -2,8 +2,15 @@
 
 import { useState, useCallback, useEffect } from 'react';
 import { useMaybeRoomContext } from '@livekit/components-react';
+import { ConnectionState, Room } from 'livekit-client';
 import { useAIResponses } from './use-ai-responses';
 import { useTranscriber } from './use-transcriber';
+
+// Helper function to check if a room is connected
+// This avoids TypeScript errors with ConnectionState comparison
+function isRoomConnected(room: Room): boolean {
+  return room.state === ConnectionState.Connected;
+}
 
 export type MessageType = 'user' | 'ai';
 
@@ -102,9 +109,32 @@ export function useConversation() {
       const message = {
         type: "list_conversations"
       };
-      room.localParticipant.publishData(
-        new TextEncoder().encode(JSON.stringify(message))
-      );
+
+      // Use a safe approach with connection checking and error handling
+      const loadConversations = async () => {
+        try {
+          // Check if the room is connected before attempting to publish
+          if (room.state !== ConnectionState.Connected) {
+            console.log('Room not connected, waiting before loading conversations...');
+            // Wait for the room to connect before trying to load conversations
+            setTimeout(loadConversations, 1000);
+            return;
+          }
+
+          // Safely publish the data
+          await room.localParticipant.publishData(
+            new TextEncoder().encode(JSON.stringify(message))
+          );
+          console.log('Successfully requested conversation list');
+        } catch (error) {
+          console.error('Error requesting conversation list:', error);
+          // Retry after a delay if there was an error
+          setTimeout(loadConversations, 2000);
+        }
+      };
+
+      // Start the process with a small delay to ensure connection is stable
+      setTimeout(loadConversations, 500);
     }
   }, [room]);
 
@@ -116,7 +146,8 @@ export function useConversation() {
   useEffect(() => {
     if (!room) return;
 
-    const handleDataReceived = (payload: Uint8Array, topic?: string) => {
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const handleDataReceived = (payload: any, _participant?: any, _kind?: any, topic?: any) => {
       try {
         // Handle binary audio data with specific topic
         if (topic === "binary_audio") {
@@ -127,8 +158,9 @@ export function useConversation() {
 
         // Handle audio info with specific topic
         if (topic === "audio_info") {
-          const dataString = new TextDecoder().decode(payload);
-          const data = JSON.parse(dataString);
+          // Just decode the data but don't process it further
+          // We're just acknowledging we received it
+          new TextDecoder().decode(payload);
           // Received audio info
           return;
         }
@@ -276,8 +308,6 @@ export function useConversation() {
     if (!text.trim()) return;
 
     // Sending text input to backend
-
-    // Send the message to the backend
     if (room) {
       try {
         const message = {
@@ -285,8 +315,47 @@ export function useConversation() {
           text: text.trim()
         };
 
+        // Check if the room is connected before attempting to publish
+        if (room.state !== ConnectionState.Connected) {
+          console.warn('Room not connected, attempting to reconnect...');
+
+          // Wait for the room to reconnect (up to 5 seconds)
+          for (let i = 0; i < 5; i++) {
+            await new Promise(resolve => setTimeout(resolve, 1000));
+            if (isRoomConnected(room)) {
+              console.log('Room reconnected successfully');
+              break;
+            }
+
+            // If we've waited 5 seconds and still not connected, throw an error
+            if (i === 4) {
+              throw new Error('Room failed to reconnect after 5 seconds');
+            }
+          }
+        }
+
         // We'll wait for the echo from the server to add the message to the conversation
-        await room.localParticipant.publishData(new TextEncoder().encode(JSON.stringify(message)));
+        // Use a try-catch with retry logic for more robust publishing
+        let retryCount = 0;
+        const maxRetries = 3;
+
+        while (retryCount < maxRetries) {
+          try {
+            await room.localParticipant.publishData(new TextEncoder().encode(JSON.stringify(message)));
+            break; // Success, exit the loop
+          } catch (publishError) {
+            retryCount++;
+            console.warn(`Publish attempt ${retryCount} failed:`, publishError);
+
+            if (retryCount >= maxRetries) {
+              throw publishError; // Rethrow after max retries
+            }
+
+            // Wait with exponential backoff before retrying
+            const delay = 300 * Math.pow(2, retryCount - 1);
+            await new Promise(resolve => setTimeout(resolve, delay));
+          }
+        }
 
         // Get the current conversation ID
         const currentConversationId = localStorage.getItem('current-conversation-id');
@@ -301,6 +370,17 @@ export function useConversation() {
         };
       } catch (error) {
         console.error("Error sending text input:", error);
+        // Add user-visible error handling here if needed
+        // The message will still appear in the UI but with an error indicator
+        const currentConversationId = localStorage.getItem('current-conversation-id');
+        return {
+          id: `user-error-${Date.now()}`,
+          type: 'user' as MessageType,
+          text: text.trim(),
+          timestamp: Date.now(),
+          conversation_id: currentConversationId || undefined,
+          error: true
+        };
       }
     }
 
@@ -328,8 +408,47 @@ export function useConversation() {
         type: "new_conversation",
         title: `New Conversation`
       };
-      // Creating new conversation from clearMessages
-      room.localParticipant.publishData(new TextEncoder().encode(JSON.stringify(message)));
+
+      // Use a safe approach with connection checking and retry logic
+      const createNewConversation = async () => {
+        try {
+          // Check if the room is connected before attempting to publish
+          if (room.state !== ConnectionState.Connected) {
+            console.warn('Room not connected, waiting before creating new conversation...');
+            // Wait for the room to connect before trying to create a new conversation
+            setTimeout(createNewConversation, 1000);
+            return;
+          }
+
+          // Use a try-catch with retry logic for more robust publishing
+          let retryCount = 0;
+          const maxRetries = 3;
+
+          while (retryCount < maxRetries) {
+            try {
+              await room.localParticipant.publishData(new TextEncoder().encode(JSON.stringify(message)));
+              console.log('Successfully created new conversation');
+              break; // Success, exit the loop
+            } catch (publishError) {
+              retryCount++;
+              console.warn(`Publish attempt ${retryCount} failed:`, publishError);
+
+              if (retryCount >= maxRetries) {
+                throw publishError; // Rethrow after max retries
+              }
+
+              // Wait with exponential backoff before retrying
+              const delay = 300 * Math.pow(2, retryCount - 1);
+              await new Promise(resolve => setTimeout(resolve, delay));
+            }
+          }
+        } catch (error) {
+          console.error('Error creating new conversation:', error);
+        }
+      };
+
+      // Start the process
+      createNewConversation();
     }
   }, [room]);
 
