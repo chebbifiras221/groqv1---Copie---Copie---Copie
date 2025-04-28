@@ -1,14 +1,15 @@
 "use client";
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Settings, LogOut, HelpCircle, Moon, Sun, Menu, X, MessageSquare } from 'lucide-react';
+import { Settings, LogOut, HelpCircle, Moon, Sun, Menu, X, MessageSquare, BookOpen, HelpCircle as HelpIcon } from 'lucide-react';
 import { SimpleBotFace } from './simple-bot-face';
 import { Button } from './button';
 import { StatusIndicator } from './status-indicator';
 import { useConnection } from '@/hooks/use-connection';
 import { ConversationManager } from '../conversation-manager';
 import { useTheme } from '@/hooks/use-theme';
+import { useSettings } from '@/hooks/use-settings';
 import { SettingsModal } from './settings-modal';
 import { HelpModal } from './help-modal';
 
@@ -19,9 +20,16 @@ interface HeaderProps {
 export function Header({ title = "Programming Teacher" }: HeaderProps) {
   const { disconnect } = useConnection();
   const { theme, toggleTheme } = useTheme();
+  const { settings } = useSettings();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isHelpOpen, setIsHelpOpen] = useState(false);
+  const [currentMode, setCurrentMode] = useState<'teacher' | 'qa'>(settings.teachingMode || 'teacher');
+
+  // Update the current mode when settings change
+  useEffect(() => {
+    setCurrentMode(settings.teachingMode || 'teacher');
+  }, [settings.teachingMode]);
 
   const handleDisconnect = () => {
     if (confirm('Are you sure you want to disconnect?')) {
@@ -61,6 +69,24 @@ export function Header({ title = "Programming Teacher" }: HeaderProps) {
 
         <div className="flex items-center gap-3">
           <StatusIndicator className="mr-2" />
+
+          {/* Mode indicator */}
+          <div
+            className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-full bg-bg-tertiary/30 border border-bg-tertiary/20"
+            title={currentMode === 'teacher' ? 'Teacher Mode: Structured learning with chapters' : 'Q&A Mode: Direct answers to questions'}
+          >
+            {currentMode === 'teacher' ? (
+              <>
+                <BookOpen size={14} className="text-primary-DEFAULT" />
+                <span className="text-xs font-medium">Teacher Mode</span>
+              </>
+            ) : (
+              <>
+                <HelpIcon size={14} className="text-secondary-DEFAULT" />
+                <span className="text-xs font-medium">Q&A Mode</span>
+              </>
+            )}
+          </div>
 
           <Button
             variant="ghost"

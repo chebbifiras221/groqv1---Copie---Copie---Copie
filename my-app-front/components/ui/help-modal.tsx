@@ -1,7 +1,7 @@
 "use client";
 
 import React from 'react';
-import { HelpCircle, Mic, Keyboard, Code, MessageSquare } from 'lucide-react';
+import { HelpCircle, Mic, Keyboard, Code, MessageSquare, BookOpen, HelpCircle as HelpIcon } from 'lucide-react';
 import { Modal } from './modal';
 
 interface HelpModalProps {
@@ -11,6 +11,11 @@ interface HelpModalProps {
 
 export function HelpModal({ isOpen, onClose }: HelpModalProps) {
   const helpSections = [
+    {
+      title: "Teaching Modes",
+      icon: <BookOpen className="text-primary-DEFAULT" size={20} />,
+      content: "The Programming Teacher has two modes: Teacher Mode and Q&A Mode. In Teacher Mode, it provides structured learning with chapters and exercises. In Q&A Mode, it answers direct questions about programming. You can switch between modes in the Settings."
+    },
     {
       title: "Voice Interaction",
       icon: <Mic className="text-primary-DEFAULT" size={20} />,
@@ -34,7 +39,7 @@ export function HelpModal({ isOpen, onClose }: HelpModalProps) {
     {
       title: "Text-to-Speech",
       icon: <HelpCircle className="text-info-DEFAULT" size={20} />,
-      content: "The AI's responses can be read aloud using text-to-speech. Click the 'Speak' button on any AI response to hear it. You can adjust the volume and voice in the settings."
+      content: "The AI's responses can be read aloud using text-to-speech. You can adjust the volume and auto-speak settings in the Settings panel."
     }
   ];
 
@@ -65,6 +70,7 @@ export function HelpModal({ isOpen, onClose }: HelpModalProps) {
           <div className="mt-6 text-text-tertiary text-sm space-y-2">
             <p>This Programming Teacher is powered by LiveKit and Groq. It uses speech recognition to transcribe your voice and generate responses.</p>
             <p>The Programming Teacher is designed to help you learn programming concepts, debug code, and answer technical questions. It can explain complex topics in simple terms and provide code examples in various programming languages.</p>
+            <p>In <strong>Teacher Mode</strong>, ask the AI to teach you a programming language (e.g., "Teach me Python") and it will create a structured learning path with chapters and exercises. In <strong>Q&A Mode</strong>, it will directly answer your programming questions without the structured approach.</p>
             <p>For the best experience, speak clearly and ask specific questions. You can also use the code editor to share code snippets for more targeted assistance.</p>
           </div>
         </div>

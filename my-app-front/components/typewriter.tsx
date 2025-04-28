@@ -3,7 +3,7 @@
 import { useEffect, useState, useRef } from "react";
 import { motion } from "framer-motion";
 import { ConnectionState } from "livekit-client";
-import { MessageSquare } from "lucide-react";
+import { MessageSquare, BookOpen, Bookmark, CheckCircle } from "lucide-react";
 import { useTranscriber } from "@/hooks/use-transcriber";
 import { useAIResponses } from "@/hooks/use-ai-responses";
 import { useConversation } from "@/hooks/use-conversation";
@@ -16,31 +16,43 @@ export interface TypewriterProps {
 }
 
 const emptyText =
-  "Voice transcription will appear after you connect and start talking";
+  "Connect to start a conversation with your teacher";
 
 // Regular expression to detect code blocks in markdown format
 const codeBlockRegex = /```([\w-]*)?\n([\s\S]*?)\n```/g;
 
 export function Typewriter({ typingSpeed = 50 }: TypewriterProps) {
-  // Function to render AI responses with code blocks
-  const renderAIResponseWithCodeBlocks = (text: string) => {
+  // Function to render AI responses with enhanced formatting
+  const renderEnhancedResponse = (text: string) => {
     if (!text) return null;
 
     // Reset regex lastIndex to ensure we start from the beginning
     codeBlockRegex.lastIndex = 0;
 
+    // Process the text to enhance formatting
+    const processedText = text
+      // Add special styling for learning objectives sections
+      .replace(/####\s+Learning Objectives/g, '#### 🎯 Learning Objectives')
+      // Add special styling for practice exercises sections
+      .replace(/####\s+Practice Exercises/g, '#### 💻 Practice Exercises')
+      // Add special styling for quiz sections
+      .replace(/####\s+Quiz/g, '#### 📝 Quiz')
+      // Add special styling for summary sections
+      .replace(/####\s+Summary/g, '#### 📌 Summary');
+
+    // Split the text into segments (code blocks and regular text)
     const segments = [];
     let lastIndex = 0;
     let match;
     let segmentId = 0;
 
     // Find all code blocks in the text
-    while ((match = codeBlockRegex.exec(text)) !== null) {
+    while ((match = codeBlockRegex.exec(processedText)) !== null) {
       // Add text before the code block
       if (match.index > lastIndex) {
         segments.push({
           type: 'text',
-          content: text.substring(lastIndex, match.index),
+          content: processedText.substring(lastIndex, match.index),
           id: segmentId++
         });
       }
@@ -57,33 +69,139 @@ export function Typewriter({ typingSpeed = 50 }: TypewriterProps) {
     }
 
     // Add any remaining text after the last code block
-    if (lastIndex < text.length) {
+    if (lastIndex < processedText.length) {
       segments.push({
         type: 'text',
-        content: text.substring(lastIndex),
+        content: processedText.substring(lastIndex),
         id: segmentId++
       });
     }
 
-    // If no code blocks were found, return the original text
+    // If no segments were found, return the original text
     if (segments.length === 0) {
-      return <p>{text}</p>;
+      return <div className="markdown-content">{formatTextWithMarkdown(processedText)}</div>;
     }
 
     // Render each segment
-    return segments.map(segment => {
-      if (segment.type === 'code') {
-        return (
-          <CodeBlock
-            key={segment.id}
-            code={segment.content}
-            language={segment.language}
-          />
-        );
-      } else {
-        return <p key={segment.id}>{segment.content}</p>;
-      }
-    });
+    return (
+      <div className="markdown-content">
+        {segments.map(segment => {
+          if (segment.type === 'code') {
+            return (
+              <CodeBlock
+                key={segment.id}
+                code={segment.content}
+                language={segment.language}
+              />
+            );
+          } else {
+            return <div key={segment.id}>{formatTextWithMarkdown(segment.content)}</div>;
+          }
+        })}
+      </div>
+    );
+  };
+
+  // Helper function to format text with markdown-like styling
+  const formatTextWithMarkdown = (text: string) => {
+    if (!text) return null;
+
+    // Split the text by lines to process headers and lists
+    const lines = text.split('\n');
+
+    return (
+      <>
+        {lines.map((line, index) => {
+          // Process headers
+          if (line.startsWith('# ')) {
+            return (
+              <div key={index} className="mt-8 mb-6">
+                <h1 className="text-2xl md:text-3xl font-bold text-primary-DEFAULT flex items-center gap-2 pb-2 border-b border-primary-DEFAULT/20">
+                  <BookOpen className="w-6 h-6" />
+                  {line.substring(2)}
+                </h1>
+              </div>
+            );
+          }
+          else if (line.startsWith('## ')) {
+            const isChapter = line.toLowerCase().includes('chapter');
+            return (
+              <div key={index} className="mt-6 mb-4">
+                <h2 className={`text-xl md:text-2xl font-bold flex items-center gap-2 ${isChapter ? 'text-success-DEFAULT' : 'text-text-primary'}`}>
+                  {isChapter && <Bookmark className="w-5 h-5" />}
+                  {line.substring(3)}
+                </h2>
+                {isChapter && <div className="h-1 w-16 bg-success-DEFAULT/50 rounded mt-2"></div>}
+              </div>
+            );
+          }
+          else if (line.startsWith('### ')) {
+            return (
+              <h3 key={index} className="text-lg md:text-xl font-semibold text-text-primary mt-5 mb-3">
+                {line.substring(4)}
+              </h3>
+            );
+          }
+          else if (line.startsWith('#### ')) {
+            return (
+              <h4 key={index} className="text-md md:text-lg font-medium text-text-primary/90 mt-4 mb-2">
+                {line.substring(5)}
+              </h4>
+            );
+          }
+          // Process lists
+          else if (line.match(/^\s*[\-\*]\s/)) {
+            return (
+              <ul key={index} className="my-1 pl-6 list-disc">
+                <li className="pl-1">{line.replace(/^\s*[\-\*]\s/, '')}</li>
+              </ul>
+            );
+          }
+          else if (line.match(/^\s*\d+\.\s/)) {
+            return (
+              <ol key={index} className="my-1 pl-6 list-decimal">
+                <li className="pl-1">{line.replace(/^\s*\d+\.\s/, '')}</li>
+              </ol>
+            );
+          }
+          // Process blockquotes
+          else if (line.startsWith('> ')) {
+            return (
+              <blockquote key={index} className="border-l-4 border-warning-DEFAULT pl-4 py-1 my-4 bg-warning-DEFAULT/10 rounded-r">
+                {line.substring(2)}
+              </blockquote>
+            );
+          }
+          // Process horizontal rules
+          else if (line.match(/^[\-\*\_]{3,}$/)) {
+            return <hr key={index} className="my-6 border-t border-bg-tertiary" />;
+          }
+          // Process regular paragraphs
+          else if (line.trim() !== '') {
+            // Process inline formatting (bold, italic, code)
+            const formattedLine = line
+              // Bold text
+              .replace(/\*\*([^*]+)\*\*/g, (_, text) => (
+                `<strong class="font-bold text-text-primary">${text}</strong>`
+              ))
+              // Italic text
+              .replace(/\*([^*]+)\*/g, (_, text) => (
+                `<em class="text-primary-DEFAULT/90 font-medium not-italic">${text}</em>`
+              ))
+              // Inline code
+              .replace(/`([^`]+)`/g, (_, text) => (
+                `<code class="px-1 py-0.5 bg-bg-tertiary rounded text-sm font-mono">${text}</code>`
+              ));
+
+            return (
+              <p key={index} className="my-3 leading-relaxed" dangerouslySetInnerHTML={{ __html: formattedLine }} />
+            );
+          }
+          // Empty lines
+          return <div key={index} className="h-2"></div>;
+        })}
+      </>
+    );
   };
 
   const { state } = useTranscriber();
@@ -190,8 +308,8 @@ export function Typewriter({ typingSpeed = 50 }: TypewriterProps) {
                 <div className="mb-4">
                   <MessageSquare className="w-12 h-12 mx-auto text-text-tertiary opacity-30" />
                 </div>
-                <p className="text-xl">No messages yet</p>
-                <p className="text-sm mt-2 text-text-tertiary">Start a conversation by typing a message or using your microphone</p>
+                <p className="text-xl">Welcome to your learning session!</p>
+                <p className="text-sm mt-2 text-text-tertiary">What would you like to learn about today? Type a message or use your microphone to begin.</p>
               </div>
             ) : (
               messages
@@ -220,17 +338,24 @@ export function Typewriter({ typingSpeed = 50 }: TypewriterProps) {
                       <>
                         <SimpleBotFace size={32} animated={false} />
                         <div className="text-sm text-text-secondary font-medium">
-                          Programming Teacher
+                          Teacher
                         </div>
                       </>
                     )}
                   </div>
 
                   {item.type === "user" ? (
-                    <div className="leading-relaxed pl-10 text-text-primary">{item.text}</div>
+                    <div className="leading-relaxed pl-10 text-text-primary">
+                      {/* Check if user message contains code blocks or markdown */}
+                      {item.text.includes("```") || item.text.includes("#") ? (
+                        renderEnhancedResponse(item.text)
+                      ) : (
+                        item.text
+                      )}
+                    </div>
                   ) : (
                     <div className="leading-relaxed pl-10 text-text-primary">
-                      {renderAIResponseWithCodeBlocks(item.text)}
+                      {renderEnhancedResponse(item.text)}
                     </div>
                   )}
 

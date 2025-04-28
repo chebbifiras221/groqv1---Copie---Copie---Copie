@@ -310,9 +310,22 @@ export function useConversation() {
     // Sending text input to backend
     if (room) {
       try {
+        // Get the current teaching mode from settings
+        let teachingMode = 'teacher'; // Default to teacher mode
+        try {
+          const storedSettings = localStorage.getItem("app-settings");
+          if (storedSettings) {
+            const parsedSettings = JSON.parse(storedSettings);
+            teachingMode = parsedSettings.teachingMode || 'teacher';
+          }
+        } catch (e) {
+          console.error('Error getting teaching mode from settings:', e);
+        }
+
         const message = {
           type: "text_input",
-          text: text.trim()
+          text: text.trim(),
+          teaching_mode: teachingMode
         };
 
         // Check if the room is connected before attempting to publish
@@ -404,9 +417,22 @@ export function useConversation() {
 
     // Create a new conversation
     if (room) {
+      // Get the current teaching mode from settings
+      let teachingMode = 'teacher'; // Default to teacher mode
+      try {
+        const storedSettings = localStorage.getItem("app-settings");
+        if (storedSettings) {
+          const parsedSettings = JSON.parse(storedSettings);
+          teachingMode = parsedSettings.teachingMode || 'teacher';
+        }
+      } catch (e) {
+        console.error('Error getting teaching mode from settings:', e);
+      }
+
       const message = {
         type: "new_conversation",
-        title: `New Conversation`
+        title: `New Conversation`,
+        teaching_mode: teachingMode
       };
 
       // Use a safe approach with connection checking and retry logic

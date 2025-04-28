@@ -180,7 +180,7 @@ export function TextInput({ isConnected }: TextInputProps) {
               value={inputText}
               onChange={(e) => setInputText(e.target.value)}
               onKeyDown={handleKeyDown}
-              placeholder={isConnected ? "What can I help you with today?" : "Connect to start chatting"}
+              placeholder={isConnected ? "What would you like to learn about today?" : "Connect to start your learning session"}
               disabled={!isConnected || isSubmitting}
               className="w-full bg-transparent px-4 py-3.5 text-text-primary placeholder:text-text-tertiary focus:outline-none"
               aria-label="Message input"

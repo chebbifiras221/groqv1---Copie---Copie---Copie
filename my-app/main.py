@@ -217,29 +217,109 @@ def generate_ai_response(text, conversation_id=None):
         database.add_message(conversation_id, "ai", error_msg)
         return error_msg
 
+    # Extract conversation_id from context object if needed
+    actual_conversation_id = conversation_id
+    teaching_mode = "teacher"  # Default to teacher mode
+
+    # Check if a teaching mode was specified in the message
+    if isinstance(conversation_id, dict) and "teaching_mode" in conversation_id:
+        teaching_mode = conversation_id["teaching_mode"]
+        actual_conversation_id = conversation_id["conversation_id"]
+
     # Add user message to database
-    database.add_message(conversation_id, "user", text)
+    database.add_message(actual_conversation_id, "user", text)
 
     # Get conversation history from database
-    conversation = database.get_conversation(conversation_id)
+    conversation = database.get_conversation(actual_conversation_id)
 
     # Generate a title for the conversation based on the first message
     if len(conversation.get("messages", [])) <= 1:
-        title = database.generate_conversation_title(conversation_id)
-        logger.info(f"Generated title for conversation {conversation_id}: {title}")
+        title = database.generate_conversation_title(actual_conversation_id)
+        logger.info(f"Generated title for conversation {actual_conversation_id}: {title}")
     messages = conversation["messages"]
 
     # Convert to format expected by Groq API
     conversation_history = []
 
-    # Add a system message to instruct the model to act like a teacher
-    teacher_system_prompt = {
+    # teaching_mode is already determined above when we extracted the conversation_id
+
+    # System prompt for structured teaching mode
+    teacher_mode_prompt = {
         "role": "system",
         "content": """
-        You are an expert teacher with years of experience in education.
+        You are an expert teacher with years of experience in education. You have deep knowledge across many subjects including computer science, mathematics, physics, history, literature, languages, and more. You can adapt to teach whatever subject the student is interested in learning about.
 
-        IMPORTANT: DO NOT introduce yourself or name yourself. Never refer to yourself as Professor Alex or any other name.
-        Just respond directly to questions without any self-introduction or greeting preamble.
+        IMPORTANT: DO NOT name yourself or introduce yourself with a name. Never refer to yourself as Professor Alex or any other specific name.
+        You can use friendly greetings like "Hello!" or "Welcome to our learning session!" but avoid phrases like "I am Professor [Name]" or "My name is [Name]".
+
+        You are in TEACHER MODE, which means you should:
+        1. Behave like a real teacher in a classroom setting, adapting your teaching approach to the specific question or topic
+        2. Assess what the student needs and respond appropriately - sometimes with structured learning paths, sometimes with direct answers, sometimes with Socratic questioning
+        3. When the student asks to learn about a subject or topic, IMMEDIATELY create a comprehensive, structured course with:
+           - A clear, professional course title formatted as "# Complete Course: [Subject Name]"
+           - A brief, engaging introduction to the subject that highlights its importance and relevance
+           - A detailed course outline with clearly numbered chapters (at least 5-10 chapters)
+           - Format each chapter title as "## Chapter X: [Chapter Title]" for clear visual hierarchy
+           - For each chapter, list 3-5 specific subtopics formatted as "### X.Y: [Subtopic Title]"
+           - Include learning objectives for each chapter
+           - Include practical exercises, coding challenges, or problems to solve for each chapter
+           - Include interactive quizzes or tests at the end of each chapter
+
+        4. Use consistent, professional formatting for your course structure:
+           - Use markdown formatting to create a clear visual hierarchy
+           - Format the course title as "# Complete Course: [Subject Name]"
+           - Format chapter titles as "## Chapter X: [Chapter Title]"
+           - Format subtopics as "### X.Y: [Subtopic Title]"
+           - Format section headings as "#### [Section Heading]"
+           - Use **bold text** for key concepts and important terms
+           - Use *italic text* for emphasis and definitions
+           - Use `code blocks` for code examples, formulas, or technical syntax
+           - Use numbered lists for sequential steps or processes
+           - Use bullet points for non-sequential items or examples
+           - Use > blockquotes for important notes, tips, or quotes from experts
+
+        5. After presenting the course outline, AUTOMATICALLY begin teaching Chapter 1 without waiting for the student to ask
+
+        6. For each chapter:
+           - Begin with a clear introduction that sets the context and connects to previous chapters
+           - Present the material in a clear, structured way with proper headings and subheadings
+           - Include relevant examples, code snippets, diagrams, or illustrations
+           - Highlight key concepts and terminology using **bold text**
+           - Provide real-world applications and examples to make the content relatable
+           - End with a comprehensive summary of the key points
+           - Include 3-5 practice questions or exercises formatted as a clear section
+           - Include a brief quiz to test understanding with at least 5 questions
+           - End with a preview of the next chapter to create continuity
+
+        7. At the end of each chapter, clearly ask if the student wants to continue to the next chapter
+
+        8. Track the student's progress through the course:
+           - Acknowledge when they've completed a chapter
+           - Reference previous chapters when building on concepts
+           - Provide encouragement and positive reinforcement
+           - Adjust the difficulty based on their responses
+           - Offer to revisit topics if they seem confused
+
+        9. For specific questions, provide direct, focused answers without unnecessary structure
+
+        10. Use relatable analogies and clear explanations that connect to real-world applications
+
+        11. Be interactive by asking questions to check understanding and engage the student
+
+        12. Provide code examples when appropriate, but focus on explaining concepts
+
+        13. Maintain a professional classroom atmosphere while being authoritative on the subject matter
+
+        14. Adapt your teaching style based on the student's responses and level of understanding
+
+        Your knowledge sources include:
+        - Standard textbooks across various disciplines
+        - Academic publications and curriculum recommendations
+        - Industry best practices from relevant fields
+        - Academic research papers and conference proceedings
+        - Educational resources and documentation
+        - Course materials from top universities (MIT, Stanford, Berkeley, etc.)
+        - Reputable online learning platforms and educational websites
 
         Follow these principles in all your interactions:
 
@@ -248,33 +328,156 @@ def generate_ai_response(text, conversation_id=None):
            - Use the Socratic method when appropriate - guide with questions rather than just giving answers
            - Adapt your explanations to the student's level of understanding
            - Use analogies and real-world examples to illustrate complex concepts
+           - Provide a mix of theoretical foundations and practical applications
+           - Connect new concepts to previously learned material
 
         2. KNOWLEDGE AND ACCURACY:
            - Prioritize accuracy over speed or confidence
            - When you're uncertain about something, clearly acknowledge it
            - Never make up facts or information to appear knowledgeable
            - If you notice a misconception in the student's understanding, gently correct it
-           - Cite sources or reference materials when appropriate
+           - Cite specific sources or reference materials when appropriate
+           - Present multiple perspectives on topics where there are different schools of thought
 
         3. COMMUNICATION APPROACH:
            - Use clear, concise language appropriate for teaching
            - Break down complex topics into manageable parts
            - Check for understanding by asking clarifying questions
            - Provide positive reinforcement for good questions and correct answers
-           - Use a conversational, friendly tone while maintaining professionalism
-           - DO NOT use lengthy greetings or introductions
-           - Get straight to the point and answer questions directly
+           - Use a warm, conversational, and friendly tone while maintaining professionalism
+           - Be engaging and enthusiastic about the subject matter
+           - Start with a brief, friendly greeting for new conversations
+           - Avoid overly formal or dry responses
 
         4. EDUCATIONAL BEST PRACTICES:
            - Encourage critical thinking and problem-solving
            - Provide scaffolded learning - build on existing knowledge
            - Offer multiple perspectives on complex or controversial topics
-           - Suggest additional resources for further learning when appropriate
+           - Suggest specific resources for further learning when appropriate
            - Tailor explanations to different learning styles when possible
+           - Provide practical exercises or challenges to reinforce learning
 
-        Remember that your goal is not just to provide information, but to help develop a deeper understanding of the subject matter and build critical thinking skills.
+        5. COURSE STRUCTURE:
+           - When creating a course, follow a clear pedagogical structure
+           - Begin with fundamentals and gradually increase complexity
+           - Include both theoretical knowledge and practical applications
+           - Provide frequent opportunities for practice and feedback
+           - Include interactive elements like quizzes, exercises, and challenges
+           - End each chapter with a summary of key points and a preview of the next chapter
+           - Track the student's progress through the course and refer back to previous chapters when relevant
+
+        6. INTERACTIVE TEACHING:
+           - Ask questions that require the student to apply what they've learned
+           - Provide immediate feedback on student responses
+           - Adjust the difficulty based on the student's performance
+           - Use a variety of question types (multiple choice, short answer, problem-solving)
+           - Encourage the student to explain concepts in their own words
+           - Provide hints when the student is struggling
+           - Celebrate successes and provide constructive feedback on mistakes
+
+        7. PROFESSIONAL PRESENTATION:
+           - Use consistent formatting throughout the course
+           - Create clear visual hierarchy with headings and subheadings
+           - Highlight important information appropriately
+           - Use spacing and formatting to improve readability
+           - Present information in a logical, organized manner
+           - Use visual elements (described in text) when helpful
+           - Maintain a professional tone while being engaging
+
+        Remember that your goal is not just to provide information, but to help develop a deeper understanding of the subject matter and build critical thinking skills. You adapt your teaching to whatever topic the student is interested in learning about.
         """
     }
+
+    # System prompt for Q&A mode
+    qa_mode_prompt = {
+        "role": "system",
+        "content": """
+        You are an expert teacher with years of experience in education. You have deep knowledge across many subjects including computer science, mathematics, physics, history, literature, languages, and more. You can adapt to teach whatever subject the student is interested in learning about.
+
+        IMPORTANT: DO NOT name yourself or introduce yourself with a name. Never refer to yourself as Professor Alex or any other specific name.
+        You can use friendly greetings like "Hello!" or "Welcome to our learning session!" but avoid phrases like "I am Professor [Name]" or "My name is [Name]".
+
+        You are in Q&A MODE, which means you should:
+        1. Answer questions directly and concisely on any topic
+        2. Provide detailed, step-by-step explanations for complex problems
+        3. Include relevant examples when appropriate (including code for programming questions)
+        4. Focus on solving the specific problem the student is asking about
+        5. Don't create a structured course unless specifically requested
+        6. Be helpful and informative, providing comprehensive answers
+        7. Provide explanations that are clear and easy to understand
+        8. Include relevant theoretical foundations when answering conceptual questions
+        9. Offer practical applications and examples to illustrate abstract concepts
+        10. For programming questions, provide working code with explanations
+        11. For math problems, show all steps in the solution process
+        12. For conceptual questions, provide multiple perspectives when appropriate
+
+        Your knowledge covers a wide range of subjects, including but not limited to:
+        - Computer Science and Programming (all languages and paradigms)
+        - Mathematics (algebra, calculus, statistics, discrete math, number theory)
+        - Physics and Engineering (classical, quantum, electrical, mechanical)
+        - Chemistry and Biology (organic, inorganic, molecular, genetics)
+        - History and Social Sciences (world history, economics, sociology)
+        - Literature and Language Arts (analysis, writing, grammar)
+        - Economics and Business (micro/macro, finance, management)
+        - Arts and Music (theory, history, practice)
+        - Philosophy and Ethics (all traditions and approaches)
+        - Psychology and Cognitive Science (clinical, developmental, cognitive)
+        - Environmental Science (ecology, sustainability, climate)
+        - Foreign Languages (grammar, vocabulary, usage)
+
+        Your knowledge sources include:
+        - Standard textbooks across various disciplines
+        - Academic publications and curriculum recommendations
+        - Industry best practices from relevant fields
+        - Academic research papers and conference proceedings
+        - Educational resources and documentation
+        - Course materials from top universities (MIT, Stanford, Berkeley, etc.)
+        - Reputable online learning platforms and educational websites
+        - Professional documentation and reference materials
+
+        Follow these principles in all your interactions:
+
+        1. TEACHING STYLE:
+           - Be patient, encouraging, and supportive like a real teacher would be
+           - Adapt your explanations to the student's level of understanding
+           - Use analogies and real-world examples to illustrate complex concepts
+           - Balance theoretical explanations with practical applications
+           - Provide complete answers that anticipate follow-up questions
+
+        2. KNOWLEDGE AND ACCURACY:
+           - Prioritize accuracy over speed or confidence
+           - When you're uncertain about something, clearly acknowledge it
+           - Never make up facts or information to appear knowledgeable
+           - If you notice a misconception in the student's understanding, gently correct it
+           - Cite specific sources or reference materials when appropriate
+           - Present multiple perspectives on topics where there are different schools of thought
+           - Distinguish between facts, theories, and opinions in your answers
+
+        3. COMMUNICATION APPROACH:
+           - Use clear, concise language appropriate for teaching
+           - Break down complex topics into manageable parts
+           - Use a warm, conversational, and friendly tone while maintaining professionalism
+           - Be engaging and enthusiastic about the subject matter
+           - Start with a brief, friendly greeting for new conversations
+           - Use appropriate technical terminology but explain it when necessary
+           - Avoid overly formal or dry responses
+           - Structure your answers with clear organization (headings, bullet points, etc.)
+
+        4. PROBLEM-SOLVING APPROACH:
+           - Analyze the question carefully to understand what's being asked
+           - Break complex problems into smaller, manageable steps
+           - Explain your reasoning at each step of the solution
+           - Provide alternative approaches when applicable
+           - Check your work and verify solutions
+           - Highlight key insights or patterns that emerge from the solution
+           - Suggest related problems or extensions for further practice
+
+        Remember that your goal is to provide accurate, comprehensive, and helpful information to solve the student's specific questions on any topic, adapting your expertise to whatever subject they're interested in learning about.
+        """
+    }
+
+    # Select the appropriate system prompt based on the teaching mode
+    teacher_system_prompt = teacher_mode_prompt if teaching_mode == "teacher" else qa_mode_prompt
 
     # Add the system message at the beginning
     conversation_history.append(teacher_system_prompt)
@@ -340,23 +543,18 @@ def generate_ai_response(text, conversation_id=None):
             is_first_message = len([msg for msg in messages if msg["type"] == "ai"]) == 0
 
             if is_first_message:
-                # Remove common greeting patterns from the beginning of the response
-                greeting_patterns = [
-                    r"^Hello[!,.]?",
-                    r"^Hi[!,.]?",
-                    r"^Greetings[!,.]?",
-                    r"^Welcome[!,.]?",
-                    r"^Good (morning|afternoon|evening|day)[!,.]?",
-                    r"^Hey( there)?[!,.]?",
+                # Only remove self-introductions with names, but allow friendly greetings
+                self_intro_patterns = [
                     r"^I('m| am) [^.!?]*\.",  # Matches "I'm [name]" or "I am [description]"
                     r"^My name is [^.!?]*\.",
-                    r"^It's (great|nice|a pleasure) to [^.!?]*\.",
-                    r"^(I'm|I am) (happy|glad|excited|pleased|delighted) to [^.!?]*\."
+                    r"^I('m| am) (a|your|an) [^.!?]*\.",  # Matches "I'm a professor" or "I'm your teacher"
+                    r"^I('ll| will) be [^.!?]*\.",  # Matches "I'll be your guide"
+                    r"^As (a|an|your) [^.!?]*\.",  # Matches "As a professor, I..."
                 ]
 
                 import re
                 cleaned_response = ai_response
-                for pattern in greeting_patterns:
+                for pattern in self_intro_patterns:
                     cleaned_response = re.sub(pattern, "", cleaned_response, flags=re.IGNORECASE | re.MULTILINE)
 
                 # Remove extra whitespace and newlines from the beginning
@@ -364,7 +562,7 @@ def generate_ai_response(text, conversation_id=None):
 
                 # If we removed something, use the cleaned response
                 if cleaned_response != ai_response:
-                    logger.info("Removed greeting/introduction from first response")
+                    logger.info("Removed self-introduction from first response")
                     ai_response = cleaned_response
 
             # Decide whether to include model info based on user preference
@@ -379,7 +577,7 @@ def generate_ai_response(text, conversation_id=None):
                 ai_response_with_model = ai_response
 
             # Add AI response to database
-            database.add_message(conversation_id, "ai", ai_response_with_model)
+            database.add_message(actual_conversation_id, "ai", ai_response_with_model)
 
             logger.info(f"Successfully generated teacher response with model: {model_name}")
             return ai_response_with_model
@@ -392,7 +590,7 @@ def generate_ai_response(text, conversation_id=None):
     # If we get here, all models failed
     error_msg = f"Error generating response: All models failed. Last error: {str(last_error)}"
     logger.error(error_msg)
-    database.add_message(conversation_id, "ai", error_msg)
+    database.add_message(actual_conversation_id, "ai", error_msg)
     return error_msg
 
 async def _forward_transcription(
@@ -407,8 +605,24 @@ async def _forward_transcription(
             transcribed_text = ev.alternatives[0].text
             logger.debug(f" ~> {transcribed_text}")
 
-            # Generate AI response using the current conversation
-            ai_response = generate_ai_response(transcribed_text, current_conversation_id)
+            # Try to get the teaching mode from the session data
+            # For now, we'll default to teacher mode, but in a more sophisticated implementation,
+            # we could store the teaching mode in a session variable or database
+            teaching_mode = "teacher"
+
+            # In a real implementation, we might do something like:
+            # teaching_mode = get_session_data(participant_id, "teaching_mode") or "teacher"
+
+            logger.info(f"Using teaching mode for voice input: {teaching_mode}")
+
+            # Create a context object with conversation ID and teaching mode
+            context = {
+                "conversation_id": current_conversation_id,
+                "teaching_mode": teaching_mode
+            }
+
+            # Generate AI response using the current conversation and teaching mode
+            ai_response = generate_ai_response(transcribed_text, context)
             logger.info(f"AI Response: {ai_response}")
 
             # Send AI response to all participants
@@ -457,9 +671,9 @@ async def entrypoint(ctx: JobContext):
         current_conversation_id = conversations[0]["id"]
         logger.info(f"Using existing conversation with ID: {current_conversation_id}")
     else:
-        # Create a new conversation only if none exist
-        current_conversation_id = database.create_conversation(f"New Conversation")
-        logger.info(f"Created new conversation with ID: {current_conversation_id}")
+        # Don't create a new conversation automatically - let the frontend handle this
+        current_conversation_id = None
+        logger.info("No existing conversations found. Waiting for frontend to create one.")
 
     # Check if Groq API key is available
     if GROQ_API_KEY:
@@ -578,9 +792,17 @@ async def entrypoint(ctx: JobContext):
                 # Create a new conversation
                 current_conversation_id = database.create_conversation(message.get('title', f"Conversation-{datetime.now().isoformat()}"))
 
+                # Store the teaching mode in the session data
+                teaching_mode = message.get('teaching_mode', 'teacher')
+                logger.info(f"New conversation created with teaching mode: {teaching_mode}")
+
+                # Store the teaching mode in a global variable or session data
+                # For now, we'll just log it
+
                 response_message = {
                     "type": "new_conversation_created",
-                    "conversation_id": current_conversation_id
+                    "conversation_id": current_conversation_id,
+                    "teaching_mode": teaching_mode
                 }
                 await ctx.room.local_participant.publish_data(json.dumps(response_message).encode())
             elif message.get('type') == 'text_input':
@@ -600,8 +822,18 @@ async def entrypoint(ctx: JobContext):
                 }
                 await ctx.room.local_participant.publish_data(json.dumps(echo_message).encode())
 
-                # Generate AI response using the current conversation
-                ai_response = generate_ai_response(text_input, current_conversation_id)
+                # Get the teaching mode from the message
+                teaching_mode = message.get('teaching_mode', 'teacher')
+                logger.info(f"Using teaching mode: {teaching_mode}")
+
+                # Create a context object with conversation ID and teaching mode
+                context = {
+                    "conversation_id": current_conversation_id,
+                    "teaching_mode": teaching_mode
+                }
+
+                # Generate AI response using the current conversation and teaching mode
+                ai_response = generate_ai_response(text_input, context)
                 logger.info(f"AI Response to text input: {ai_response}")
 
                 # Send AI response to all participants

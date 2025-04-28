@@ -62,6 +62,7 @@ function createParticipantToken(
     canPublish: true,
     canPublishData: true,
     canSubscribe: true,
+    canUpdateOwnMetadata: true,  // Add permission to update own metadata
   };
   at.addGrant(grant);
   return at.toJwt();

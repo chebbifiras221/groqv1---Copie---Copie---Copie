@@ -290,8 +290,41 @@ export function useWebTTS() {
       setIsLoading(true);
       setError(null);
 
-      // Create a new utterance
-      const utterance = new SpeechSynthesisUtterance(text);
+      // Simple text cleaning for speech synthesis
+      // Just remove markdown formatting without adding complex markers
+      let cleanedText = text
+        // Remove markdown formatting
+        .replace(/\*\*\*(.*?)\*\*\*/g, '$1') // Triple asterisks (bold+italic)
+        .replace(/\*\*(.*?)\*\*/g, '$1')     // Double asterisks (bold)
+        .replace(/\*(.*?)\*/g, '$1')         // Single asterisks (italic)
+        .replace(/\*/g, ' ')                 // Any remaining asterisks
+
+        // Handle markdown links
+        .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1') // Replace [text](url) with just text
+
+        // Handle code blocks and inline code
+        .replace(/```[\s\S]*?```/g, 'Code block omitted.') // Replace code blocks
+        .replace(/`([^`]+)`/g, '$1')         // Replace inline code with just the code
+
+        // Handle markdown headers
+        .replace(/^#{1,6}\s+(.+)$/gm, '$1.') // Replace # Header with just Header
+
+        // Handle markdown lists
+        .replace(/^[\s]*[-*+]\s+/gm, '') // Replace bullet points
+        .replace(/^[\s]*\d+\.\s+/gm, '') // Replace numbered lists
+
+        // Handle special characters
+        .replace(/&[a-z]+;/g, ' ')       // Replace HTML entities like &nbsp; with space
+        .replace(/[_=+]/g, ' ')          // Replace underscores, equals, plus with spaces
+
+        // Clean up extra whitespace
+        .replace(/\s+/g, ' ')            // Replace multiple spaces with a single space
+        .trim();                         // Remove leading/trailing whitespace
+
+      console.log('Cleaned text for TTS:', cleanedText.substring(0, 50) + '...');
+
+      // Create a new utterance with the cleaned text
+      const utterance = new SpeechSynthesisUtterance(cleanedText);
 
       // Always set a voice - prioritize female voices
       const voiceToUse = voiceOverride || selectedVoice;
@@ -319,9 +352,9 @@ export function useWebTTS() {
         }
       }
 
-      // Set properties for more natural, high-quality female voice sound
-      utterance.rate = 0.95;     // Slightly slower for more natural sound
-      utterance.pitch = 1.05;    // Slightly higher pitch for female voice
+      // Set speech parameters for a natural, pleasant voice
+      utterance.rate = 0.95;     // Slightly slower for better clarity
+      utterance.pitch = 1.0;     // Normal pitch
       utterance.volume = settings.volume;  // Use volume from settings (0-1 range)
 
       // Set event handlers with proper error handling

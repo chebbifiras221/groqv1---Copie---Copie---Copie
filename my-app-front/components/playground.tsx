@@ -112,7 +112,7 @@ export function Playground({ onConnect: _ }: PlaygroundProps) {
 
   return (
     <div className="flex flex-col h-full w-full">
-      <Header title="Programming Teacher" />
+      <Header title="Teacher Assistant" />
 
       <AnimatePresence>
         {showConnectionToast && (

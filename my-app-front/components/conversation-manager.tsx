@@ -55,6 +55,7 @@ export function ConversationManager() {
   const [isLoading, setIsLoading] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editTitle, setEditTitle] = useState("");
+  const [initialLoadDone, setInitialLoadDone] = useState(false); // Flag to track initial load
   const room = useMaybeRoomContext();
   const connectionState = useConnectionState();
   const isConnected = connectionState === ConnectionState.Connected;
@@ -62,9 +63,10 @@ export function ConversationManager() {
 
   /**
    * Function to fetch the list of conversations from the server
+   * Returns a promise that resolves when the request is sent
    */
   const fetchConversations = async () => {
-    if (!room) return;
+    if (!room) return Promise.resolve();
 
     setIsLoading(true);
     try {
@@ -118,8 +120,15 @@ export function ConversationManager() {
           await new Promise(resolve => setTimeout(resolve, delay));
         }
       }
+
+      // Return a promise that resolves after a short delay
+      // This gives time for the server to respond and update the state
+      return new Promise<void>(resolve => {
+        setTimeout(resolve, 500);
+      });
     } catch (error) {
       handleError(error, 'conversation', 'Error loading conversations');
+      return Promise.resolve(); // Resolve even on error
     } finally {
       setIsLoading(false);
     }
@@ -228,14 +237,44 @@ export function ConversationManager() {
   };
 
   /**
-   * Fetch conversations when connected to the room
+   * Handle initial conversation loading when connected
    * This ensures we load the conversation list as soon as the connection is established
+   * and create exactly one new conversation if none exist
    */
   useEffect(() => {
-    if (isConnected && room) {
-      fetchConversations();
+    // Only run this effect when we first connect
+    if (isConnected && room && !initialLoadDone) {
+      console.log("Initial connection detected, loading conversations");
+
+      // Mark initial load as done to prevent this from running again
+      setInitialLoadDone(true);
+
+      // Store in localStorage that we've done the initial load
+      localStorage.setItem('initial-load-done', 'true');
+
+      // Fetch conversations
+      fetchConversations().then(() => {
+        // After fetching, check if we need to create a new conversation
+        // This will run after the state has been updated with the fetched conversations
+        setTimeout(() => {
+          if (conversations.length === 0) {
+            console.log("No conversations found on initial load, creating one automatically");
+            createNewConversation();
+          } else {
+            console.log(`Found ${conversations.length} existing conversations, not creating a new one`);
+          }
+        }, 1000);
+      });
     }
-  }, [isConnected, room]);
+  }, [isConnected, room, initialLoadDone]);
+
+  // Check localStorage on component mount to see if we've already done the initial load
+  useEffect(() => {
+    const hasInitialLoadBeenDone = localStorage.getItem('initial-load-done') === 'true';
+    if (hasInitialLoadBeenDone) {
+      setInitialLoadDone(true);
+    }
+  }, []);
 
   // Listen for data messages from the server
   useEffect(() => {
