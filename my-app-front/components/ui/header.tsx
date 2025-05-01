@@ -20,7 +20,7 @@ interface HeaderProps {
 export function Header({ title = "Programming Teacher" }: HeaderProps) {
   const { disconnect } = useConnection();
   const { theme, toggleTheme } = useTheme();
-  const { settings } = useSettings();
+  const { settings, updateSettings } = useSettings();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isHelpOpen, setIsHelpOpen] = useState(false);
@@ -30,6 +30,12 @@ export function Header({ title = "Programming Teacher" }: HeaderProps) {
   useEffect(() => {
     setCurrentMode(settings.teachingMode || 'teacher');
   }, [settings.teachingMode]);
+
+  // Toggle between teacher and Q&A modes
+  const toggleTeachingMode = () => {
+    const newMode = currentMode === 'teacher' ? 'qa' : 'teacher';
+    updateSettings({ teachingMode: newMode });
+  };
 
   const handleDisconnect = () => {
     if (confirm('Are you sure you want to disconnect?')) {
@@ -70,23 +76,24 @@ export function Header({ title = "Programming Teacher" }: HeaderProps) {
         <div className="flex items-center gap-3">
           <StatusIndicator className="mr-2" />
 
-          {/* Mode indicator */}
-          <div
-            className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-full bg-bg-tertiary/30 border border-bg-tertiary/20"
-            title={currentMode === 'teacher' ? 'Teacher Mode: Structured learning with chapters' : 'Q&A Mode: Direct answers to questions'}
+          {/* Mode toggle button */}
+          <button
+            onClick={toggleTeachingMode}
+            className="teaching-mode-toggle flex items-center gap-2 px-3 py-1.5 rounded-md transition-all bg-secondary-DEFAULT/10 border border-secondary-DEFAULT text-secondary-DEFAULT hover:bg-secondary-DEFAULT/20"
+            title={currentMode === 'teacher' ? 'Click to switch to Q&A Mode' : 'Click to switch to Teacher Mode'}
           >
             {currentMode === 'teacher' ? (
               <>
-                <BookOpen size={14} className="text-primary-DEFAULT" />
-                <span className="text-xs font-medium">Teacher Mode</span>
+                <BookOpen size={16} className="teaching-mode-icon" />
+                <span className="text-sm font-medium">Teacher Mode</span>
               </>
             ) : (
               <>
-                <HelpIcon size={14} className="text-secondary-DEFAULT" />
-                <span className="text-xs font-medium">Q&A Mode</span>
+                <HelpIcon size={16} className="teaching-mode-icon" />
+                <span className="text-sm font-medium">Q&A Mode</span>
               </>
             )}
-          </div>
+          </button>
 
           <Button
             variant="ghost"

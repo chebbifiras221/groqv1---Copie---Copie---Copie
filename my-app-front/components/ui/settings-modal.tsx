@@ -2,7 +2,7 @@
 
 import React, { useState } from 'react';
 import { motion } from 'framer-motion';
-import { Settings, Volume2, RefreshCw, Mic, BookOpen, HelpCircle } from 'lucide-react';
+import { Settings, Volume2, RefreshCw, Mic } from 'lucide-react';
 import { Modal } from './modal';
 import { Button } from './button';
 import { useSettings } from '@/hooks/use-settings';
@@ -115,43 +115,6 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
             </div>
             <p className="text-text-tertiary text-xs mt-1">
               When enabled, AI responses will be automatically read aloud
-            </p>
-          </div>
-
-          {/* Teaching Mode Selector */}
-          <div className="space-y-2">
-            <div className="flex items-center justify-between">
-              <label className="flex items-center gap-2 text-text-primary">
-                <BookOpen size={18} />
-                <span>Teaching Mode</span>
-              </label>
-            </div>
-            <div className="grid grid-cols-2 gap-2">
-              <button
-                className={`flex items-center justify-center gap-2 p-3 rounded-lg border transition-all ${
-                  settings.teachingMode === 'teacher'
-                    ? 'bg-primary-DEFAULT/10 border-primary-DEFAULT text-primary-DEFAULT'
-                    : 'bg-bg-tertiary/30 border-bg-tertiary/50 text-text-secondary hover:bg-bg-tertiary/50'
-                }`}
-                onClick={() => updateSettings({ teachingMode: 'teacher' })}
-              >
-                <BookOpen size={16} />
-                <span>Teacher Mode</span>
-              </button>
-              <button
-                className={`flex items-center justify-center gap-2 p-3 rounded-lg border transition-all ${
-                  settings.teachingMode === 'qa'
-                    ? 'bg-primary-DEFAULT/10 border-primary-DEFAULT text-primary-DEFAULT'
-                    : 'bg-bg-tertiary/30 border-bg-tertiary/50 text-text-secondary hover:bg-bg-tertiary/50'
-                }`}
-                onClick={() => updateSettings({ teachingMode: 'qa' })}
-              >
-                <HelpCircle size={16} />
-                <span>Q&A Mode</span>
-              </button>
-            </div>
-            <p className="text-text-tertiary text-xs mt-1">
-              Teacher Mode provides structured learning with chapters and exercises. Q&A Mode answers direct questions.
             </p>
           </div>
 

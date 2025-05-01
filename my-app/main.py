@@ -66,139 +66,110 @@ async def synthesize_speech(text, room, voice_name=None):
     """
     global tts_engine
 
+    # Helper function to get provider name
+    def get_provider_name():
+        return "fallback" if hasattr(tts_engine, 'use_fallback') and tts_engine.use_fallback else "web"
+
+    # Helper function to get voice name
+    def get_voice_name():
+        return voice_name or (tts_engine.default_voice_name if hasattr(tts_engine, 'default_voice_name') else "Web Voice")
+
+    # Helper function to send error message
+    async def send_error(message):
+        try:
+            error_message = {
+                "type": "tts_error",
+                "message": message
+            }
+            await room.local_participant.publish_data(json.dumps(error_message).encode())
+        except Exception as publish_error:
+            logger.error(f"Error sending error message: {publish_error}")
+        return False
+
+    # Check if TTS engine is initialized
     if not tts_engine:
         logger.warning("TTS engine not initialized, attempting to initialize now...")
         if initialize_tts():
             logger.info("TTS engine initialized successfully on demand")
         else:
             logger.error("TTS engine initialization failed, cannot synthesize speech")
-            # Send a message to the client that TTS failed
-            error_message = {
-                "type": "tts_error",
-                "message": "Failed to initialize TTS engine"
-            }
-            await room.local_participant.publish_data(json.dumps(error_message).encode())
-            return False
+            return await send_error("Failed to initialize TTS engine")
 
     try:
-        # Use the default voice from the TTS engine
+        # Use the default voice from the TTS engine if none provided
         if not voice_name and hasattr(tts_engine, 'default_voice_name'):
             voice_name = tts_engine.default_voice_name
 
-        # Determine the provider based on whether we're using fallback
-        provider = "web"
-        if hasattr(tts_engine, 'use_fallback') and tts_engine.use_fallback:
-            provider = "fallback"
+        # Get provider and voice information
+        provider = get_provider_name()
+        voice = get_voice_name()
 
         # Create a data message to notify clients that TTS is starting
         tts_start_message = {
             "type": "tts_starting",
             "text": text[:100] + ("..." if len(text) > 100 else ""),
             "provider": provider,
-            "voice": voice_name or (tts_engine.default_voice_name if hasattr(tts_engine, 'default_voice_name') else "Web Voice")
+            "voice": voice
         }
         await room.local_participant.publish_data(json.dumps(tts_start_message).encode())
 
         logger.info(f"Synthesizing speech with {provider.capitalize()} TTS: {text[:50]}...")
 
-        # Generate audio using TTS engine with the specified voice (or Daniel by default)
+        # Generate audio using TTS engine
         audio_data = tts_engine.synthesize(text, voice_name=voice_name)
 
-        if audio_data:
-            logger.info(f"Audio data generated, size: {len(audio_data)} bytes")
-
-            # Publish the audio to the room
-            logger.info(f"Publishing audio data to room, size: {len(audio_data)} bytes")
-
-            # Create an audio track from the audio data
-            try:
-                # Send a message to the client that audio data is coming with voice info
-                # (This audio_info is not used directly, but kept for reference)
-                # We'll send a simpler voice_info message instead
-
-                # First send the audio info with a specific topic
-                try:
-                    # Determine the provider based on whether we're using fallback
-                    provider = "web"
-                    if hasattr(tts_engine, 'use_fallback') and tts_engine.use_fallback:
-                        provider = "fallback"
-
-                    # Send a message about the voice being used
-                    voice_info = {
-                        "type": "voice_info",
-                        "voice": tts_engine.default_voice_name if hasattr(tts_engine, 'default_voice_name') else "Web Voice",
-                        "provider": provider
-                    }
-                    await room.local_participant.publish_data(json.dumps(voice_info).encode())
-                    logger.info("Published voice info message")
-
-                    # Check if this is a web TTS message
-                    try:
-                        # Try to decode and parse as JSON
-                        message_str = audio_data.decode('utf-8')
-                        message = json.loads(message_str)
-
-                        # If it's a web TTS message, publish it as is
-                        if message.get('type') == 'web_tts':
-                            logger.info(f"Publishing web TTS message for text: {message.get('text', '')[:50]}...")
-                            await room.local_participant.publish_data(audio_data)
-                        else:
-                            # Otherwise, publish as binary data
-                            await room.local_participant.publish_data(audio_data)
-                            logger.info(f"Published audio data, size: {len(audio_data)} bytes")
-                    except (UnicodeDecodeError, json.JSONDecodeError):
-                        # If it's not valid UTF-8 or JSON, it's binary audio data
-                        await room.local_participant.publish_data(audio_data)
-                        logger.info(f"Published binary audio data, size: {len(audio_data)} bytes")
-                except Exception as e:
-                    logger.error(f"Error publishing audio data: {e}")
-                logger.info("Successfully published audio data")
-            except Exception as e:
-                logger.error(f"Unexpected error publishing audio data: {e}")
-                # Send an error message to the client
-                error_message = {
-                    "type": "tts_error",
-                    "message": f"Error publishing audio: {str(e)}"
-                }
-                await room.local_participant.publish_data(json.dumps(error_message).encode())
-                return False
-
-            # Determine the provider based on whether we're using fallback
-            provider = "web"
-            if hasattr(tts_engine, 'use_fallback') and tts_engine.use_fallback:
-                provider = "fallback"
-
-            # Create a data message to notify clients that TTS is complete
-            tts_complete_message = {
-                "type": "tts_complete",
-                "provider": provider,
-                "voice": voice_name or (tts_engine.default_voice_name if hasattr(tts_engine, 'default_voice_name') else "Web Voice")
-            }
-            await room.local_participant.publish_data(json.dumps(tts_complete_message).encode())
-
-            logger.info("Speech synthesis and transmission complete")
-            return True
-        else:
+        if not audio_data:
             logger.error("Failed to synthesize speech: No audio data generated")
-            # Send an error message to the client
-            error_message = {
-                "type": "tts_error",
-                "message": "Failed to generate audio data"
-            }
-            await room.local_participant.publish_data(json.dumps(error_message).encode())
-            return False
+            return await send_error("Failed to generate audio data")
+
+        logger.info(f"Audio data generated, size: {len(audio_data)} bytes")
+
+        # Send voice info message
+        voice_info = {
+            "type": "voice_info",
+            "voice": voice,
+            "provider": provider
+        }
+        await room.local_participant.publish_data(json.dumps(voice_info).encode())
+        logger.info("Published voice info message")
+
+        # Try to publish the audio data
+        try:
+            # Check if this is a web TTS message
+            try:
+                # Try to decode and parse as JSON
+                message_str = audio_data.decode('utf-8')
+                message = json.loads(message_str)
+
+                # If it's a web TTS message, publish it as is
+                if message.get('type') == 'web_tts':
+                    logger.info(f"Publishing web TTS message for text: {message.get('text', '')[:50]}...")
+                    await room.local_participant.publish_data(audio_data)
+                else:
+                    # Otherwise, publish as binary data
+                    await room.local_participant.publish_data(audio_data)
+                    logger.info(f"Published audio data, size: {len(audio_data)} bytes")
+            except (UnicodeDecodeError, json.JSONDecodeError):
+                # If it's not valid UTF-8 or JSON, it's binary audio data
+                await room.local_participant.publish_data(audio_data)
+                logger.info(f"Published binary audio data, size: {len(audio_data)} bytes")
+        except Exception as e:
+            logger.error(f"Error publishing audio data: {e}")
+            return await send_error(f"Error publishing audio: {str(e)}")
+
+        # Create a data message to notify clients that TTS is complete
+        tts_complete_message = {
+            "type": "tts_complete",
+            "provider": provider,
+            "voice": voice
+        }
+        await room.local_participant.publish_data(json.dumps(tts_complete_message).encode())
+
+        logger.info("Speech synthesis and transmission complete")
+        return True
     except Exception as e:
         logger.error(f"Error in speech synthesis: {e}")
-        # Send an error message to the client
-        try:
-            error_message = {
-                "type": "tts_error",
-                "message": f"Speech synthesis error: {str(e)}"
-            }
-            await room.local_participant.publish_data(json.dumps(error_message).encode())
-        except Exception as publish_error:
-            logger.error(f"Error sending error message: {publish_error}")
-        return False
+        return await send_error(f"Speech synthesis error: {str(e)}")
 
 
 def generate_ai_response(text, conversation_id=None):
@@ -311,6 +282,30 @@ def generate_ai_response(text, conversation_id=None):
         13. Maintain a professional classroom atmosphere while being authoritative on the subject matter
 
         14. Adapt your teaching style based on the student's responses and level of understanding
+
+        15. IMPORTANT - COURSE NAVIGATION AND READING BEHAVIOR:
+           - When a student asks to go to a specific chapter, immediately present that chapter
+           - When reading chapter titles, use a clear, authoritative tone and pause briefly after the title
+           - When reading section headings, use a slightly different tone to distinguish them from regular content
+           - When reading code blocks, slow down slightly and be precise with syntax
+           - When reading lists or steps, pause briefly between items
+           - When reading important terms (in bold), emphasize them slightly
+           - When presenting a quiz or exercise, use a more engaging, interactive tone
+           - When summarizing key points, use a slightly more formal, conclusive tone
+           - When transitioning between chapters or major sections, use clear transitional phrases
+           - When a student asks to continue to the next chapter, acknowledge their progress before proceeding
+
+        16. PROFESSIONAL COURSE STRUCTURE:
+           - Create a course that resembles professional learning platforms like Coursera or LinkedIn Learning
+           - Each chapter should be clearly numbered and titled for easy navigation
+           - Include a "Course Progress" section at the beginning of each chapter (e.g., "Chapter 3 of 10")
+           - Include estimated reading/completion time for each chapter
+           - Include clear prerequisites for each chapter when applicable
+           - Include a "Learning Path" that shows how chapters build on each other
+           - Include "Key Takeaways" at the end of each major section
+           - Include "Further Reading" or "Additional Resources" sections where appropriate
+           - Include "Practical Application" sections that connect theory to real-world usage
+           - Format the course in a way that would work well in a professional learning management system
 
         Your knowledge sources include:
         - Standard textbooks across various disciplines

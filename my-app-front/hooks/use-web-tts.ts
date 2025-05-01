@@ -266,6 +266,88 @@ export function useWebTTS() {
     setIsPlaying(false);
   }, []);
 
+  // Function to process text for course content
+  const processCourseContent = useCallback((text: string): string => {
+    // Split the text into lines to process each line appropriately
+    const lines = text.split('\n');
+    const processedLines: string[] = [];
+
+    // Track if we're in a code block
+    let inCodeBlock = false;
+
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i].trim();
+
+      // Skip empty lines
+      if (!line) continue;
+
+      // Check for code block markers
+      if (line.startsWith('```')) {
+        inCodeBlock = !inCodeBlock;
+        if (inCodeBlock) {
+          processedLines.push('Code example:');
+        } else {
+          processedLines.push('End of code example.');
+        }
+        continue;
+      }
+
+      // Skip content inside code blocks
+      if (inCodeBlock) continue;
+
+      // Process headings with appropriate pauses and emphasis
+      if (line.startsWith('# ')) {
+        // Course title - add emphasis
+        processedLines.push(`Course Title: ${line.substring(2)}.`);
+        processedLines.push('');  // Add pause
+      } else if (line.match(/^## Chapter \d+:/)) {
+        // Chapter heading - add emphasis and pause
+        processedLines.push(`${line.substring(3)}.`);
+        processedLines.push('');  // Add pause
+      } else if (line.startsWith('### ')) {
+        // Section heading - add emphasis
+        processedLines.push(`Section: ${line.substring(4)}.`);
+        processedLines.push('');  // Add pause
+      } else if (line.startsWith('#### ')) {
+        // Subsection heading - add emphasis
+        const heading = line.substring(5);
+
+        // Special handling for specific section types
+        if (heading.includes('Learning Objectives')) {
+          processedLines.push('Learning Objectives:');
+        } else if (heading.includes('Practice Exercises')) {
+          processedLines.push('Practice Exercises:');
+        } else if (heading.includes('Quiz')) {
+          processedLines.push('Quiz Section:');
+        } else if (heading.includes('Summary')) {
+          processedLines.push('Summary:');
+        } else if (heading.includes('Key Takeaways')) {
+          processedLines.push('Key Takeaways:');
+        } else {
+          processedLines.push(`${heading}:`);
+        }
+        processedLines.push('');  // Add pause
+      } else if (line.match(/^\s*[\-\*]\s/)) {
+        // Bullet point - add slight pause
+        processedLines.push(`• ${line.replace(/^\s*[\-\*]\s/, '')}`);
+      } else if (line.match(/^\s*\d+\.\s/)) {
+        // Numbered list - add slight pause
+        const number = line.match(/^\s*(\d+)\.\s/)?.[1] || '';
+        const content = line.replace(/^\s*\d+\.\s/, '');
+        processedLines.push(`Step ${number}: ${content}`);
+      } else if (line.startsWith('> ')) {
+        // Blockquote - add emphasis
+        processedLines.push(`Note: ${line.substring(2)}`);
+      } else {
+        // Regular paragraph
+        processedLines.push(line);
+      }
+    }
+
+    // Join the processed lines with appropriate spacing
+    return processedLines.join(' ');
+  }, []);
+
   // Function to speak text
   const speak = useCallback((text: string, voiceOverride?: SpeechSynthesisVoice) => {
     if (typeof window === 'undefined') {
@@ -290,36 +372,47 @@ export function useWebTTS() {
       setIsLoading(true);
       setError(null);
 
-      // Simple text cleaning for speech synthesis
-      // Just remove markdown formatting without adding complex markers
-      let cleanedText = text
-        // Remove markdown formatting
-        .replace(/\*\*\*(.*?)\*\*\*/g, '$1') // Triple asterisks (bold+italic)
-        .replace(/\*\*(.*?)\*\*/g, '$1')     // Double asterisks (bold)
-        .replace(/\*(.*?)\*/g, '$1')         // Single asterisks (italic)
-        .replace(/\*/g, ' ')                 // Any remaining asterisks
+      // Check if this is course content
+      const isCourseContent = text.includes('# Complete Course:') ||
+                             text.includes('## Chapter') ||
+                             text.includes('### ');
 
-        // Handle markdown links
-        .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1') // Replace [text](url) with just text
+      // Process text differently based on content type
+      let cleanedText;
+      if (isCourseContent) {
+        // Use specialized course content processing
+        cleanedText = processCourseContent(text);
+      } else {
+        // Simple text cleaning for regular content
+        cleanedText = text
+          // Remove markdown formatting
+          .replace(/\*\*\*(.*?)\*\*\*/g, '$1') // Triple asterisks (bold+italic)
+          .replace(/\*\*(.*?)\*\*/g, '$1')     // Double asterisks (bold)
+          .replace(/\*(.*?)\*/g, '$1')         // Single asterisks (italic)
+          .replace(/\*/g, ' ')                 // Any remaining asterisks
 
-        // Handle code blocks and inline code
-        .replace(/```[\s\S]*?```/g, 'Code block omitted.') // Replace code blocks
-        .replace(/`([^`]+)`/g, '$1')         // Replace inline code with just the code
+          // Handle markdown links
+          .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1') // Replace [text](url) with just text
 
-        // Handle markdown headers
-        .replace(/^#{1,6}\s+(.+)$/gm, '$1.') // Replace # Header with just Header
+          // Handle code blocks and inline code
+          .replace(/```[\s\S]*?```/g, 'Code block omitted.') // Replace code blocks
+          .replace(/`([^`]+)`/g, '$1')         // Replace inline code with just the code
 
-        // Handle markdown lists
-        .replace(/^[\s]*[-*+]\s+/gm, '') // Replace bullet points
-        .replace(/^[\s]*\d+\.\s+/gm, '') // Replace numbered lists
+          // Handle markdown headers
+          .replace(/^#{1,6}\s+(.+)$/gm, '$1.') // Replace # Header with just Header
 
-        // Handle special characters
-        .replace(/&[a-z]+;/g, ' ')       // Replace HTML entities like &nbsp; with space
-        .replace(/[_=+]/g, ' ')          // Replace underscores, equals, plus with spaces
+          // Handle markdown lists
+          .replace(/^[\s]*[-*+]\s+/gm, '') // Replace bullet points
+          .replace(/^[\s]*\d+\.\s+/gm, '') // Replace numbered lists
 
-        // Clean up extra whitespace
-        .replace(/\s+/g, ' ')            // Replace multiple spaces with a single space
-        .trim();                         // Remove leading/trailing whitespace
+          // Handle special characters
+          .replace(/&[a-z]+;/g, ' ')       // Replace HTML entities like &nbsp; with space
+          .replace(/[_=+]/g, ' ')          // Replace underscores, equals, plus with spaces
+
+          // Clean up extra whitespace
+          .replace(/\s+/g, ' ')            // Replace multiple spaces with a single space
+          .trim();                         // Remove leading/trailing whitespace
+      }
 
       console.log('Cleaned text for TTS:', cleanedText.substring(0, 50) + '...');
 
@@ -406,7 +499,7 @@ export function useWebTTS() {
 
       return true; // Return true anyway so the UI shows we're handling it
     }
-  }, [selectedVoice, stopSpeaking, settings]);
+  }, [selectedVoice, stopSpeaking, settings, processCourseContent]);
 
   // Function to select a voice by name
   const selectVoiceByName = useCallback((voiceName: string) => {

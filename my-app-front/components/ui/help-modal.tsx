@@ -14,7 +14,7 @@ export function HelpModal({ isOpen, onClose }: HelpModalProps) {
     {
       title: "Teaching Modes",
       icon: <BookOpen className="text-primary-DEFAULT" size={20} />,
-      content: "The Programming Teacher has two modes: Teacher Mode and Q&A Mode. In Teacher Mode, it provides structured learning with chapters and exercises. In Q&A Mode, it answers direct questions about programming. You can switch between modes in the Settings."
+      content: "The Programming Teacher has two modes: Teacher Mode and Q&A Mode. In Teacher Mode, it provides structured learning with chapters and exercises. In Q&A Mode, it answers direct questions about programming. You can switch between modes by clicking the mode button in the top navigation bar."
     },
     {
       title: "Voice Interaction",
