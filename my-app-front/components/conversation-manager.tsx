@@ -142,6 +142,15 @@ export function ConversationManager() {
 
     setIsLoading(true);
     try {
+      // Reset any course UI state for the previous conversation
+      if (typeof window !== 'undefined') {
+        // Dispatch a custom event to notify components about the course reset
+        const resetEvent = new CustomEvent('course-ui-reset', {
+          detail: { conversationId }
+        });
+        window.dispatchEvent(resetEvent);
+      }
+
       // Store the conversation ID in localStorage so the useConversation hook can pick it up
       localStorage.setItem('current-conversation-id', conversationId);
 
@@ -216,6 +225,15 @@ export function ConversationManager() {
 
     setIsLoading(true);
     try {
+      // Reset any course UI state for the previous conversation
+      if (typeof window !== 'undefined') {
+        // Dispatch a custom event to notify components about the course reset
+        const resetEvent = new CustomEvent('course-ui-reset', {
+          detail: { conversationId: 'new' }
+        });
+        window.dispatchEvent(resetEvent);
+      }
+
       // Clear the current conversation ID in localStorage
       // The server will assign a new ID when it creates the conversation
       localStorage.removeItem('current-conversation-id');

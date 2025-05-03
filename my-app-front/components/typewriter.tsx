@@ -228,6 +228,19 @@ export function Typewriter({ typingSpeed = 50 }: TypewriterProps) {
     // Reset course chapters when conversation ID changes or is null
     setCourseChapters([]);
     console.log("Conversation ID changed, resetting course structure");
+
+    // Also reset any localStorage data related to course structure for this conversation
+    localStorage.removeItem(`course-chapters-${currentConversationId}`);
+    localStorage.removeItem(`active-chapter-${currentConversationId}`);
+
+    // Clear any other course-related state
+    if (typeof window !== 'undefined') {
+      // Dispatch a custom event to notify other components about the course reset
+      const resetEvent = new CustomEvent('course-ui-reset', {
+        detail: { conversationId: currentConversationId }
+      });
+      window.dispatchEvent(resetEvent);
+    }
   }, [currentConversationId]);
 
   // Process messages for course structure when they change

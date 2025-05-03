@@ -2,6 +2,7 @@ import sqlite3
 import uuid
 import json
 import logging
+import threading
 from datetime import datetime
 from typing import List, Dict, Any, Optional
 
@@ -10,259 +11,358 @@ logger = logging.getLogger("database")
 # Database file path
 DB_FILE = "conversations.db"
 
+# Simple connection pool for SQLite
+class ConnectionPool:
+    _instance = None
+    _lock = threading.Lock()
+
+    def __new__(cls):
+        with cls._lock:
+            if cls._instance is None:
+                cls._instance = super(ConnectionPool, cls).__new__(cls)
+                cls._instance.pool = []
+                cls._instance.max_connections = 5
+                cls._instance.in_use = set()
+            return cls._instance
+
+    def get_connection(self):
+        """Get a connection from the pool or create a new one"""
+        with self._lock:
+            # Try to reuse an existing connection
+            while self.pool:
+                conn = self.pool.pop()
+                if conn not in self.in_use:
+                    try:
+                        # Test if connection is still valid
+                        conn.execute("SELECT 1")
+                        self.in_use.add(conn)
+                        return conn
+                    except sqlite3.Error:
+                        # Connection is no longer valid, discard it
+                        continue
+
+            # Create a new connection
+            conn = sqlite3.connect(DB_FILE, check_same_thread=False)
+            conn.row_factory = sqlite3.Row  # Return rows as dictionaries
+            self.in_use.add(conn)
+            return conn
+
+    def release_connection(self, conn):
+        """Return a connection to the pool"""
+        with self._lock:
+            if conn in self.in_use:
+                self.in_use.remove(conn)
+                if len(self.pool) < self.max_connections:
+                    self.pool.append(conn)
+                else:
+                    conn.close()
+
+# Initialize the connection pool
+_pool = ConnectionPool()
+
 def get_db_connection():
-    """Create a connection to the SQLite database"""
-    conn = sqlite3.connect(DB_FILE)
-    conn.row_factory = sqlite3.Row  # Return rows as dictionaries
-    return conn
+    """Get a connection from the pool"""
+    return _pool.get_connection()
+
+def release_connection(conn):
+    """Release a connection back to the pool"""
+    _pool.release_connection(conn)
 
 def init_db():
     """Initialize the database with required tables"""
     conn = get_db_connection()
-    cursor = conn.cursor()
+    try:
+        cursor = conn.cursor()
 
-    # Create conversations table
-    cursor.execute('''
-    CREATE TABLE IF NOT EXISTS conversations (
-        id TEXT PRIMARY KEY,
-        title TEXT,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-    )
-    ''')
+        # Create conversations table
+        cursor.execute('''
+        CREATE TABLE IF NOT EXISTS conversations (
+            id TEXT PRIMARY KEY,
+            title TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+        ''')
 
-    # Create messages table
-    cursor.execute('''
-    CREATE TABLE IF NOT EXISTS messages (
-        id TEXT PRIMARY KEY,
-        conversation_id TEXT,
-        type TEXT,
-        content TEXT,
-        timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        FOREIGN KEY (conversation_id) REFERENCES conversations(id)
-    )
-    ''')
+        # Create messages table
+        cursor.execute('''
+        CREATE TABLE IF NOT EXISTS messages (
+            id TEXT PRIMARY KEY,
+            conversation_id TEXT,
+            type TEXT,
+            content TEXT,
+            timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (conversation_id) REFERENCES conversations(id)
+        )
+        ''')
 
-    conn.commit()
-    conn.close()
-    logger.info("Database initialized")
+        conn.commit()
+        logger.info("Database initialized")
+    except Exception as e:
+        logger.error(f"Error initializing database: {e}")
+        conn.rollback()
+        raise
+    finally:
+        release_connection(conn)
 
 def create_conversation(title: str = "New Conversation") -> str:
     """Create a new conversation and return its ID"""
     conn = get_db_connection()
-    cursor = conn.cursor()
+    try:
+        cursor = conn.cursor()
 
-    conversation_id = str(uuid.uuid4())
-    now = datetime.now().isoformat()
+        conversation_id = str(uuid.uuid4())
+        now = datetime.now().isoformat()
 
-    cursor.execute(
-        "INSERT INTO conversations (id, title, created_at, updated_at) VALUES (?, ?, ?, ?)",
-        (conversation_id, title, now, now)
-    )
+        cursor.execute(
+            "INSERT INTO conversations (id, title, created_at, updated_at) VALUES (?, ?, ?, ?)",
+            (conversation_id, title, now, now)
+        )
 
-    conn.commit()
-    conn.close()
-
-    logger.info(f"Created new conversation: {conversation_id}")
-    return conversation_id
+        conn.commit()
+        logger.info(f"Created new conversation: {conversation_id}")
+        return conversation_id
+    except Exception as e:
+        logger.error(f"Error creating conversation: {e}")
+        conn.rollback()
+        raise
+    finally:
+        release_connection(conn)
 
 def get_conversation(conversation_id: str) -> Optional[Dict[str, Any]]:
     """Get a conversation by ID"""
     conn = get_db_connection()
-    cursor = conn.cursor()
+    try:
+        cursor = conn.cursor()
 
-    cursor.execute("SELECT * FROM conversations WHERE id = ?", (conversation_id,))
-    conversation = cursor.fetchone()
+        cursor.execute("SELECT * FROM conversations WHERE id = ?", (conversation_id,))
+        conversation = cursor.fetchone()
 
-    if not conversation:
-        conn.close()
-        return None
+        if not conversation:
+            return None
 
-    # Convert to dict
-    result = dict(conversation)
+        # Convert to dict
+        result = dict(conversation)
 
-    # Get messages for this conversation
-    cursor.execute(
-        "SELECT * FROM messages WHERE conversation_id = ? ORDER BY timestamp",
-        (conversation_id,)
-    )
-    messages = [dict(row) for row in cursor.fetchall()]
-    result["messages"] = messages
+        # Get messages for this conversation
+        cursor.execute(
+            "SELECT * FROM messages WHERE conversation_id = ? ORDER BY timestamp",
+            (conversation_id,)
+        )
+        messages = [dict(row) for row in cursor.fetchall()]
+        result["messages"] = messages
 
-    conn.close()
-    return result
+        return result
+    except Exception as e:
+        logger.error(f"Error getting conversation {conversation_id}: {e}")
+        raise
+    finally:
+        release_connection(conn)
 
 def list_conversations(limit: int = 10, offset: int = 0, include_messages: bool = True) -> List[Dict[str, Any]]:
     """List conversations with pagination"""
     conn = get_db_connection()
-    cursor = conn.cursor()
+    try:
+        cursor = conn.cursor()
 
-    cursor.execute(
-        "SELECT * FROM conversations ORDER BY updated_at DESC LIMIT ? OFFSET ?",
-        (limit, offset)
-    )
-
-    conversations = [dict(row) for row in cursor.fetchall()]
-
-    # Get message counts and last message for each conversation
-    for conv in conversations:
-        # Get message count
         cursor.execute(
-            "SELECT COUNT(*) as count FROM messages WHERE conversation_id = ?",
-            (conv["id"],)
+            "SELECT * FROM conversations ORDER BY updated_at DESC LIMIT ? OFFSET ?",
+            (limit, offset)
         )
-        count = cursor.fetchone()["count"]
-        conv["message_count"] = count
 
-        # Get last message
-        cursor.execute(
-            "SELECT type, content FROM messages WHERE conversation_id = ? ORDER BY timestamp DESC LIMIT 1",
-            (conv["id"],)
-        )
-        last_message = cursor.fetchone()
-        if last_message:
-            conv["last_message"] = {
-                "type": last_message["type"],
-                "content": last_message["content"]
-            }
+        conversations = [dict(row) for row in cursor.fetchall()]
 
-        # Include all messages if requested
-        if include_messages:
+        # Get message counts and last message for each conversation
+        for conv in conversations:
+            # Get message count
             cursor.execute(
-                "SELECT id, type, content, timestamp FROM messages WHERE conversation_id = ? ORDER BY timestamp",
+                "SELECT COUNT(*) as count FROM messages WHERE conversation_id = ?",
                 (conv["id"],)
             )
-            messages = [dict(row) for row in cursor.fetchall()]
-            conv["messages"] = messages
+            count = cursor.fetchone()["count"]
+            conv["message_count"] = count
 
-    conn.close()
-    return conversations
+            # Get last message
+            cursor.execute(
+                "SELECT type, content FROM messages WHERE conversation_id = ? ORDER BY timestamp DESC LIMIT 1",
+                (conv["id"],)
+            )
+            last_message = cursor.fetchone()
+            if last_message:
+                conv["last_message"] = {
+                    "type": last_message["type"],
+                    "content": last_message["content"]
+                }
+
+            # Include all messages if requested
+            if include_messages:
+                cursor.execute(
+                    "SELECT id, type, content, timestamp FROM messages WHERE conversation_id = ? ORDER BY timestamp",
+                    (conv["id"],)
+                )
+                messages = [dict(row) for row in cursor.fetchall()]
+                conv["messages"] = messages
+
+        return conversations
+    except Exception as e:
+        logger.error(f"Error listing conversations: {e}")
+        raise
+    finally:
+        release_connection(conn)
 
 def add_message(conversation_id: str, message_type: str, content: str) -> str:
     """Add a message to a conversation"""
     conn = get_db_connection()
-    cursor = conn.cursor()
+    try:
+        cursor = conn.cursor()
 
-    # Check if conversation exists
-    cursor.execute("SELECT id FROM conversations WHERE id = ?", (conversation_id,))
-    if not cursor.fetchone():
-        conn.close()
-        raise ValueError(f"Conversation {conversation_id} does not exist")
+        # Check if conversation exists
+        cursor.execute("SELECT id FROM conversations WHERE id = ?", (conversation_id,))
+        if not cursor.fetchone():
+            raise ValueError(f"Conversation {conversation_id} does not exist")
 
-    message_id = str(uuid.uuid4())
-    now = datetime.now().isoformat()
+        message_id = str(uuid.uuid4())
+        now = datetime.now().isoformat()
 
-    # Insert message
-    cursor.execute(
-        "INSERT INTO messages (id, conversation_id, type, content, timestamp) VALUES (?, ?, ?, ?, ?)",
-        (message_id, conversation_id, message_type, content, now)
-    )
+        # Insert message
+        cursor.execute(
+            "INSERT INTO messages (id, conversation_id, type, content, timestamp) VALUES (?, ?, ?, ?, ?)",
+            (message_id, conversation_id, message_type, content, now)
+        )
 
-    # Update conversation's updated_at timestamp
-    cursor.execute(
-        "UPDATE conversations SET updated_at = ? WHERE id = ?",
-        (now, conversation_id)
-    )
+        # Update conversation's updated_at timestamp
+        cursor.execute(
+            "UPDATE conversations SET updated_at = ? WHERE id = ?",
+            (now, conversation_id)
+        )
 
-    conn.commit()
-    conn.close()
-
-    return message_id
+        conn.commit()
+        return message_id
+    except Exception as e:
+        logger.error(f"Error adding message to conversation {conversation_id}: {e}")
+        conn.rollback()
+        raise
+    finally:
+        release_connection(conn)
 
 def get_messages(conversation_id: str) -> List[Dict[str, Any]]:
     """Get all messages for a conversation"""
     conn = get_db_connection()
-    cursor = conn.cursor()
+    try:
+        cursor = conn.cursor()
 
-    cursor.execute(
-        "SELECT * FROM messages WHERE conversation_id = ? ORDER BY timestamp",
-        (conversation_id,)
-    )
+        cursor.execute(
+            "SELECT * FROM messages WHERE conversation_id = ? ORDER BY timestamp",
+            (conversation_id,)
+        )
 
-    messages = [dict(row) for row in cursor.fetchall()]
-    conn.close()
-
-    return messages
+        messages = [dict(row) for row in cursor.fetchall()]
+        return messages
+    except Exception as e:
+        logger.error(f"Error getting messages for conversation {conversation_id}: {e}")
+        raise
+    finally:
+        release_connection(conn)
 
 def delete_conversation(conversation_id: str) -> bool:
     """Delete a conversation and all its messages"""
     conn = get_db_connection()
-    cursor = conn.cursor()
+    try:
+        cursor = conn.cursor()
 
-    # Delete messages first (foreign key constraint)
-    cursor.execute("DELETE FROM messages WHERE conversation_id = ?", (conversation_id,))
+        # Delete messages first (foreign key constraint)
+        cursor.execute("DELETE FROM messages WHERE conversation_id = ?", (conversation_id,))
 
-    # Delete conversation
-    cursor.execute("DELETE FROM conversations WHERE id = ?", (conversation_id,))
+        # Delete conversation
+        cursor.execute("DELETE FROM conversations WHERE id = ?", (conversation_id,))
 
-    deleted = cursor.rowcount > 0
+        deleted = cursor.rowcount > 0
 
-    conn.commit()
-    conn.close()
-
-    return deleted
+        conn.commit()
+        return deleted
+    except Exception as e:
+        logger.error(f"Error deleting conversation {conversation_id}: {e}")
+        conn.rollback()
+        raise
+    finally:
+        release_connection(conn)
 
 def update_conversation_title(conversation_id: str, title: str) -> bool:
     """Update a conversation's title"""
     conn = get_db_connection()
-    cursor = conn.cursor()
+    try:
+        cursor = conn.cursor()
 
-    now = datetime.now().isoformat()
+        now = datetime.now().isoformat()
 
-    cursor.execute(
-        "UPDATE conversations SET title = ?, updated_at = ? WHERE id = ?",
-        (title, now, conversation_id)
-    )
+        cursor.execute(
+            "UPDATE conversations SET title = ?, updated_at = ? WHERE id = ?",
+            (title, now, conversation_id)
+        )
 
-    updated = cursor.rowcount > 0
+        updated = cursor.rowcount > 0
 
-    conn.commit()
-    conn.close()
-
-    return updated
+        conn.commit()
+        return updated
+    except Exception as e:
+        logger.error(f"Error updating conversation title for {conversation_id}: {e}")
+        conn.rollback()
+        raise
+    finally:
+        release_connection(conn)
 
 def clear_all_conversations() -> int:
     """Delete all conversations and their messages"""
     conn = get_db_connection()
-    cursor = conn.cursor()
+    try:
+        cursor = conn.cursor()
 
-    # Delete all messages first (foreign key constraint)
-    cursor.execute("DELETE FROM messages")
+        # Delete all messages first (foreign key constraint)
+        cursor.execute("DELETE FROM messages")
 
-    # Delete all conversations
-    cursor.execute("DELETE FROM conversations")
-    deleted_count = cursor.rowcount
+        # Delete all conversations
+        cursor.execute("DELETE FROM conversations")
+        deleted_count = cursor.rowcount
 
-    conn.commit()
-    conn.close()
-
-    return deleted_count
+        conn.commit()
+        return deleted_count
+    except Exception as e:
+        logger.error(f"Error clearing all conversations: {e}")
+        conn.rollback()
+        raise
+    finally:
+        release_connection(conn)
 
 def generate_conversation_title(conversation_id: str) -> str:
     """Generate a title for a conversation based on its content"""
     conn = get_db_connection()
-    cursor = conn.cursor()
+    try:
+        cursor = conn.cursor()
 
-    # Get the first user message
-    cursor.execute(
-        "SELECT content FROM messages WHERE conversation_id = ? AND type = 'user' ORDER BY timestamp LIMIT 1",
-        (conversation_id,)
-    )
+        # Get the first user message
+        cursor.execute(
+            "SELECT content FROM messages WHERE conversation_id = ? AND type = 'user' ORDER BY timestamp LIMIT 1",
+            (conversation_id,)
+        )
 
-    first_message = cursor.fetchone()
-    conn.close()
+        first_message = cursor.fetchone()
 
-    if not first_message:
+        if not first_message:
+            return f"New Conversation {conversation_id[:8]}"
+
+        # Use the first 30 characters of the first message as the title
+        content = first_message['content']
+        if len(content) > 30:
+            title = content[:30] + "..."
+        else:
+            title = content
+
+        # Update the conversation title
+        update_conversation_title(conversation_id, title)
+
+        return title
+    except Exception as e:
+        logger.error(f"Error generating title for conversation {conversation_id}: {e}")
         return f"New Conversation {conversation_id[:8]}"
-
-    # Use the first 30 characters of the first message as the title
-    content = first_message['content']
-    if len(content) > 30:
-        title = content[:30] + "..."
-    else:
-        title = content
-
-    # Update the conversation title
-    update_conversation_title(conversation_id, title)
-
-    return title
+    finally:
+        release_connection(conn)

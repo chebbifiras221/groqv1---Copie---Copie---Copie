@@ -27,6 +27,18 @@ export function CourseUI({
   navigateToSection,
   isTeacherMode
 }: CourseUIProps) {
+  // Listen for course UI reset events
+  useEffect(() => {
+    const handleCourseReset = (event: Event) => {
+      console.log("Course UI reset event received");
+      // The course chapters state is managed in the parent component (typewriter),
+      // so we don't need to do anything here except log for debugging
+    };
+
+    window.addEventListener('course-ui-reset', handleCourseReset);
+    return () => window.removeEventListener('course-ui-reset', handleCourseReset);
+  }, []);
+
   // Only render if we have chapters to display
   if (!chapters || chapters.length === 0) return null;
 

@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { ChevronDown, ChevronRight, Target, Code, FileText, CheckCircle } from 'lucide-react';
 
 interface CourseChapter {
@@ -24,6 +24,18 @@ export function CourseChapterSidebar({
   onToggleExpand,
   onNavigateToSection
 }: CourseChapterSidebarProps) {
+  // Listen for course UI reset events
+  useEffect(() => {
+    const handleCourseReset = (event: Event) => {
+      console.log(`Course chapter sidebar reset for chapter ${chapter.number}`);
+      // The chapter state is managed in the parent component,
+      // so we don't need to do anything here except log for debugging
+    };
+
+    window.addEventListener('course-ui-reset', handleCourseReset);
+    return () => window.removeEventListener('course-ui-reset', handleCourseReset);
+  }, [chapter.number]);
+
   return (
     <div className="mb-2">
       <button

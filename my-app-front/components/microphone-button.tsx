@@ -23,8 +23,33 @@ export const MicrophoneButton = ({
     if (localParticipant) {
       // Force mute the microphone
       localParticipant.setMicrophoneEnabled(false);
+
+      // Double-check after a short delay to ensure it's really muted
+      // This helps with race conditions where the mic might get enabled by another process
+      const doubleCheckTimeout = setTimeout(() => {
+        if (localParticipant.isMicrophoneEnabled) {
+          console.log('Microphone was enabled unexpectedly, muting again');
+          localParticipant.setMicrophoneEnabled(false);
+        }
+      }, 500);
+
+      return () => clearTimeout(doubleCheckTimeout);
     }
   }, [localParticipant]); // Only run once when component mounts with localParticipant
+
+  // Additional safety check when the room connects
+  useEffect(() => {
+    const handleRoomConnected = () => {
+      if (localParticipant) {
+        console.log('Room connected, ensuring microphone is muted');
+        localParticipant.setMicrophoneEnabled(false);
+        setIsMuted(true);
+      }
+    };
+
+    window.addEventListener('room-connected', handleRoomConnected);
+    return () => window.removeEventListener('room-connected', handleRoomConnected);
+  }, [localParticipant]);
 
   // Keep isMuted state in sync with actual microphone state
   useEffect(() => {
