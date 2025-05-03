@@ -20,6 +20,13 @@ export interface Message {
   text: string;
   timestamp: number;
   conversation_id?: string; // Optional to maintain compatibility with existing code
+  // Properties for multi-part messages
+  isPart?: boolean;
+  partNumber?: number;
+  totalParts?: number;
+  isFinal?: boolean;
+  // Property for error handling
+  error?: boolean;
 }
 
 // We're not using localStorage for messages anymore as we clear on startup
@@ -247,17 +254,54 @@ export function useConversation() {
           // Get the current conversation ID
           const currentConversationId = localStorage.getItem('current-conversation-id') || data.conversation_id;
 
+          // Check if this is part of a multi-part message
+          // Use optional chaining to safely access properties
+          const isPart = data.is_part === true;
+          const partNumber = data.part_number || 1;
+          const totalParts = data.total_parts || 1;
+          const isFinal = data.is_final === true;
+
+          // Create a unique ID for this message
+          // For multi-part messages, include the part number in the ID
+          const messageId = isPart
+            ? `ai-response-part-${partNumber}-of-${totalParts}-${Date.now()}`
+            : `ai-response-${Date.now()}`;
+
           // Add the AI response to the conversation
           const newMessage: Message = {
-            id: `ai-response-${Date.now()}`,
+            id: messageId,
             type: 'ai',
-            text: data.text,
+            text: data.text || '',
             timestamp: Date.now(),
-            conversation_id: currentConversationId
+            conversation_id: currentConversationId,
+            // Add metadata for multi-part messages with default values
+            isPart: isPart || false,
+            partNumber: partNumber || 1,
+            totalParts: totalParts || 1,
+            isFinal: isFinal || true
           };
 
-          // Add the AI response to the messages
+          // Add the AI response to the messages, but check for duplicates first
           setMessages(prev => {
+            // Check if this is a duplicate message (same text content)
+            const isDuplicate = prev.some(msg =>
+              msg.type === 'ai' &&
+              msg.text === data.text &&
+              Date.now() - msg.timestamp < 5000 // Only check messages from the last 5 seconds
+            );
+
+            // If it's a duplicate, don't add it
+            if (isDuplicate) {
+              console.log('Detected duplicate AI message, skipping');
+              return prev;
+            }
+
+            // If the message is empty, add a placeholder
+            if (!data.text || !data.text.trim()) {
+              console.log('Received empty AI message, adding placeholder');
+              newMessage.text = ' '; // Add a space to prevent rendering issues
+            }
+
             const newMessages = [...prev, newMessage];
             return newMessages;
           });
@@ -478,9 +522,47 @@ export function useConversation() {
     }
   }, [room]);
 
+  // Function to send a hidden instruction to the AI without showing it in the chat
+  const sendHiddenInstruction = useCallback((text: string) => {
+    if (!room) return;
+
+    try {
+      // Get the current teaching mode from settings
+      let teachingMode = 'teacher'; // Default to teacher mode
+      try {
+        const storedSettings = localStorage.getItem("app-settings");
+        if (storedSettings) {
+          const parsedSettings = JSON.parse(storedSettings);
+          teachingMode = parsedSettings.teachingMode || 'teacher';
+        }
+      } catch (e) {
+        console.error('Error getting teaching mode from settings:', e);
+      }
+
+      // Create a message with a special flag indicating it's a hidden instruction
+      const message = {
+        type: "text_input",
+        text: text.trim(),
+        teaching_mode: teachingMode,
+        hidden: true // This flag tells the backend not to echo the message back
+      };
+
+      // Send the message to the backend
+      if (room.state === ConnectionState.Connected) {
+        room.localParticipant.publishData(
+          new TextEncoder().encode(JSON.stringify(message))
+        );
+      }
+    } catch (error) {
+      console.error("Error sending hidden instruction:", error);
+    }
+  }, [room]);
+
   return {
     messages,
     addUserMessage,
+    sendTextMessage: addUserMessage, // Export addUserMessage as sendTextMessage for backward compatibility
+    sendHiddenInstruction, // Export the new function
     clearMessages,
     currentConversationId
   };

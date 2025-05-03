@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState, useRef, useCallback } from "react";
 import { motion } from "framer-motion";
 import { ConnectionState } from "livekit-client";
 import {
@@ -26,19 +26,27 @@ import { useConversation } from "@/hooks/use-conversation";
 import { CodeBlock } from "./code-block";
 import { CodeEditor } from "./code-editor";
 import { SimpleBotFace } from "./ui/simple-bot-face";
+import { CourseUI } from "./course-ui";
+import { useSettings } from "@/hooks/use-settings";
 
 export interface TypewriterProps {
   typingSpeed?: number;
 }
 
 const emptyText =
-  "Connect to start a conversation with your teacher";
+  "Connect to begin your personalized learning experience";
 
 // Regular expression to detect code blocks in markdown format
 const codeBlockRegex = /```([\w-]*)?\n([\s\S]*?)\n```/g;
 
-// Regular expression to detect chapter titles
+// Regular expressions to detect chapter titles
 const chapterRegex = /^## Chapter (\d+): (.+)$/;
+// New regex to match the format in the image (numbered list with asterisks)
+// This captures the number before the dot as the chapter number
+const outlineChapterRegex = /^\s*(\d+)\.\s+\*\*([^*]+)\*\*$/;
+// Additional regex to match other common outline formats
+// This also captures the number before the dot as the chapter number
+const altOutlineRegex = /^\s*(\d+)\.\s+(.*?)$/;
 
 export function Typewriter({ typingSpeed = 50 }: TypewriterProps) {
   // State for tracking course structure
@@ -65,25 +73,177 @@ export function Typewriter({ typingSpeed = 50 }: TypewriterProps) {
     }[] = [];
 
     const lines = text.split('\n');
-    lines.forEach(line => {
+
+    // Keep track of chapters we've already processed to avoid duplicates
+    const processedChapters = new Set<string>();
+    // Keep track of chapter numbers we've seen to avoid duplicates
+    const usedChapterNumbers = new Set<number>();
+
+    // First pass: look for traditional chapter format (## Chapter X: Title)
+    let foundTraditionalFormat = false;
+
+    lines.forEach((line, index) => {
       const match = line.match(chapterRegex);
       if (match) {
+        foundTraditionalFormat = true;
         const chapterNumber = parseInt(match[1]);
         const chapterTitle = match[2];
 
-        // Add to chapters array
-        chapters.push({
-          id: `chapter-${chapterNumber}`,
-          number: chapterNumber,
-          title: chapterTitle,
-          isActive: chapterNumber === 1, // First chapter is active by default
-          isExpanded: chapterNumber === 1 // First chapter is expanded by default
-        });
+        // Create a unique key for this chapter
+        const chapterKey = `${chapterNumber}-${chapterTitle}`;
+
+        // Only add this chapter if we haven't seen it before
+        if (!processedChapters.has(chapterKey) && !usedChapterNumbers.has(chapterNumber)) {
+          processedChapters.add(chapterKey);
+          usedChapterNumbers.add(chapterNumber);
+
+          // Add to chapters array with a unique ID that includes the index
+          chapters.push({
+            id: `chapter-${chapterNumber}-${index}`,
+            number: chapterNumber,
+            title: chapterTitle,
+            isActive: chapters.length === 0, // First chapter is active by default
+            isExpanded: chapters.length === 0 // First chapter is expanded by default
+          });
+        }
       }
     });
 
-    return chapters;
+    // If no traditional format found, look for outline format
+    if (!foundTraditionalFormat) {
+      // Reset used chapter numbers for the outline format
+      usedChapterNumbers.clear();
+
+      // First try the primary outline regex (with asterisks)
+      lines.forEach((line, index) => {
+        const match = line.match(outlineChapterRegex);
+        if (match) {
+          const chapterNumber = parseInt(match[1]);
+          const chapterTitle = match[2];
+
+          // Create a unique key for this chapter
+          const chapterKey = `${chapterNumber}-${chapterTitle}`;
+
+          // Only add this chapter if we haven't seen it before and the number is unique
+          if (!processedChapters.has(chapterKey) && !usedChapterNumbers.has(chapterNumber)) {
+            processedChapters.add(chapterKey);
+            usedChapterNumbers.add(chapterNumber);
+
+            // Add to chapters array with a unique ID that includes the index
+            chapters.push({
+              id: `chapter-${chapterNumber}-${index}`,
+              number: chapterNumber,
+              title: chapterTitle,
+              isActive: chapters.length === 0, // First chapter is active by default
+              isExpanded: chapters.length === 0 // First chapter is expanded by default
+            });
+          }
+        }
+      });
+
+      // If still no chapters found, try the alternative outline regex
+      if (chapters.length === 0) {
+        // Reset used chapter numbers again
+        usedChapterNumbers.clear();
+
+        lines.forEach((line, index) => {
+          const match = line.match(altOutlineRegex);
+          if (match) {
+            const chapterNumber = parseInt(match[1]);
+            const chapterTitle = match[2];
+
+            // Create a unique key for this chapter
+            const chapterKey = `${chapterNumber}-${chapterTitle}`;
+
+            // Only add this chapter if we haven't seen it before and the number is unique
+            if (!processedChapters.has(chapterKey) && !usedChapterNumbers.has(chapterNumber)) {
+              processedChapters.add(chapterKey);
+              usedChapterNumbers.add(chapterNumber);
+
+              // Add to chapters array with a unique ID that includes the index
+              chapters.push({
+                id: `chapter-${chapterNumber}-${index}`,
+                number: chapterNumber,
+                title: chapterTitle,
+                isActive: chapters.length === 0, // First chapter is active by default
+                isExpanded: chapters.length === 0 // First chapter is expanded by default
+              });
+            }
+          }
+        });
+      }
+    }
+
+    // Sort chapters by number before returning
+    return chapters.sort((a, b) => a.number - b.number);
   };
+
+  const { state } = useTranscriber();
+  const { isTtsSpeaking, isProcessingTTS, stopSpeaking, speakLastResponse } = useAIResponses();
+
+  // Get conversation messages, current conversation ID, and message sending functions from our hook
+  const { messages, currentConversationId, sendTextMessage, sendHiddenInstruction } = useConversation();
+  const conversationContainerRef = useRef<HTMLDivElement>(null);
+  const transcriptionEndRef = useRef<HTMLDivElement>(null);
+
+  // Function to extract and set course structure - called from useEffect, not during render
+  const processMessageForCourseStructure = useCallback((text: string) => {
+    if (!text) return;
+
+    // Check if the message contains chapter-like content
+    if (text.includes('Chapter') || text.includes('**Introduction to')) {
+      const newChapters = extractCourseStructure(text);
+
+      if (newChapters.length > 0) {
+        // Preserve active chapter when updating course structure
+        setCourseChapters(prevChapters => {
+          // If we have no previous chapters, use the new ones
+          if (prevChapters.length === 0) {
+            return newChapters;
+          }
+
+          // Find the currently active chapter number
+          const activeChapterNumber = prevChapters.find(ch => ch.isActive)?.number;
+
+          // If we have an active chapter, maintain its active state in the new structure
+          if (activeChapterNumber) {
+            return newChapters.map(chapter => ({
+              ...chapter,
+              isActive: chapter.number === activeChapterNumber,
+              isExpanded: chapter.number === activeChapterNumber || chapter.isExpanded
+            }));
+          }
+
+          // Otherwise, just use the new chapters
+          return newChapters;
+        });
+
+        console.log(`Course structure updated with ${newChapters.length} chapters`);
+      }
+    }
+  }, []);
+
+  // Reset course structure when conversation ID changes
+  useEffect(() => {
+    // Reset course chapters when conversation ID changes or is null
+    setCourseChapters([]);
+    console.log("Conversation ID changed, resetting course structure");
+  }, [currentConversationId]);
+
+  // Process messages for course structure when they change
+  useEffect(() => {
+    if (messages.length > 0 && currentConversationId) {
+      // Get the latest AI message
+      const aiMessages = messages.filter(m =>
+        m.conversation_id === currentConversationId && m.type === 'ai'
+      );
+
+      if (aiMessages.length > 0) {
+        const latestMessage = aiMessages[aiMessages.length - 1];
+        processMessageForCourseStructure(latestMessage.text);
+      }
+    }
+  }, [messages, currentConversationId, processMessageForCourseStructure]);
 
   // Function to render AI responses with enhanced formatting
   const renderEnhancedResponse = (text: string) => {
@@ -110,14 +270,6 @@ export function Typewriter({ typingSpeed = 50 }: TypewriterProps) {
       .replace(/####\s+Practical Application/g, '#### 🛠️ Practical Application')
       // Add special styling for course progress
       .replace(/####\s+Course Progress/g, '#### 📊 Course Progress');
-
-    // Check if this is a course response and extract course structure
-    if (text.includes('# Complete Course:') && text.includes('## Chapter')) {
-      const chapters = extractCourseStructure(text);
-      if (chapters.length > 0) {
-        setCourseChapters(chapters);
-      }
-    }
 
     // Split the text into segments (code blocks and regular text)
     const segments = [];
@@ -202,7 +354,17 @@ export function Typewriter({ typingSpeed = 50 }: TypewriterProps) {
                 </h1>
                 <div className="mt-2 text-sm text-text-secondary flex items-center gap-2">
                   <BookMarked className="w-4 h-4" />
-                  <span>Professional Learning Course</span>
+                  <span>Professional Learning Experience</span>
+                </div>
+                <div className="mt-3 flex items-center gap-2">
+                  <div className="px-2 py-1 bg-primary-DEFAULT/10 text-primary-DEFAULT text-xs rounded-md flex items-center gap-1">
+                    <BookOpen className="w-3 h-3" />
+                    <span>Interactive Course</span>
+                  </div>
+                  <div className="px-2 py-1 bg-success-DEFAULT/10 text-success-DEFAULT text-xs rounded-md flex items-center gap-1">
+                    <Target className="w-3 h-3" />
+                    <span>Hands-on Learning</span>
+                  </div>
                 </div>
               </div>
             );
@@ -217,19 +379,23 @@ export function Typewriter({ typingSpeed = 50 }: TypewriterProps) {
               const chapterTitle = chapterMatch[2];
 
               return (
-                <div key={index} className="mt-8 mb-6 bg-bg-tertiary/30 rounded-lg p-4 border-l-4 border-success-DEFAULT">
+                <div key={index} className="mt-8 mb-6 bg-gradient-to-r from-bg-tertiary/40 to-bg-tertiary/20 rounded-lg p-5 border-l-4 border-success-DEFAULT shadow-sm">
                   <h2 className="text-xl md:text-2xl font-bold flex items-center gap-2 text-success-DEFAULT">
                     <Bookmark className="w-5 h-5" />
                     Chapter {chapterNumber}: {chapterTitle}
                   </h2>
-                  <div className="flex items-center gap-3 mt-3 text-sm text-text-secondary">
-                    <div className="flex items-center gap-1">
-                      <Clock className="w-4 h-4" />
+                  <div className="flex flex-wrap items-center gap-3 mt-3 text-sm text-text-secondary">
+                    <div className="flex items-center gap-1 px-2 py-1 bg-bg-tertiary/30 rounded-md">
+                      <Clock className="w-3.5 h-3.5" />
                       <span>Est. time: 20-30 min</span>
                     </div>
-                    <div className="flex items-center gap-1">
-                      <ListChecks className="w-4 h-4" />
+                    <div className="flex items-center gap-1 px-2 py-1 bg-bg-tertiary/30 rounded-md">
+                      <ListChecks className="w-3.5 h-3.5" />
                       <span>Chapter {chapterNumber} of {courseChapters.length || '?'}</span>
+                    </div>
+                    <div className="flex items-center gap-1 px-2 py-1 bg-success-DEFAULT/10 text-success-DEFAULT rounded-md">
+                      <Award className="w-3.5 h-3.5" />
+                      <span>Core Content</span>
                     </div>
                   </div>
                 </div>
@@ -251,12 +417,12 @@ export function Typewriter({ typingSpeed = 50 }: TypewriterProps) {
             const isNumberedSection = /^\d+\.\d+:/.test(sectionTitle);
 
             return (
-              <div key={index} className="mt-6 mb-3">
-                <h3 className="text-lg md:text-xl font-semibold text-text-primary flex items-center gap-2">
+              <div key={index} className="mt-6 mb-4 group">
+                <h3 className="text-lg md:text-xl font-semibold text-text-primary flex items-center gap-2 bg-bg-tertiary/20 px-3 py-2 rounded-md border-l-2 border-primary-DEFAULT/50 group-hover:border-primary-DEFAULT transition-colors duration-200">
                   {isNumberedSection && <ChevronRight className="w-5 h-5 text-primary-DEFAULT" />}
                   {sectionTitle}
                 </h3>
-                <div className="h-0.5 w-12 bg-primary-DEFAULT/30 rounded mt-1"></div>
+                <div className="h-0.5 w-16 bg-primary-DEFAULT/40 rounded mt-2 ml-3 group-hover:w-24 transition-all duration-300"></div>
               </div>
             );
           }
@@ -294,40 +460,85 @@ export function Typewriter({ typingSpeed = 50 }: TypewriterProps) {
             }
 
             return (
-              <div key={index} className="mt-5 mb-3 bg-bg-tertiary/20 p-3 rounded-md">
+              <div key={index} className="mt-5 mb-4 bg-gradient-to-r from-bg-tertiary/30 to-bg-tertiary/10 p-3 rounded-md shadow-sm border border-bg-tertiary/20">
                 <h4 className={`text-md md:text-lg font-medium ${colorClass} flex items-center gap-2`}>
                   {icon}
                   {heading}
                 </h4>
+                <div className={`h-0.5 w-12 ${colorClass.replace('text-', 'bg-')}/30 rounded mt-2`}></div>
               </div>
             );
           }
           // Process lists
           else if (line.match(/^\s*[\-\*]\s/)) {
+            const content = line.replace(/^\s*[\-\*]\s/, '');
+
+            // Process any inline formatting in the content
+            const formattedContent = content
+              // Bold text
+              .replace(/\*\*([^*]+)\*\*/g, (_, text) => (
+                `<strong class="font-bold text-text-primary">${text}</strong>`
+              ))
+              // Italic text
+              .replace(/\*([^*]+)\*/g, (_, text) => (
+                `<em class="text-primary-DEFAULT/90 font-medium not-italic">${text}</em>`
+              ))
+              // Inline code
+              .replace(/`([^`]+)`/g, (_, text) => (
+                `<code class="px-1 py-0.5 bg-bg-tertiary rounded text-sm font-mono">${text}</code>`
+              ));
+
             return (
-              <ul key={index} className="my-1 pl-6 list-disc">
-                <li className="pl-1 py-0.5">{line.replace(/^\s*[\-\*]\s/, '')}</li>
-              </ul>
+              <div key={index} className="my-2 flex items-start">
+                <span className="text-primary-DEFAULT mr-2">•</span>
+                <div className="flex-1" dangerouslySetInnerHTML={{ __html: formattedContent }} />
+              </div>
             );
           }
           else if (line.match(/^\s*\d+\.\s/)) {
+            // Extract the number to preserve it in the rendered output
+            const match = line.match(/^\s*(\d+)\.\s/);
+            const number = match ? match[1] : "1";
+            const content = line.replace(/^\s*\d+\.\s/, '');
+
+            // Process any inline formatting in the content
+            const formattedContent = content
+              // Bold text
+              .replace(/\*\*([^*]+)\*\*/g, (_, text) => (
+                `<strong class="font-bold text-text-primary">${text}</strong>`
+              ))
+              // Italic text
+              .replace(/\*([^*]+)\*/g, (_, text) => (
+                `<em class="text-primary-DEFAULT/90 font-medium not-italic">${text}</em>`
+              ))
+              // Inline code
+              .replace(/`([^`]+)`/g, (_, text) => (
+                `<code class="px-1 py-0.5 bg-bg-tertiary rounded text-sm font-mono">${text}</code>`
+              ));
+
             return (
-              <ol key={index} className="my-1 pl-6 list-decimal">
-                <li className="pl-1 py-0.5">{line.replace(/^\s*\d+\.\s/, '')}</li>
-              </ol>
+              <div key={index} className="my-2 flex items-start">
+                <span className="font-medium text-primary-DEFAULT mr-2 min-w-[1.5rem] text-right">{number}.</span>
+                <div className="flex-1" dangerouslySetInnerHTML={{ __html: formattedContent }} />
+              </div>
             );
           }
           // Process blockquotes
           else if (line.startsWith('> ')) {
             return (
-              <blockquote key={index} className="border-l-4 border-warning-DEFAULT pl-4 py-2 my-4 bg-warning-DEFAULT/10 rounded-r">
-                {line.substring(2)}
+              <blockquote key={index} className="border-l-4 border-warning-DEFAULT pl-4 py-3 my-5 bg-gradient-to-r from-warning-DEFAULT/15 to-warning-DEFAULT/5 rounded-r shadow-sm">
+                <div className="text-warning-DEFAULT/90 font-medium mb-1 text-sm">Note:</div>
+                <div className="text-text-primary/90">{line.substring(2)}</div>
               </blockquote>
             );
           }
           // Process horizontal rules
           else if (line.match(/^[\-\*\_]{3,}$/)) {
-            return <hr key={index} className="my-6 border-t border-bg-tertiary" />;
+            return (
+              <div key={index} className="my-8 flex items-center justify-center">
+                <div className="w-full max-w-md h-px bg-gradient-to-r from-transparent via-bg-tertiary/70 to-transparent"></div>
+              </div>
+            );
           }
           // Process regular paragraphs
           else if (line.trim() !== '') {
@@ -357,13 +568,7 @@ export function Typewriter({ typingSpeed = 50 }: TypewriterProps) {
     );
   };
 
-  const { state } = useTranscriber();
-  const { isTtsSpeaking, isProcessingTTS, stopSpeaking, speakLastResponse } = useAIResponses();
-
-  // Get conversation messages and current conversation ID from our hook
-  const { messages, currentConversationId } = useConversation();
-  const conversationContainerRef = useRef<HTMLDivElement>(null);
-  const transcriptionEndRef = useRef<HTMLDivElement>(null);
+  // These hooks are now moved above
 
   /**
    * Auto-select the first conversation when the component mounts
@@ -454,108 +659,137 @@ export function Typewriter({ typingSpeed = 50 }: TypewriterProps) {
     );
   };
 
-  // Get sendTextMessage function from useConversation hook
-  const { sendTextMessage } = useConversation();
+  // sendTextMessage is available from the useConversation hook above and is used to send messages to the AI
 
   // Function to navigate to a specific chapter
   const navigateToChapter = (chapterId: string) => {
-    // Set the active chapter
+    // Find the chapter by ID first to avoid setting active chapter if it doesn't exist
+    const chapter = courseChapters.find(ch => ch.id === chapterId);
+    if (!chapter || !sendHiddenInstruction) return;
+
+    // Set the active chapter only if we found the chapter
     setCourseChapters(prev =>
-      prev.map(chapter => ({
-        ...chapter,
-        isActive: chapter.id === chapterId,
-        isExpanded: chapter.id === chapterId ? true : chapter.isExpanded
+      prev.map(ch => ({
+        ...ch,
+        isActive: ch.id === chapterId,
+        isExpanded: ch.id === chapterId ? true : ch.isExpanded
       }))
     );
 
-    // Find the chapter by ID
-    const chapter = courseChapters.find(ch => ch.id === chapterId);
-    if (chapter && sendTextMessage) {
-      // Send a message to the AI to display the specific chapter
-      sendTextMessage(`Please show me Chapter ${chapter.number}: ${chapter.title}`);
-    }
+    const currentChapterNum = chapter.number;
+    const totalChapters = courseChapters.length;
+
+    // Create the instruction message
+    const message = `I'd like to learn Chapter ${chapter.number}: ${chapter.title}.
+Please provide a comprehensive explanation of this chapter, including all key concepts, examples, and code samples where appropriate.
+Begin with an introduction to the chapter, then cover the main content in a clear, educational format.
+Remember that I'm currently at Chapter ${currentChapterNum} out of ${totalChapters} in this course.
+Please make sure your response is complete and well-structured, with proper headings and formatting.
+Do NOT automatically proceed to the next chapter when you're done - wait for me to tell you to proceed.`;
+
+    // Add a visible message to the UI to show what's being requested
+    const userMessage = `Show me Chapter ${chapter.number}: ${chapter.title}`;
+
+    // First send a regular message to show in the UI
+    sendTextMessage(userMessage).then(() => {
+      // Then send the hidden instruction after a short delay
+      setTimeout(() => {
+        sendHiddenInstruction(message);
+      }, 500);
+    });
   };
 
   // Function to navigate to a specific section within a chapter
   const navigateToSection = (chapterId: string, sectionName: string) => {
-    // Set the active chapter
+    // Find the chapter by ID first to avoid setting active chapter if it doesn't exist
+    const chapter = courseChapters.find(ch => ch.id === chapterId);
+    if (!chapter || !sendHiddenInstruction) return;
+
+    // Set the active chapter only if we found the chapter
     setCourseChapters(prev =>
-      prev.map(chapter => ({
-        ...chapter,
-        isActive: chapter.id === chapterId,
-        isExpanded: chapter.id === chapterId ? true : chapter.isExpanded
+      prev.map(ch => ({
+        ...ch,
+        isActive: ch.id === chapterId,
+        isExpanded: ch.id === chapterId ? true : ch.isExpanded
       }))
     );
 
-    // Find the chapter by ID
-    const chapter = courseChapters.find(ch => ch.id === chapterId);
-    if (chapter && sendTextMessage) {
-      // Send a message to the AI to display the specific section
-      sendTextMessage(`Please show me the ${sectionName} section of Chapter ${chapter.number}`);
+    // Create specific instructions based on the section name
+    let message = "";
+    const currentChapterNum = chapter.number;
+    const totalChapters = courseChapters.length;
+
+    switch(sectionName) {
+      case "start":
+        message = `Teach me Chapter ${chapter.number}: ${chapter.title}.
+
+Please provide a clear explanation of this chapter with:
+• An introduction to the main topic
+• Key concepts explained step by step
+• Examples and code samples where helpful
+• Clear explanations of important ideas`;
+        break;
+      case "Learning Objectives":
+        message = `Show me the Learning Objectives for Chapter ${chapter.number}: ${chapter.title}.
+
+Please provide a clear list of what I'll learn in this chapter, including:
+• The main concepts I should understand
+• The skills I should develop
+• The knowledge I should gain
+
+Please format this as a clean, bulleted list that's easy to read.`;
+        break;
+      case "Practice Exercises":
+        message = `Show me the Practice Exercises for Chapter ${chapter.number}: ${chapter.title}.
+
+I'd like 3-5 practical exercises that will help me apply what I've learned in this chapter.
+For each exercise, please include:
+• A clear problem statement
+• Example inputs/outputs where relevant
+• Difficulty level
+• Hints to help me if I get stuck`;
+        break;
+      case "Quiz":
+        message = `Give me a Quiz on Chapter ${chapter.number}: ${chapter.title}.
+
+I want to test my understanding with:
+• 5-10 questions covering the key concepts
+• A mix of multiple choice and short answer questions
+• The correct answers provided at the end`;
+        break;
+      case "Summary":
+        message = `Provide a Summary of Chapter ${chapter.number}: ${chapter.title}.
+
+I need a concise overview that:
+• Highlights the most important concepts
+• Connects the main ideas together
+• Reinforces what I should remember from this chapter`;
+        break;
+      default:
+        message = `Show me the ${sectionName} section of Chapter ${chapter.number}: ${chapter.title}.
+
+Please focus specifically on this section and provide a clear, concise explanation.`;
     }
+
+    // Instead of sending two separate messages, let's just send one visible message
+    // with the detailed instructions
+    sendTextMessage(message);
   };
+
+  // Get the current teaching mode from settings
+  const { settings } = useSettings();
+  const isTeacherMode = settings.teachingMode === 'teacher';
 
   return (
     <div className="relative h-full text-lg font-mono overflow-hidden flex">
-      {/* Course Navigation Sidebar - only shown when we have chapters */}
-      {courseChapters.length > 0 && (
-        <div className="hidden md:block w-64 h-full border-r border-bg-tertiary/50 overflow-y-auto pt-4 pb-20 bg-bg-secondary/30">
-          <div className="px-4 py-2 mb-2">
-            <h3 className="text-sm font-semibold text-text-secondary uppercase tracking-wider">Course Contents</h3>
-          </div>
-          <div className="space-y-1">
-            {courseChapters.map(chapter => (
-              <div key={chapter.id} className="px-2">
-                <button
-                  onClick={() => toggleChapter(chapter.id)}
-                  className={`w-full text-left px-3 py-2 rounded-md flex items-center justify-between text-sm ${
-                    chapter.isActive ? 'bg-primary-DEFAULT/10 text-primary-DEFAULT' : 'hover:bg-bg-tertiary/30'
-                  }`}
-                >
-                  <div className="flex items-center gap-2">
-                    <Bookmark className="w-4 h-4" />
-                    <span>Chapter {chapter.number}: {chapter.title}</span>
-                  </div>
-                  {chapter.isExpanded ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
-                </button>
-
-                {chapter.isExpanded && (
-                  <div className="ml-4 pl-2 border-l border-bg-tertiary/50 mt-1 mb-2 space-y-1">
-                    <button
-                      onClick={() => navigateToSection(chapter.id, "Learning Objectives")}
-                      className={`w-full text-left px-3 py-1.5 rounded-md text-sm hover:bg-bg-tertiary/30 flex items-center gap-2`}
-                    >
-                      <Target className="w-3.5 h-3.5 text-primary-DEFAULT/70" />
-                      <span>Learning Objectives</span>
-                    </button>
-                    <button
-                      onClick={() => navigateToSection(chapter.id, "Practice Exercises")}
-                      className={`w-full text-left px-3 py-1.5 rounded-md text-sm hover:bg-bg-tertiary/30 flex items-center gap-2`}
-                    >
-                      <Code className="w-3.5 h-3.5 text-success-DEFAULT/70" />
-                      <span>Practice Exercises</span>
-                    </button>
-                    <button
-                      onClick={() => navigateToSection(chapter.id, "Quiz")}
-                      className={`w-full text-left px-3 py-1.5 rounded-md text-sm hover:bg-bg-tertiary/30 flex items-center gap-2`}
-                    >
-                      <FileText className="w-3.5 h-3.5 text-warning-DEFAULT/70" />
-                      <span>Quiz</span>
-                    </button>
-                    <button
-                      onClick={() => navigateToSection(chapter.id, "Summary")}
-                      className={`w-full text-left px-3 py-1.5 rounded-md text-sm hover:bg-bg-tertiary/30 flex items-center gap-2`}
-                    >
-                      <CheckCircle className="w-3.5 h-3.5 text-info-DEFAULT/70" />
-                      <span>Summary</span>
-                    </button>
-                  </div>
-                )}
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
+      {/* Course Navigation Sidebar using our new CourseUI component */}
+      <CourseUI
+        chapters={courseChapters}
+        toggleChapter={toggleChapter}
+        navigateToChapter={navigateToChapter}
+        navigateToSection={navigateToSection}
+        isTeacherMode={isTeacherMode}
+      />
 
       {/* Main Content Area */}
       <div className={`flex-1 px-4 md:px-8 pt-6 pb-20 overflow-hidden ${courseChapters.length > 0 ? 'md:border-l md:border-bg-tertiary/50' : ''}`}>
@@ -568,84 +802,24 @@ export function Typewriter({ typingSpeed = 50 }: TypewriterProps) {
           <div className="h-full overflow-y-auto" ref={conversationContainerRef}>
             <div className="h-12" />
 
-            {/* Mobile Course Navigation - only shown on small screens when we have chapters */}
-            {courseChapters.length > 0 && (
-              <div className="md:hidden mb-6 bg-bg-secondary/30 rounded-lg border border-bg-tertiary/50 overflow-hidden">
-                <div className="p-3 border-b border-bg-tertiary/50">
-                  <h3 className="text-sm font-semibold text-text-secondary">Course Contents</h3>
-                </div>
-                <div className="p-2 max-h-48 overflow-y-auto">
-                  <select
-                    className="w-full p-2 bg-bg-primary border border-bg-tertiary rounded-md text-sm"
-                    onChange={(e) => navigateToChapter(e.target.value)}
-                    value={courseChapters.find(ch => ch.isActive)?.id || ''}
-                  >
-                    {courseChapters.map(chapter => (
-                      <option key={chapter.id} value={chapter.id}>
-                        Chapter {chapter.number}: {chapter.title}
-                      </option>
-                    ))}
-                  </select>
-
-                  {/* Quick section navigation */}
-                  <div className="grid grid-cols-2 gap-2 mt-3">
-                    {courseChapters.find(ch => ch.isActive) && (
-                      <>
-                        <button
-                          onClick={() => navigateToSection(
-                            courseChapters.find(ch => ch.isActive)?.id || '',
-                            "Learning Objectives"
-                          )}
-                          className="p-2 bg-bg-tertiary/20 rounded text-xs flex items-center justify-center gap-1"
-                        >
-                          <Target className="w-3 h-3" />
-                          <span>Objectives</span>
-                        </button>
-                        <button
-                          onClick={() => navigateToSection(
-                            courseChapters.find(ch => ch.isActive)?.id || '',
-                            "Practice Exercises"
-                          )}
-                          className="p-2 bg-bg-tertiary/20 rounded text-xs flex items-center justify-center gap-1"
-                        >
-                          <Code className="w-3 h-3" />
-                          <span>Exercises</span>
-                        </button>
-                        <button
-                          onClick={() => navigateToSection(
-                            courseChapters.find(ch => ch.isActive)?.id || '',
-                            "Quiz"
-                          )}
-                          className="p-2 bg-bg-tertiary/20 rounded text-xs flex items-center justify-center gap-1"
-                        >
-                          <FileText className="w-3 h-3" />
-                          <span>Quiz</span>
-                        </button>
-                        <button
-                          onClick={() => navigateToSection(
-                            courseChapters.find(ch => ch.isActive)?.id || '',
-                            "Summary"
-                          )}
-                          className="p-2 bg-bg-tertiary/20 rounded text-xs flex items-center justify-center gap-1"
-                        >
-                          <CheckCircle className="w-3 h-3" />
-                          <span>Summary</span>
-                        </button>
-                      </>
-                    )}
-                  </div>
-                </div>
-              </div>
-            )}
+            {/* Mobile Course Navigation is now handled by the CourseUI component */}
             {/* Conversation History */}
             <div className="flex flex-col gap-8 max-w-4xl mx-auto">
               {messages.length === 0 || !currentConversationId ? (
                 <div className="text-text-secondary text-center py-12">
-                  <div className="mb-4">
-                    <MessageSquare className="w-12 h-12 mx-auto text-text-tertiary opacity-30" />
+                  <div className="mb-6">
+                    <MessageSquare className="w-16 h-16 mx-auto text-primary-DEFAULT opacity-80" />
                   </div>
-                  <p className="text-xl">Welcome to your learning session!</p>
-                  <p className="text-sm mt-2 text-text-tertiary">What would you like to learn about today? Type a message or use your microphone to begin.</p>
+                  <p className="text-2xl font-semibold text-text-primary mb-3">Hi there! What would you like to learn?</p>
+                  <p className="text-md mt-3 text-text-secondary max-w-lg mx-auto leading-relaxed">
+                    Type your question below or use the microphone to start a conversation.
+                  </p>
+                  <div className="mt-6 flex justify-center">
+                    <div className="inline-flex items-center gap-2 px-4 py-2 bg-bg-tertiary/30 rounded-lg text-text-tertiary text-sm">
+                      <span>Try asking about:</span>
+                      <span className="text-primary-DEFAULT">"Explain object-oriented programming"</span>
+                    </div>
+                  </div>
                 </div>
               ) : (
                 messages
@@ -653,7 +827,22 @@ export function Typewriter({ typingSpeed = 50 }: TypewriterProps) {
                   .map((item) => (
                   <motion.div
                     key={item.id}
-                    className={`mb-6 whitespace-pre-wrap ${item.type === "ai" ? "p-6 bg-[#323a45]/40 rounded-lg border-l-2 border-primary-DEFAULT/20" : "px-2"}`}
+                    className={`${
+                      // Add special styling for multi-part messages
+                      item.type === "ai" && item.isPart
+                        ? (item.partNumber === 1)
+                          // First part of multi-part message
+                          ? "mb-1 whitespace-pre-wrap p-6 pt-6 pb-3 bg-gradient-to-r from-bg-tertiary/50 to-bg-tertiary/30 rounded-t-lg border-l-2 border-primary-DEFAULT/40 shadow-sm"
+                          : (item.isFinal === true)
+                            // Last part of multi-part message
+                            ? "mb-8 whitespace-pre-wrap p-6 pt-3 pb-6 bg-gradient-to-r from-bg-tertiary/50 to-bg-tertiary/30 rounded-b-lg border-l-2 border-primary-DEFAULT/40 shadow-sm"
+                            // Middle part of multi-part message
+                            : "mb-1 whitespace-pre-wrap p-6 py-3 bg-gradient-to-r from-bg-tertiary/50 to-bg-tertiary/30 border-l-2 border-primary-DEFAULT/40 shadow-sm"
+                        // Regular message styling
+                        : item.type === "ai"
+                          ? "mb-8 whitespace-pre-wrap p-6 bg-gradient-to-r from-bg-tertiary/50 to-bg-tertiary/30 rounded-lg border-l-2 border-primary-DEFAULT/40 shadow-sm"
+                          : "mb-8 whitespace-pre-wrap px-2"
+                    }`}
                     initial={{ opacity: 0 }}
                     animate={{ opacity: 1 }}
                     transition={{ duration: 0.2, ease: "easeOut" }}
@@ -663,22 +852,31 @@ export function Typewriter({ typingSpeed = 50 }: TypewriterProps) {
                       contentVisibility: "auto"
                     }}
                   >
-                    <div className="flex items-center gap-2 mb-3">
-                      {item.type === "user" ? (
-                        <>
-                          <div className="w-8 h-8 rounded-full flex items-center justify-center bg-primary-DEFAULT">
-                            <span className="text-white font-bold text-xs">You</span>
-                          </div>
-                        </>
-                      ) : (
-                        <>
-                          <SimpleBotFace size={32} animated={false} />
-                          <div className="text-sm text-text-secondary font-medium">
-                            Teacher
-                          </div>
-                        </>
-                      )}
-                    </div>
+                    {/* Only show the header for user messages or the first part of AI messages */}
+                    {item.type === "user" || !item.isPart || (item.isPart && item.partNumber === 1) ? (
+                      <div className="flex items-center gap-2 mb-3">
+                        {item.type === "user" ? (
+                          <>
+                            <div className="w-8 h-8 rounded-full flex items-center justify-center bg-primary-DEFAULT">
+                              <span className="text-white font-bold text-xs">You</span>
+                            </div>
+                          </>
+                        ) : (
+                          <>
+                            <SimpleBotFace size={32} animated={false} />
+                            <div className="text-sm text-text-secondary font-medium flex items-center gap-2">
+                              <span>Teacher</span>
+                              {/* Show part indicator for multi-part messages */}
+                              {item.type === "ai" && item.isPart && (
+                                <div className="text-xs bg-bg-tertiary/50 px-2 py-0.5 rounded-full">
+                                  Part {item.partNumber || 1} of {item.totalParts || 1}
+                                </div>
+                              )}
+                            </div>
+                          </>
+                        )}
+                      </div>
+                    ) : null}
 
                     {item.type === "user" ? (
                       <div className="leading-relaxed pl-10 text-text-primary">
@@ -691,11 +889,18 @@ export function Typewriter({ typingSpeed = 50 }: TypewriterProps) {
                       </div>
                     ) : (
                       <div className="leading-relaxed pl-10 text-text-primary">
-                        {renderEnhancedResponse(item.text)}
+                        {item.text && item.text.trim() ? (
+                          renderEnhancedResponse(item.text)
+                        ) : (
+                          <div className="text-text-tertiary italic">
+                            [No response received. Please try again.]
+                          </div>
+                        )}
                       </div>
                     )}
 
-                    {item.type === "ai" && (
+                    {/* Only show speak button for non-part messages or the final part of multi-part messages */}
+                    {item.type === "ai" && (!item.isPart || (item.isPart && item.isFinal === true)) && (
                       <div className="flex justify-end mt-4">
                         {isTtsSpeaking ? (
                           <button
@@ -721,6 +926,17 @@ export function Typewriter({ typingSpeed = 50 }: TypewriterProps) {
                             Speak
                           </button>
                         )}
+                      </div>
+                    )}
+
+                    {/* Show continuation indicator for non-final parts */}
+                    {item.type === "ai" && item.isPart && item.isFinal !== true && (
+                      <div className="flex justify-center mt-2">
+                        <div className="flex space-x-1">
+                          <div className="w-1.5 h-1.5 bg-primary-DEFAULT/40 rounded-full animate-pulse"></div>
+                          <div className="w-1.5 h-1.5 bg-primary-DEFAULT/40 rounded-full animate-pulse" style={{ animationDelay: '0.2s' }}></div>
+                          <div className="w-1.5 h-1.5 bg-primary-DEFAULT/40 rounded-full animate-pulse" style={{ animationDelay: '0.4s' }}></div>
+                        </div>
                       </div>
                     )}
                   </motion.div>

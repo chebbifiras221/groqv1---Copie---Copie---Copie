@@ -180,7 +180,7 @@ export function TextInput({ isConnected }: TextInputProps) {
               value={inputText}
               onChange={(e) => setInputText(e.target.value)}
               onKeyDown={handleKeyDown}
-              placeholder={isConnected ? "What would you like to learn about today?" : "Connect to start your learning session"}
+              placeholder={isConnected ? "Enter your question or topic to begin exploring..." : "Connect to access your personalized learning environment"}
               disabled={!isConnected || isSubmitting}
               className="w-full bg-transparent px-4 py-3.5 text-text-primary placeholder:text-text-tertiary focus:outline-none"
               aria-label="Message input"
@@ -222,10 +222,10 @@ export function TextInput({ isConnected }: TextInputProps) {
             <div className="flex-1"></div>
 
             {/* Centered Space to speak instruction */}
-            <div className="flex items-center gap-1 text-xs text-text-tertiary">
-              <span className="opacity-70">Press</span>
-              <kbd className="px-1.5 py-0.5 rounded bg-bg-tertiary/30 text-text-secondary text-xs font-mono">Space</kbd>
-              <span className="opacity-70">to speak</span>
+            <div className="flex items-center gap-1.5 text-xs text-text-tertiary bg-bg-tertiary/10 px-3 py-1 rounded-full">
+              <span className="opacity-80">Press</span>
+              <kbd className="px-1.5 py-0.5 rounded bg-bg-tertiary/40 text-text-secondary text-xs font-mono shadow-sm">Space</kbd>
+              <span className="opacity-80">for voice input</span>
             </div>
 
             <div className="flex-1 flex justify-end">
