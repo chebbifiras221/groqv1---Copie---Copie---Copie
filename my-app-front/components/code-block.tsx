@@ -94,11 +94,18 @@ export function CodeBlock({ code, language = 'javascript' }: CodeBlockProps) {
 
   // Basic syntax highlighting function
   const applyBasicHighlighting = (code: string, language: string): React.ReactNode => {
-    // This is a very basic implementation
-    // In a real app, you'd use a proper syntax highlighting library
+    // First, escape HTML entities to prevent XSS and rendering issues
+    const escapeHtml = (text: string): string => {
+      return text
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+    };
 
-    // Replace keywords with spans
-    let highlightedCode = code;
+    // Escape the code before applying syntax highlighting
+    let highlightedCode = escapeHtml(code);
 
     // JavaScript/TypeScript keywords
     if (['javascript', 'typescript', 'jsx', 'tsx'].includes(language)) {
@@ -107,14 +114,14 @@ export function CodeBlock({ code, language = 'javascript' }: CodeBlockProps) {
           '<span class="keyword">$1</span>')
         .replace(/\b(true|false|null|undefined)\b/g,
           '<span class="boolean">$1</span>')
-        .replace(/(".*?"|'.*?'|`.*?`)/g,
+        .replace(/(&quot;.*?&quot;|&#039;.*?&#039;|`.*?`)/g,
           '<span class="string">$1</span>')
         .replace(/\b(\d+)\b/g,
           '<span class="number">$1</span>')
-        .replace(/\/\/(.*)/g,
-          '<span class="comment">//$1</span>')
-        .replace(/\/\*([\s\S]*?)\*\//g,
-          '<span class="comment">/*$1*/</span>');
+        .replace(/(\/\/.*)/g,
+          '<span class="comment">$1</span>')
+        .replace(/(\/\*[\s\S]*?\*\/)/g,
+          '<span class="comment">$1</span>');
     }
 
     // Python keywords
@@ -122,12 +129,12 @@ export function CodeBlock({ code, language = 'javascript' }: CodeBlockProps) {
       highlightedCode = highlightedCode
         .replace(/\b(def|class|import|from|return|if|elif|else|for|while|try|except|finally|with|as|lambda|None|True|False)\b/g,
           '<span class="keyword">$1</span>')
-        .replace(/(".*?"|'.*?'|"""[\s\S]*?"""|'''[\s\S]*?''')/g,
+        .replace(/(&quot;.*?&quot;|&#039;.*?&#039;|&quot;&quot;&quot;[\s\S]*?&quot;&quot;&quot;|&#039;&#039;&#039;[\s\S]*?&#039;&#039;&#039;)/g,
           '<span class="string">$1</span>')
         .replace(/\b(\d+)\b/g,
           '<span class="number">$1</span>')
-        .replace(/#(.*)/g,
-          '<span class="comment">#$1</span>');
+        .replace(/(#.*)/g,
+          '<span class="comment">$1</span>');
     }
 
     // HTML keywords
@@ -135,7 +142,7 @@ export function CodeBlock({ code, language = 'javascript' }: CodeBlockProps) {
       highlightedCode = highlightedCode
         .replace(/(&lt;[\/]?[a-zA-Z0-9]+(&gt;)?)/g,
           '<span class="keyword">$1</span>')
-        .replace(/("[^"]*")/g,
+        .replace(/(&quot;[^&quot;]*&quot;)/g,
           '<span class="string">$1</span>')
         .replace(/(&lt;!--[\s\S]*?--&gt;)/g,
           '<span class="comment">$1</span>');
@@ -152,8 +159,8 @@ export function CodeBlock({ code, language = 'javascript' }: CodeBlockProps) {
           '<span class="property">$1</span>$2')
         .replace(/(:\s*)([^;]+)(;)/g,
           '$1<span class="value">$2</span>$3')
-        .replace(/\/\*([\s\S]*?)\*\//g,
-          '<span class="comment">/*$1*/</span>');
+        .replace(/(\/\*[\s\S]*?\*\/)/g,
+          '<span class="comment">$1</span>');
     }
 
     return <div dangerouslySetInnerHTML={{ __html: highlightedCode }} />;
@@ -369,80 +376,98 @@ export function CodeBlock({ code, language = 'javascript' }: CodeBlockProps) {
         .keyword {
           color: #ff7b72; /* GitHub syntax theme */
           font-weight: 500;
+          display: inline; /* Ensure inline display */
         }
 
         .string {
           color: #a5d6ff; /* GitHub syntax theme */
+          display: inline; /* Ensure inline display */
         }
 
         .boolean {
           color: #d2a8ff; /* GitHub syntax theme */
           font-weight: 500;
+          display: inline; /* Ensure inline display */
         }
 
         .number {
           color: #79c0ff; /* GitHub syntax theme */
+          display: inline; /* Ensure inline display */
         }
 
         .comment {
           color: #8b949e; /* GitHub syntax theme */
           font-style: italic;
+          display: inline; /* Ensure inline display */
         }
 
         .selector {
           color: #7ee787; /* GitHub syntax theme */
+          display: inline; /* Ensure inline display */
         }
 
         .property {
           color: #d2a8ff; /* GitHub syntax theme */
+          display: inline; /* Ensure inline display */
         }
 
         .value {
           color: #a5d6ff; /* GitHub syntax theme */
+          display: inline; /* Ensure inline display */
         }
 
         .bracket {
           color: #e6edf3; /* GitHub syntax theme */
+          display: inline; /* Ensure inline display */
         }
 
         /* Light theme syntax highlighting - VS Code Light+ theme */
         :global(.light-theme) .keyword {
           color: #0000ff;
           font-weight: 500;
+          display: inline; /* Ensure inline display */
         }
 
         :global(.light-theme) .string {
           color: #a31515;
+          display: inline; /* Ensure inline display */
         }
 
         :global(.light-theme) .boolean {
           color: #0000ff;
           font-weight: 500;
+          display: inline; /* Ensure inline display */
         }
 
         :global(.light-theme) .number {
           color: #098658;
+          display: inline; /* Ensure inline display */
         }
 
         :global(.light-theme) .comment {
           color: #008000;
           font-style: italic;
+          display: inline; /* Ensure inline display */
         }
 
         :global(.light-theme) .selector {
           color: #800000;
+          display: inline; /* Ensure inline display */
         }
 
         :global(.light-theme) .property {
           color: #795e26;
+          display: inline; /* Ensure inline display */
         }
 
         :global(.light-theme) .value {
           color: #a31515;
+          display: inline; /* Ensure inline display */
         }
 
         :global(.light-theme) .bracket {
           color: #000000;
+          display: inline; /* Ensure inline display */
         }
       `}</style>
     </motion.div>
