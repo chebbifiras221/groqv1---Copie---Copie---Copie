@@ -346,6 +346,71 @@ export function Typewriter({ typingSpeed = 50 }: TypewriterProps) {
     );
   };
 
+  // Helper function to detect and parse markdown tables
+  const parseMarkdownTable = (lines: string[], startIndex: number) => {
+    const tableLines = [];
+    let currentIndex = startIndex;
+
+    // Collect all lines that are part of the table
+    while (currentIndex < lines.length && lines[currentIndex].trim().startsWith('|')) {
+      tableLines.push(lines[currentIndex]);
+      currentIndex++;
+    }
+
+    if (tableLines.length < 2) return { table: null, endIndex: startIndex }; // Not a valid table
+
+    // Process the table
+    const headerRow = tableLines[0];
+    const separatorRow = tableLines[1];
+    const dataRows = tableLines.slice(2);
+
+    // Check if the second row is a separator row (contains only |, -, :)
+    if (!separatorRow.replace(/[\|\-\:\s]/g, '').trim()) {
+      // Parse header cells
+      const headerCells = headerRow
+        .trim()
+        .split('|')
+        .filter(cell => cell.trim() !== '')
+        .map(cell => cell.trim());
+
+      // Parse data rows
+      const rows = dataRows.map(row => {
+        return row
+          .trim()
+          .split('|')
+          .filter(cell => cell !== '')
+          .map(cell => cell.trim());
+      });
+
+      // Create the table HTML
+      const tableHtml = `
+        <div class="overflow-x-auto my-4">
+          <table class="min-w-full border-collapse border border-border-DEFAULT rounded-md">
+            <thead class="bg-bg-tertiary">
+              <tr>
+                ${headerCells.map(cell => `<th class="px-4 py-2 text-left text-text-primary font-semibold border border-border-DEFAULT">${cell}</th>`).join('')}
+              </tr>
+            </thead>
+            <tbody>
+              ${rows.map(row => `
+                <tr class="hover:bg-bg-tertiary/30">
+                  ${row.map(cell => `<td class="px-4 py-2 border border-border-DEFAULT">${cell}</td>`).join('')}
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+        </div>
+      `;
+
+      return {
+        table: tableHtml,
+        endIndex: currentIndex - 1
+      };
+    }
+
+    return { table: null, endIndex: startIndex }; // Not a valid table
+  };
+
   // Helper function to format text with markdown-like styling
   const formatTextWithMarkdown = (text: string) => {
     if (!text) return null;
@@ -353,232 +418,251 @@ export function Typewriter({ typingSpeed = 50 }: TypewriterProps) {
     // Split the text by lines to process headers and lists
     const lines = text.split('\n');
 
-    return (
-      <>
-        {lines.map((line, index) => {
-          // Process course title
-          if (line.startsWith('# ')) {
-            const courseTitle = line.substring(2);
-            return (
-              <div key={index} className="mt-8 mb-6">
-                <h1 className="text-2xl md:text-3xl font-bold text-primary-DEFAULT flex items-center gap-2 pb-2 border-b border-primary-DEFAULT/20">
-                  <BookOpen className="w-6 h-6" />
-                  {courseTitle}
-                </h1>
-                <div className="mt-2 text-sm text-text-secondary flex items-center gap-2">
-                  <BookMarked className="w-4 h-4" />
-                  <span>Professional Learning Experience</span>
+    // Process the lines with special handling for tables
+    const renderedElements = [];
+
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i];
+
+      // Check for tables
+      if (line.trim().startsWith('|')) {
+        const { table, endIndex } = parseMarkdownTable(lines, i);
+        if (table) {
+          renderedElements.push(
+            <div key={`table-${i}`} dangerouslySetInnerHTML={{ __html: table }} />
+          );
+          i = endIndex; // Skip the lines that were part of the table
+          continue;
+        }
+      }
+
+      // Process the line based on its content
+      if (line.startsWith('# ')) {
+        // Process course title
+        const courseTitle = line.substring(2);
+        renderedElements.push(
+          <div key={`heading-${i}`} className="mt-8 mb-6">
+            <h1 className="text-2xl md:text-3xl font-bold text-primary-DEFAULT flex items-center gap-2 pb-2 border-b border-primary-DEFAULT/20">
+              <BookOpen className="w-6 h-6" />
+              {courseTitle}
+            </h1>
+            <div className="mt-2 text-sm text-text-secondary flex items-center gap-2">
+              <BookMarked className="w-4 h-4" />
+              <span>Professional Learning Experience</span>
+            </div>
+            <div className="mt-3 flex items-center gap-2">
+              <div className="px-2 py-1 bg-primary-DEFAULT/10 text-primary-DEFAULT text-xs rounded-md flex items-center gap-1">
+                <BookOpen className="w-3 h-3" />
+                <span>Interactive Course</span>
+              </div>
+              <div className="px-2 py-1 bg-success-DEFAULT/10 text-success-DEFAULT text-xs rounded-md flex items-center gap-1">
+                <Target className="w-3 h-3" />
+                <span>Hands-on Learning</span>
+              </div>
+            </div>
+          </div>
+        );
+      }
+      // Process chapter headings
+      else if (line.startsWith('## ')) {
+        const isChapter = line.toLowerCase().includes('chapter');
+        const chapterMatch = isChapter ? line.match(chapterRegex) : null;
+
+        if (chapterMatch) {
+          const chapterNumber = parseInt(chapterMatch[1]);
+          const chapterTitle = chapterMatch[2];
+
+          renderedElements.push(
+            <div key={`chapter-${i}`} className="mt-8 mb-6 bg-gradient-to-r from-bg-tertiary/40 to-bg-tertiary/20 rounded-lg p-5 border-l-4 border-success-DEFAULT shadow-sm">
+              <h2 className="text-xl md:text-2xl font-bold flex items-center gap-2 text-success-DEFAULT">
+                <Bookmark className="w-5 h-5" />
+                Chapter {chapterNumber}: {chapterTitle}
+              </h2>
+              <div className="flex flex-wrap items-center gap-3 mt-3 text-sm text-text-secondary">
+                <div className="flex items-center gap-1 px-2 py-1 bg-bg-tertiary/30 rounded-md">
+                  <Clock className="w-3.5 h-3.5" />
+                  <span>Est. time: 20-30 min</span>
                 </div>
-                <div className="mt-3 flex items-center gap-2">
-                  <div className="px-2 py-1 bg-primary-DEFAULT/10 text-primary-DEFAULT text-xs rounded-md flex items-center gap-1">
-                    <BookOpen className="w-3 h-3" />
-                    <span>Interactive Course</span>
-                  </div>
-                  <div className="px-2 py-1 bg-success-DEFAULT/10 text-success-DEFAULT text-xs rounded-md flex items-center gap-1">
-                    <Target className="w-3 h-3" />
-                    <span>Hands-on Learning</span>
-                  </div>
+                <div className="flex items-center gap-1 px-2 py-1 bg-bg-tertiary/30 rounded-md">
+                  <ListChecks className="w-3.5 h-3.5" />
+                  <span>Chapter {chapterNumber} of {courseChapters.length || '?'}</span>
+                </div>
+                <div className="flex items-center gap-1 px-2 py-1 bg-success-DEFAULT/10 text-success-DEFAULT rounded-md">
+                  <Award className="w-3.5 h-3.5" />
+                  <span>Core Content</span>
                 </div>
               </div>
-            );
-          }
-          // Process chapter headings
-          else if (line.startsWith('## ')) {
-            const isChapter = line.toLowerCase().includes('chapter');
-            const chapterMatch = isChapter ? line.match(chapterRegex) : null;
+            </div>
+          );
+        } else {
+          renderedElements.push(
+            <div key={`heading2-${i}`} className="mt-6 mb-4">
+              <h2 className="text-xl md:text-2xl font-bold flex items-center gap-2 text-text-primary">
+                {line.substring(3)}
+              </h2>
+              <div className="h-1 w-16 bg-primary-DEFAULT/50 rounded mt-2"></div>
+            </div>
+          );
+        }
+      }
+      // Process subtopics (section headings)
+      else if (line.startsWith('### ')) {
+        const sectionTitle = line.substring(4);
+        const isNumberedSection = /^\d+\.\d+:/.test(sectionTitle);
 
-            if (chapterMatch) {
-              const chapterNumber = parseInt(chapterMatch[1]);
-              const chapterTitle = chapterMatch[2];
+        renderedElements.push(
+          <div key={`section-${i}`} className="mt-6 mb-4 group">
+            <h3 className="text-lg md:text-xl font-semibold text-text-primary flex items-center gap-2 bg-bg-tertiary/20 px-3 py-2 rounded-md border-l-2 border-primary-DEFAULT/50 group-hover:border-primary-DEFAULT transition-colors duration-200">
+              {isNumberedSection && <ChevronRight className="w-5 h-5 text-primary-DEFAULT" />}
+              {sectionTitle}
+            </h3>
+            <div className="h-0.5 w-16 bg-primary-DEFAULT/40 rounded mt-2 ml-3 group-hover:w-24 transition-all duration-300"></div>
+          </div>
+        );
+      }
+      // Process subsection headings with special icons
+      else if (line.startsWith('#### ')) {
+        const heading = line.substring(5);
+        let icon = null;
+        let colorClass = "text-text-primary/90";
 
-              return (
-                <div key={index} className="mt-8 mb-6 bg-gradient-to-r from-bg-tertiary/40 to-bg-tertiary/20 rounded-lg p-5 border-l-4 border-success-DEFAULT shadow-sm">
-                  <h2 className="text-xl md:text-2xl font-bold flex items-center gap-2 text-success-DEFAULT">
-                    <Bookmark className="w-5 h-5" />
-                    Chapter {chapterNumber}: {chapterTitle}
-                  </h2>
-                  <div className="flex flex-wrap items-center gap-3 mt-3 text-sm text-text-secondary">
-                    <div className="flex items-center gap-1 px-2 py-1 bg-bg-tertiary/30 rounded-md">
-                      <Clock className="w-3.5 h-3.5" />
-                      <span>Est. time: 20-30 min</span>
-                    </div>
-                    <div className="flex items-center gap-1 px-2 py-1 bg-bg-tertiary/30 rounded-md">
-                      <ListChecks className="w-3.5 h-3.5" />
-                      <span>Chapter {chapterNumber} of {courseChapters.length || '?'}</span>
-                    </div>
-                    <div className="flex items-center gap-1 px-2 py-1 bg-success-DEFAULT/10 text-success-DEFAULT rounded-md">
-                      <Award className="w-3.5 h-3.5" />
-                      <span>Core Content</span>
-                    </div>
-                  </div>
-                </div>
-              );
-            } else {
-              return (
-                <div key={index} className="mt-6 mb-4">
-                  <h2 className="text-xl md:text-2xl font-bold flex items-center gap-2 text-text-primary">
-                    {line.substring(3)}
-                  </h2>
-                  <div className="h-1 w-16 bg-primary-DEFAULT/50 rounded mt-2"></div>
-                </div>
-              );
-            }
-          }
-          // Process subtopics (section headings)
-          else if (line.startsWith('### ')) {
-            const sectionTitle = line.substring(4);
-            const isNumberedSection = /^\d+\.\d+:/.test(sectionTitle);
+        // Determine icon and color based on heading content
+        if (heading.includes('🎯 Learning Objectives')) {
+          icon = <Target className="w-5 h-5 text-primary-DEFAULT" />;
+          colorClass = "text-primary-DEFAULT";
+        } else if (heading.includes('💻 Practice Exercises')) {
+          icon = <Code className="w-5 h-5 text-success-DEFAULT" />;
+          colorClass = "text-success-DEFAULT";
+        } else if (heading.includes('📝 Quiz')) {
+          icon = <FileText className="w-5 h-5 text-warning-DEFAULT" />;
+          colorClass = "text-warning-DEFAULT";
+        } else if (heading.includes('📌 Summary')) {
+          icon = <CheckCircle className="w-5 h-5 text-info-DEFAULT" />;
+          colorClass = "text-info-DEFAULT";
+        } else if (heading.includes('🔑 Key Takeaways')) {
+          icon = <Award className="w-5 h-5 text-warning-DEFAULT" />;
+          colorClass = "text-warning-DEFAULT";
+        } else if (heading.includes('📚 Further Reading')) {
+          icon = <BookOpen className="w-5 h-5 text-primary-DEFAULT" />;
+          colorClass = "text-primary-DEFAULT";
+        } else if (heading.includes('🛠️ Practical Application')) {
+          icon = <PenTool className="w-5 h-5 text-success-DEFAULT" />;
+          colorClass = "text-success-DEFAULT";
+        } else if (heading.includes('📊 Course Progress')) {
+          icon = <ArrowRight className="w-5 h-5 text-info-DEFAULT" />;
+          colorClass = "text-info-DEFAULT";
+        }
 
-            return (
-              <div key={index} className="mt-6 mb-4 group">
-                <h3 className="text-lg md:text-xl font-semibold text-text-primary flex items-center gap-2 bg-bg-tertiary/20 px-3 py-2 rounded-md border-l-2 border-primary-DEFAULT/50 group-hover:border-primary-DEFAULT transition-colors duration-200">
-                  {isNumberedSection && <ChevronRight className="w-5 h-5 text-primary-DEFAULT" />}
-                  {sectionTitle}
-                </h3>
-                <div className="h-0.5 w-16 bg-primary-DEFAULT/40 rounded mt-2 ml-3 group-hover:w-24 transition-all duration-300"></div>
-              </div>
-            );
-          }
-          // Process subsection headings with special icons
-          else if (line.startsWith('#### ')) {
-            const heading = line.substring(5);
-            let icon = null;
-            let colorClass = "text-text-primary/90";
+        renderedElements.push(
+          <div key={`subsection-${i}`} className="mt-5 mb-4 bg-gradient-to-r from-bg-tertiary/30 to-bg-tertiary/10 p-3 rounded-md shadow-sm border border-bg-tertiary/20">
+            <h4 className={`text-md md:text-lg font-medium ${colorClass} flex items-center gap-2`}>
+              {icon}
+              {heading}
+            </h4>
+            <div className={`h-0.5 w-12 ${colorClass.replace('text-', 'bg-')}/30 rounded mt-2`}></div>
+          </div>
+        );
+      }
+      // Process lists
+      else if (line.match(/^\s*[\-\*]\s/)) {
+        const content = line.replace(/^\s*[\-\*]\s/, '');
 
-            // Determine icon and color based on heading content
-            if (heading.includes('🎯 Learning Objectives')) {
-              icon = <Target className="w-5 h-5 text-primary-DEFAULT" />;
-              colorClass = "text-primary-DEFAULT";
-            } else if (heading.includes('💻 Practice Exercises')) {
-              icon = <Code className="w-5 h-5 text-success-DEFAULT" />;
-              colorClass = "text-success-DEFAULT";
-            } else if (heading.includes('📝 Quiz')) {
-              icon = <FileText className="w-5 h-5 text-warning-DEFAULT" />;
-              colorClass = "text-warning-DEFAULT";
-            } else if (heading.includes('📌 Summary')) {
-              icon = <CheckCircle className="w-5 h-5 text-info-DEFAULT" />;
-              colorClass = "text-info-DEFAULT";
-            } else if (heading.includes('🔑 Key Takeaways')) {
-              icon = <Award className="w-5 h-5 text-warning-DEFAULT" />;
-              colorClass = "text-warning-DEFAULT";
-            } else if (heading.includes('📚 Further Reading')) {
-              icon = <BookOpen className="w-5 h-5 text-primary-DEFAULT" />;
-              colorClass = "text-primary-DEFAULT";
-            } else if (heading.includes('🛠️ Practical Application')) {
-              icon = <PenTool className="w-5 h-5 text-success-DEFAULT" />;
-              colorClass = "text-success-DEFAULT";
-            } else if (heading.includes('📊 Course Progress')) {
-              icon = <ArrowRight className="w-5 h-5 text-info-DEFAULT" />;
-              colorClass = "text-info-DEFAULT";
-            }
+        // Process any inline formatting in the content
+        const formattedContent = content
+          // Bold text
+          .replace(/\*\*([^*]+)\*\*/g, (_, text) => (
+            `<strong class="font-bold text-text-primary">${text}</strong>`
+          ))
+          // Italic text
+          .replace(/\*([^*]+)\*/g, (_, text) => (
+            `<em class="text-primary-DEFAULT/90 font-medium not-italic">${text}</em>`
+          ))
+          // Inline code
+          .replace(/`([^`]+)`/g, (_, text) => (
+            `<code class="px-1 py-0.5 bg-bg-tertiary rounded text-sm font-mono">${text}</code>`
+          ));
 
-            return (
-              <div key={index} className="mt-5 mb-4 bg-gradient-to-r from-bg-tertiary/30 to-bg-tertiary/10 p-3 rounded-md shadow-sm border border-bg-tertiary/20">
-                <h4 className={`text-md md:text-lg font-medium ${colorClass} flex items-center gap-2`}>
-                  {icon}
-                  {heading}
-                </h4>
-                <div className={`h-0.5 w-12 ${colorClass.replace('text-', 'bg-')}/30 rounded mt-2`}></div>
-              </div>
-            );
-          }
-          // Process lists
-          else if (line.match(/^\s*[\-\*]\s/)) {
-            const content = line.replace(/^\s*[\-\*]\s/, '');
+        renderedElements.push(
+          <div key={`list-${i}`} className="my-2 flex items-start">
+            <span className="text-primary-DEFAULT mr-2">•</span>
+            <div className="flex-1" dangerouslySetInnerHTML={{ __html: formattedContent }} />
+          </div>
+        );
+      }
+      // Process numbered lists
+      else if (line.match(/^\s*\d+\.\s/)) {
+        // Extract the number to preserve it in the rendered output
+        const match = line.match(/^\s*(\d+)\.\s/);
+        const number = match ? match[1] : "1";
+        const content = line.replace(/^\s*\d+\.\s/, '');
 
-            // Process any inline formatting in the content
-            const formattedContent = content
-              // Bold text
-              .replace(/\*\*([^*]+)\*\*/g, (_, text) => (
-                `<strong class="font-bold text-text-primary">${text}</strong>`
-              ))
-              // Italic text
-              .replace(/\*([^*]+)\*/g, (_, text) => (
-                `<em class="text-primary-DEFAULT/90 font-medium not-italic">${text}</em>`
-              ))
-              // Inline code
-              .replace(/`([^`]+)`/g, (_, text) => (
-                `<code class="px-1 py-0.5 bg-bg-tertiary rounded text-sm font-mono">${text}</code>`
-              ));
+        // Process any inline formatting in the content
+        const formattedContent = content
+          // Bold text
+          .replace(/\*\*([^*]+)\*\*/g, (_, text) => (
+            `<strong class="font-bold text-text-primary">${text}</strong>`
+          ))
+          // Italic text
+          .replace(/\*([^*]+)\*/g, (_, text) => (
+            `<em class="text-primary-DEFAULT/90 font-medium not-italic">${text}</em>`
+          ))
+          // Inline code
+          .replace(/`([^`]+)`/g, (_, text) => (
+            `<code class="px-1 py-0.5 bg-bg-tertiary rounded text-sm font-mono">${text}</code>`
+          ));
 
-            return (
-              <div key={index} className="my-2 flex items-start">
-                <span className="text-primary-DEFAULT mr-2">•</span>
-                <div className="flex-1" dangerouslySetInnerHTML={{ __html: formattedContent }} />
-              </div>
-            );
-          }
-          else if (line.match(/^\s*\d+\.\s/)) {
-            // Extract the number to preserve it in the rendered output
-            const match = line.match(/^\s*(\d+)\.\s/);
-            const number = match ? match[1] : "1";
-            const content = line.replace(/^\s*\d+\.\s/, '');
+        renderedElements.push(
+          <div key={`numlist-${i}`} className="my-2 flex items-start">
+            <span className="font-medium text-primary-DEFAULT mr-2 min-w-[1.5rem] text-right">{number}.</span>
+            <div className="flex-1" dangerouslySetInnerHTML={{ __html: formattedContent }} />
+          </div>
+        );
+      }
+      // Process blockquotes
+      else if (line.startsWith('> ')) {
+        renderedElements.push(
+          <blockquote key={`quote-${i}`} className="border-l-4 border-warning-DEFAULT pl-4 py-3 my-5 bg-gradient-to-r from-warning-DEFAULT/15 to-warning-DEFAULT/5 rounded-r shadow-sm">
+            <div className="text-warning-DEFAULT/90 font-medium mb-1 text-sm">Note:</div>
+            <div className="text-text-primary/90">{line.substring(2)}</div>
+          </blockquote>
+        );
+      }
+      // Process horizontal rules
+      else if (line.match(/^[\-\*\_]{3,}$/)) {
+        renderedElements.push(
+          <div key={`hr-${i}`} className="my-8 flex items-center justify-center">
+            <div className="w-full max-w-md h-px bg-gradient-to-r from-transparent via-bg-tertiary/70 to-transparent"></div>
+          </div>
+        );
+      }
+      // Process regular paragraphs
+      else if (line.trim() !== '') {
+        // Process inline formatting (bold, italic, code)
+        const formattedLine = line
+          // Bold text
+          .replace(/\*\*([^*]+)\*\*/g, (_, text) => (
+            `<strong class="font-bold text-text-primary">${text}</strong>`
+          ))
+          // Italic text
+          .replace(/\*([^*]+)\*/g, (_, text) => (
+            `<em class="text-primary-DEFAULT/90 font-medium not-italic">${text}</em>`
+          ))
+          // Inline code
+          .replace(/`([^`]+)`/g, (_, text) => (
+            `<code class="px-1 py-0.5 bg-bg-tertiary rounded text-sm font-mono">${text}</code>`
+          ));
 
-            // Process any inline formatting in the content
-            const formattedContent = content
-              // Bold text
-              .replace(/\*\*([^*]+)\*\*/g, (_, text) => (
-                `<strong class="font-bold text-text-primary">${text}</strong>`
-              ))
-              // Italic text
-              .replace(/\*([^*]+)\*/g, (_, text) => (
-                `<em class="text-primary-DEFAULT/90 font-medium not-italic">${text}</em>`
-              ))
-              // Inline code
-              .replace(/`([^`]+)`/g, (_, text) => (
-                `<code class="px-1 py-0.5 bg-bg-tertiary rounded text-sm font-mono">${text}</code>`
-              ));
+        renderedElements.push(
+          <p key={`para-${i}`} className="my-3 leading-relaxed" dangerouslySetInnerHTML={{ __html: formattedLine }} />
+        );
+      }
+      // Empty lines
+      else {
+        renderedElements.push(<div key={`empty-${i}`} className="h-2"></div>);
+      }
+    }
 
-            return (
-              <div key={index} className="my-2 flex items-start">
-                <span className="font-medium text-primary-DEFAULT mr-2 min-w-[1.5rem] text-right">{number}.</span>
-                <div className="flex-1" dangerouslySetInnerHTML={{ __html: formattedContent }} />
-              </div>
-            );
-          }
-          // Process blockquotes
-          else if (line.startsWith('> ')) {
-            return (
-              <blockquote key={index} className="border-l-4 border-warning-DEFAULT pl-4 py-3 my-5 bg-gradient-to-r from-warning-DEFAULT/15 to-warning-DEFAULT/5 rounded-r shadow-sm">
-                <div className="text-warning-DEFAULT/90 font-medium mb-1 text-sm">Note:</div>
-                <div className="text-text-primary/90">{line.substring(2)}</div>
-              </blockquote>
-            );
-          }
-          // Process horizontal rules
-          else if (line.match(/^[\-\*\_]{3,}$/)) {
-            return (
-              <div key={index} className="my-8 flex items-center justify-center">
-                <div className="w-full max-w-md h-px bg-gradient-to-r from-transparent via-bg-tertiary/70 to-transparent"></div>
-              </div>
-            );
-          }
-          // Process regular paragraphs
-          else if (line.trim() !== '') {
-            // Process inline formatting (bold, italic, code)
-            const formattedLine = line
-              // Bold text
-              .replace(/\*\*([^*]+)\*\*/g, (_, text) => (
-                `<strong class="font-bold text-text-primary">${text}</strong>`
-              ))
-              // Italic text
-              .replace(/\*([^*]+)\*/g, (_, text) => (
-                `<em class="text-primary-DEFAULT/90 font-medium not-italic">${text}</em>`
-              ))
-              // Inline code
-              .replace(/`([^`]+)`/g, (_, text) => (
-                `<code class="px-1 py-0.5 bg-bg-tertiary rounded text-sm font-mono">${text}</code>`
-              ));
-
-            return (
-              <p key={index} className="my-3 leading-relaxed" dangerouslySetInnerHTML={{ __html: formattedLine }} />
-            );
-          }
-          // Empty lines
-          return <div key={index} className="h-2"></div>;
-        })}
-      </>
-    );
+    return <>{renderedElements}</>;
   };
 
   // These hooks are now moved above

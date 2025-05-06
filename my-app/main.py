@@ -888,7 +888,11 @@ async def entrypoint(ctx: JobContext):
         logger.warning("Groq API key not available, using local transcription")
         stt_impl = stt.StreamAdapter(
             stt=stt.STT.with_default(),
-            vad=silero.VAD.load(min_silence_duration=0.2),
+            vad=silero.VAD.load(
+                min_silence_duration=1.0,  # Increased from 0.2 to allow for natural pauses in speech
+                min_speech_duration=0.1,   # Minimum duration to consider as speech
+                prefix_padding_duration=0.5  # Add padding to the beginning of speech segments
+            ),
         )
 
     if not stt_impl.capabilities.streaming:
@@ -896,7 +900,9 @@ async def entrypoint(ctx: JobContext):
         stt_impl = stt.StreamAdapter(
             stt=stt_impl,
             vad=silero.VAD.load(
-                min_silence_duration=0.2,
+                min_silence_duration=1.0,  # Increased from 0.2 to allow for natural pauses in speech
+                min_speech_duration=0.1,   # Minimum duration to consider as speech
+                prefix_padding_duration=0.5  # Add padding to the beginning of speech segments
             ),
         )
 

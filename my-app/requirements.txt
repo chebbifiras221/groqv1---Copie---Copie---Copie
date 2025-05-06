@@ -1,6 +1,7 @@
-livekit-agents>=0.12.8
-livekit-plugins-openai>=0.10.15
-livekit-plugins-silero>=0.7.4
+livekit-agents==0.12.16
+livekit-plugins-openai==0.12.0
+livekit-plugins-silero==0.7.4
+livekit-plugins-groq==0.1.2
 python-dotenv~=1.0
-livekit-plugin-deepgram>=0.6.16
+#livekit-plugin-deepgram>=0.6.16
 requests>=2.31.0
