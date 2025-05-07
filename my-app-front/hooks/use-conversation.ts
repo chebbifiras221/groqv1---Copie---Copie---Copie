@@ -99,50 +99,14 @@ export function useConversation() {
   const { transcriptions } = useTranscriber();
 
   /**
-   * Trigger conversation loading when room is available
-   * This ensures we automatically load conversations when the connection is established
+   * We don't need to trigger conversation loading here anymore
+   * The conversation-manager component handles this now
+   * This hook just listens for changes to the current conversation ID
    */
   useEffect(() => {
-    if (!room) return;
-
-    // Check if we have a conversation ID in localStorage
-    const currentId = localStorage.getItem('current-conversation-id');
-
-    // If we don't have a conversation ID, we'll trigger the conversation manager
-    // to load the most recent conversation or create a new one
-    if (!currentId) {
-      // Request the conversation list from the server
-      // The conversation manager will handle creating a new conversation if none exist
-      const message = {
-        type: "list_conversations"
-      };
-
-      // Use a safe approach with connection checking and error handling
-      const loadConversations = async () => {
-        try {
-          // Check if the room is connected before attempting to publish
-          if (room.state !== ConnectionState.Connected) {
-            console.log('Room not connected, waiting before loading conversations...');
-            // Wait for the room to connect before trying to load conversations
-            setTimeout(loadConversations, 1000);
-            return;
-          }
-
-          // Safely publish the data
-          await room.localParticipant.publishData(
-            new TextEncoder().encode(JSON.stringify(message))
-          );
-          console.log('Successfully requested conversation list');
-        } catch (error) {
-          console.error('Error requesting conversation list:', error);
-          // Retry after a delay if there was an error
-          setTimeout(loadConversations, 2000);
-        }
-      };
-
-      // Start the process with a small delay to ensure connection is stable
-      setTimeout(loadConversations, 500);
-    }
+    // This effect is intentionally empty
+    // The conversation-manager component handles loading conversations
+    // and creating a new conversation on initial connection
   }, [room]);
 
   // Track the last processed transcription and response

@@ -49,13 +49,18 @@ interface ConversationData {
   messages: ConversationMessage[];
 }
 
+// Import the progress bar
+import { ProgressBar } from "./ui/progress-bar";
+
 export function ConversationManager() {
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [currentConversation, setCurrentConversation] = useState<ConversationData | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [isLoadingHistory, setIsLoadingHistory] = useState(false); // Specific state for history loading
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editTitle, setEditTitle] = useState("");
   const [initialLoadDone, setInitialLoadDone] = useState(false); // Flag to track initial load
+  const [isCreatingNewConversation, setIsCreatingNewConversation] = useState(false); // Flag to prevent multiple creations
   const room = useMaybeRoomContext();
   const connectionState = useConnectionState();
   const isConnected = connectionState === ConnectionState.Connected;
@@ -63,12 +68,13 @@ export function ConversationManager() {
 
   /**
    * Function to fetch the list of conversations from the server
-   * Returns a promise that resolves when the request is sent
+   * Returns a promise that resolves when the conversations are actually loaded
    */
   const fetchConversations = async () => {
     if (!room) return Promise.resolve();
 
     setIsLoading(true);
+    setIsLoadingHistory(true); // Set history loading state for progress bar
     try {
       const message = {
         type: "list_conversations"
@@ -121,16 +127,53 @@ export function ConversationManager() {
         }
       }
 
-      // Return a promise that resolves after a short delay
-      // This gives time for the server to respond and update the state
-      return new Promise<void>(resolve => {
-        setTimeout(resolve, 500);
+      // Return a promise that resolves when the conversations are actually loaded
+      // We'll wait for the server to respond and update the state
+      return new Promise<void>((resolve) => {
+        // Store the current number of conversations
+        const initialCount = conversations.length;
+        let checkCount = 0;
+        const maxChecks = 20; // Maximum number of checks (6 seconds total)
+
+        // Create a function to check if conversations have been loaded
+        const checkConversationsLoaded = () => {
+          checkCount++;
+
+          // If conversations have been updated, resolve the promise
+          if (conversations.length > initialCount) {
+            console.log(`Conversations loaded: ${conversations.length} (was ${initialCount})`);
+            resolve();
+            return;
+          }
+
+          // If we've been checking for too long, resolve anyway
+          if (checkCount >= maxChecks) {
+            console.log(`Timed out waiting for conversations after ${checkCount} checks`);
+            resolve();
+            return;
+          }
+
+          // Log progress
+          console.log(`Waiting for conversations to load... (check ${checkCount}/${maxChecks})`);
+
+          // Check again in 300ms
+          setTimeout(checkConversationsLoaded, 300);
+        };
+
+        // Start checking immediately
+        checkConversationsLoaded();
       });
     } catch (error) {
       handleError(error, 'conversation', 'Error loading conversations');
       return Promise.resolve(); // Resolve even on error
     } finally {
       setIsLoading(false);
+      // Keep the history loading state active a bit longer for the progress bar
+      // This ensures the progress bar completes its animation
+      setTimeout(() => {
+        setIsLoadingHistory(false);
+        console.log("History loading complete");
+      }, 500);
     }
   };
 
@@ -219,11 +262,33 @@ export function ConversationManager() {
 
   /**
    * Function to create a new conversation
+   * Prevents creating multiple empty conversations
    */
   const createNewConversation = async () => {
     if (!room) return;
 
+    // Prevent creating multiple empty conversations
+    if (isCreatingNewConversation) {
+      console.log("Already creating a new conversation, ignoring request");
+      return;
+    }
+
+    // Check if current conversation is empty and we're trying to create another one
+    if (currentConversation) {
+      // Check if the conversation has no messages or only system messages
+      const hasUserMessages = currentConversation.messages?.some(
+        msg => msg.type === 'user' || (msg.type === 'ai' && msg.content.trim().length > 0)
+      );
+
+      if (!hasUserMessages) {
+        console.log("Current conversation is empty (no user messages), not creating a new one");
+        return;
+      }
+    }
+
     setIsLoading(true);
+    setIsCreatingNewConversation(true);
+
     try {
       // Reset any course UI state for the previous conversation
       if (typeof window !== 'undefined') {
@@ -238,12 +303,20 @@ export function ConversationManager() {
       // The server will assign a new ID when it creates the conversation
       localStorage.removeItem('current-conversation-id');
 
+      // Clear the current conversation in state to show loading state
+      setCurrentConversation(null);
+
+      // Create a message to request a new conversation
       const message = {
         type: "new_conversation",
         title: `New Conversation`
       };
 
+      console.log("Creating new conversation...");
+
       // Send the request to create a new conversation
+      // The server will respond with a new_conversation_created message
+      // which will be handled by the data received handler
       await room.localParticipant.publishData(
         new TextEncoder().encode(JSON.stringify(message))
       );
@@ -251,18 +324,22 @@ export function ConversationManager() {
       handleError(error, 'conversation', 'Error creating new conversation');
     } finally {
       setIsLoading(false);
+      // Reset the creating flag after a short delay
+      setTimeout(() => {
+        setIsCreatingNewConversation(false);
+      }, 1000);
     }
   };
 
   /**
    * Handle initial conversation loading when connected
-   * This ensures we load the conversation list as soon as the connection is established
-   * and create exactly one new conversation if none exist
+   * This ensures we IMMEDIATELY load the conversation list in the sidebar
+   * and then create a new conversation by default
    */
   useEffect(() => {
     // Only run this effect when we first connect
     if (isConnected && room && !initialLoadDone) {
-      console.log("Initial connection detected, loading conversations");
+      console.log("Initial connection detected, IMMEDIATELY loading conversations");
 
       // Mark initial load as done to prevent this from running again
       setInitialLoadDone(true);
@@ -270,19 +347,62 @@ export function ConversationManager() {
       // Store in localStorage that we've done the initial load
       localStorage.setItem('initial-load-done', 'true');
 
-      // Fetch conversations
-      fetchConversations().then(() => {
-        // After fetching, check if we need to create a new conversation
-        // This will run after the state has been updated with the fetched conversations
-        setTimeout(() => {
-          if (conversations.length === 0) {
-            console.log("No conversations found on initial load, creating one automatically");
-            createNewConversation();
+      // Set loading state for the progress bar
+      setIsLoadingHistory(true);
+
+      // IMMEDIATELY request the conversation list from the server
+      // This will populate the sidebar without waiting
+      const message = {
+        type: "list_conversations"
+      };
+
+      // Send the request directly
+      try {
+        console.log("Directly requesting conversation list");
+        room.localParticipant.publishData(
+          new TextEncoder().encode(JSON.stringify(message))
+        );
+      } catch (error) {
+        console.error("Error requesting conversation list:", error);
+      }
+
+      // Also start a more robust loading process with retries as a backup
+      const loadConversationsWithRetry = async (retryCount = 0) => {
+        try {
+          console.log(`Attempting to load conversation history (attempt ${retryCount + 1})`);
+
+          // Wait for the conversations to be fetched
+          await fetchConversations();
+
+          // Always create a new conversation by default, regardless of whether we loaded history
+          console.log("Creating a new conversation by default");
+
+          // Clear any existing conversation ID from localStorage
+          localStorage.removeItem('current-conversation-id');
+
+          // Create a new conversation by default
+          // This ensures we're in a new conversation when connecting
+          createNewConversation();
+
+        } catch (error) {
+          console.error("Error loading conversations:", error);
+          if (retryCount < 3) {
+            // Retry with exponential backoff
+            const delay = 1000 * Math.pow(2, retryCount);
+            console.log(`Retrying in ${delay}ms...`);
+            setTimeout(() => loadConversationsWithRetry(retryCount + 1), delay);
           } else {
-            console.log(`Found ${conversations.length} existing conversations, not creating a new one`);
+            // After several retries, just create a new conversation
+            console.log("Failed to load conversations after retries, creating a new conversation");
+            localStorage.removeItem('current-conversation-id');
+            createNewConversation();
           }
-        }, 1000);
-      });
+        }
+      };
+
+      // Start the loading process after a short delay
+      // This gives the direct request a chance to complete first
+      setTimeout(() => loadConversationsWithRetry(), 500);
     }
   }, [isConnected, room, initialLoadDone]);
 
@@ -321,38 +441,45 @@ export function ConversationManager() {
         }
 
         if (data.type === "conversations_list") {
-          // Update the conversations list in state
-          setConversations(data.conversations);
+          console.log(`Received conversation list with ${data.conversations.length} conversations`);
+
+          // Sort conversations by updated_at (most recent first)
+          const sortedConversations = [...data.conversations].sort(
+            (a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime()
+          );
+
+          // Update the conversations list in state with sorted conversations
+          setConversations(sortedConversations);
 
           // Get the current conversation ID from localStorage
           const currentId = localStorage.getItem('current-conversation-id');
 
-          // Automatically load the most recent conversation if we don't have one loaded
-          if (data.conversations.length > 0) {
-            // Sort by updated_at and get the most recent one
-            const sortedConversations = [...data.conversations].sort(
-              (a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime()
-            );
-
-            // If we have a current ID, check if it exists in the conversations list
+          // If we have a specific conversation ID in localStorage, try to load it
+          if (sortedConversations.length > 0) {
             if (currentId) {
-              const conversationExists = data.conversations.some((c: Conversation) => c.id === currentId);
+              // Check if the requested conversation exists
+              const conversationExists = sortedConversations.some((c: Conversation) => c.id === currentId);
 
               if (conversationExists) {
+                console.log(`Loading existing conversation: ${currentId}`);
                 // If the current conversation exists but isn't loaded, load it
                 if (!currentConversation || currentConversation.id !== currentId) {
                   // Load the conversation from localStorage
                   fetchConversation(currentId);
                 }
               } else {
-                // If the current conversation doesn't exist, load the most recent one
-                // Current ID not found, load the most recent conversation
-                fetchConversation(sortedConversations[0].id);
+                console.log(`Conversation ${currentId} not found in history`);
+                // The conversation ID in localStorage doesn't exist
+                // This could happen if conversations were deleted on another device
+                // We'll let the createNewConversation flow handle this case
               }
-            } else if (!currentConversation) {
-              // If we don't have a current ID and no conversation is loaded, load the most recent one
-              // No current conversation, load the most recent one
-              fetchConversation(sortedConversations[0].id);
+            } else if (!initialLoadDone) {
+              // If we're in the initial loading phase and don't have a current ID,
+              // we'll create a new conversation after a short delay
+              // This ensures the history is loaded and visible first
+              console.log("Conversation list loaded, will create new conversation shortly");
+
+              // We don't need to do anything here - the useEffect will handle creating a new conversation
             }
           }
         } else if (data.type === "conversation_data") {
@@ -363,15 +490,21 @@ export function ConversationManager() {
           localStorage.setItem('current-conversation-id', data.conversation.id);
         } else if (data.type === "new_conversation_created") {
           // Handle new conversation creation
+          console.log("New conversation created with ID:", data.conversation_id);
 
           // Update localStorage with the new conversation ID
           localStorage.setItem('current-conversation-id', data.conversation_id);
 
-          // Refresh the conversation list
-          fetchConversations();
+          // Reset the creating flag
+          setIsCreatingNewConversation(false);
 
-          // Load the new conversation
-          fetchConversation(data.conversation_id);
+          // Refresh the conversation list first to include the new conversation
+          // This ensures the sidebar is up-to-date
+          fetchConversations().then(() => {
+            // Then load the new conversation
+            console.log("Loading newly created conversation");
+            fetchConversation(data.conversation_id);
+          });
         } else if (data.type === "conversation_renamed") {
           // Update the conversation title in the list
           setConversations(prev =>
@@ -405,7 +538,9 @@ export function ConversationManager() {
           }
 
           // Refresh the conversation list
-          fetchConversations();
+          fetchConversations().catch(err =>
+            console.error("Error refreshing conversation list:", err)
+          );
         } else if (data.type === "all_conversations_cleared") {
           // Clear the conversations list
           setConversations([]);
@@ -417,7 +552,9 @@ export function ConversationManager() {
           }
 
           // Refresh the conversation list
-          fetchConversations();
+          fetchConversations().catch(err =>
+            console.error("Error refreshing conversation list:", err)
+          );
         }
       } catch (e) {
         handleError(e, 'conversation', 'Error processing conversation data');
@@ -546,7 +683,7 @@ export function ConversationManager() {
             onClick={createNewConversation}
             variant="primary"
             className="flex-1 py-2.5 flex items-center justify-center gap-2 text-sm font-medium bg-primary-DEFAULT hover:bg-primary-hover rounded-md shadow-sm transition-all duration-200 hover:shadow"
-            disabled={isLoading}
+            disabled={isLoading || isCreatingNewConversation}
           >
             <span>+ &nbsp;New Chat</span>
           </Button>
@@ -561,6 +698,20 @@ export function ConversationManager() {
             <Trash2 size={18} />
           </Button>
         </div>
+
+        {/* Progress bar for loading history - only shows when loading history */}
+        <ProgressBar
+          isLoading={isLoadingHistory}
+          duration={2000}
+          className="mt-2"
+        />
+
+        {/* Loading indicator text - only shows when loading history */}
+        {isLoadingHistory && (
+          <div className="mt-1 text-center">
+            <p className="text-xs text-text-tertiary">Loading conversation history...</p>
+          </div>
+        )}
       </div>
 
       <div className="flex-1 overflow-y-auto">

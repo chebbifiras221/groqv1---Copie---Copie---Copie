@@ -40,15 +40,19 @@ export function Playground({ onConnect: _ }: PlaygroundProps) {
       setShowConnectionToast(true);
       const timer = setTimeout(() => setShowConnectionToast(false), 3000);
 
-      // If we just connected, trigger conversation loading
+      // If we just connected, trigger the conversation manager
       if (roomState === ConnectionState.Connected) {
-        // Use a short delay to ensure everything is initialized
+        console.log("Connection established, conversation manager should initialize automatically");
+
+        // The conversation manager will now handle loading on its own
+        // We'll just dispatch a storage event as a backup trigger
         setTimeout(() => {
-          // Trigger the conversation manager to load conversations
-          // This will create a new conversation if none exist
-          const event = new Event('storage');
-          window.dispatchEvent(event);
-        }, 500);
+          if (typeof window !== 'undefined') {
+            console.log("Dispatching backup storage event to trigger conversation manager");
+            const event = new Event('storage');
+            window.dispatchEvent(event);
+          }
+        }, 1500); // Longer delay as a backup mechanism
       }
 
       return () => clearTimeout(timer);
