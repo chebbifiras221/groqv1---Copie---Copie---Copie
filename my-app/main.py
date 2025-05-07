@@ -21,8 +21,16 @@ GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions"
 # TTS provider will be configured later
 
-# Initialize the database
+# Initialize the database and run migrations
 database.init_db()
+
+# Run database migrations separately to ensure they're applied
+# This is a safeguard in case the migrations in init_db didn't run
+try:
+    database.migrate_db()
+    logger.info("Database migrations completed successfully")
+except Exception as e:
+    logger.error(f"Error running database migrations: {e}")
 
 # Current conversation ID
 current_conversation_id = None
@@ -196,6 +204,35 @@ def generate_ai_response(text, conversation_id=None):
     if isinstance(conversation_id, dict) and "teaching_mode" in conversation_id:
         teaching_mode = conversation_id["teaching_mode"]
         actual_conversation_id = conversation_id["conversation_id"]
+
+    # If no teaching mode was specified in the message, try to get it from the database
+    if teaching_mode == "teacher" and actual_conversation_id:
+        try:
+            conn = database.get_db_connection()
+            cursor = conn.cursor()
+
+            # Check if teaching_mode column exists
+            has_teaching_mode = database.check_column_exists(conn, "conversations", "teaching_mode")
+
+            if has_teaching_mode:
+                cursor.execute("SELECT teaching_mode FROM conversations WHERE id = ?", (actual_conversation_id,))
+                result = cursor.fetchone()
+                if result and result["teaching_mode"]:
+                    teaching_mode = result["teaching_mode"]
+                    logger.info(f"Retrieved teaching mode from database: {teaching_mode}")
+            else:
+                logger.warning("teaching_mode column doesn't exist yet, using default mode")
+                # Try to run the migration to add the column
+                try:
+                    database.release_connection(conn)
+                    database.migrate_db()
+                    logger.info("Ran migration in generate_ai_response")
+                except Exception as e:
+                    logger.error(f"Failed to run migration in generate_ai_response: {e}")
+        except Exception as e:
+            logger.error(f"Error getting teaching mode from database: {e}")
+        finally:
+            database.release_connection(conn)
 
     # Add user message to database only if it's not a hidden instruction
     # Check if context has is_hidden flag
@@ -693,13 +730,37 @@ async def _forward_transcription(
             transcribed_text = ev.alternatives[0].text
             logger.debug(f" ~> {transcribed_text}")
 
-            # Try to get the teaching mode from the session data
-            # For now, we'll default to teacher mode, but in a more sophisticated implementation,
-            # we could store the teaching mode in a session variable or database
-            teaching_mode = "teacher"
+            # Try to get the teaching mode from the database for the current conversation
+            teaching_mode = "teacher"  # Default to teacher mode
 
-            # In a real implementation, we might do something like:
-            # teaching_mode = get_session_data(participant_id, "teaching_mode") or "teacher"
+            if current_conversation_id:
+                try:
+                    conn = database.get_db_connection()
+                    cursor = conn.cursor()
+
+                    # Check if teaching_mode column exists
+                    has_teaching_mode = database.check_column_exists(conn, "conversations", "teaching_mode")
+
+                    if has_teaching_mode:
+                        cursor.execute("SELECT teaching_mode FROM conversations WHERE id = ?", (current_conversation_id,))
+                        result = cursor.fetchone()
+                        if result and result["teaching_mode"]:
+                            teaching_mode = result["teaching_mode"]
+                            logger.info(f"Retrieved teaching mode from database for voice input: {teaching_mode}")
+                    else:
+                        logger.warning("teaching_mode column doesn't exist yet, using default mode for voice input")
+                        # Try to run the migration to add the column
+                        try:
+                            database.release_connection(conn)
+                            database.migrate_db()
+                            logger.info("Ran migration in voice input handler")
+                            conn = database.get_db_connection()  # Get a new connection after migration
+                        except Exception as e:
+                            logger.error(f"Failed to run migration in voice input handler: {e}")
+                except Exception as e:
+                    logger.error(f"Error getting teaching mode from database for voice input: {e}")
+                finally:
+                    database.release_connection(conn)
 
             logger.info(f"Using teaching mode for voice input: {teaching_mode}")
 
@@ -1017,8 +1078,14 @@ async def entrypoint(ctx: JobContext):
 
                     # Use the optimized function to update timestamp and get conversation list in one transaction
                     try:
+                        # Get the teaching mode from the message
+                        teaching_mode = message.get('teaching_mode', 'teacher')
+
                         # This combines multiple operations into a single transaction
-                        result = database.reuse_empty_conversation(current_conversation_id)
+                        result = database.reuse_empty_conversation(
+                            conversation_id=current_conversation_id,
+                            teaching_mode=teaching_mode
+                        )
 
                         # Send the updated conversation list to the frontend
                         list_response = {
@@ -1031,15 +1098,31 @@ async def entrypoint(ctx: JobContext):
                         logger.error(f"Error reusing empty conversation: {e}")
                 else:
                     # Create a new conversation only if there are no empty ones
-                    current_conversation_id = database.create_conversation(message.get('title', f"Conversation-{datetime.now().isoformat()}"))
-                    logger.info(f"Created new conversation with ID: {current_conversation_id}")
+                    teaching_mode = message.get('teaching_mode', 'teacher')
+                    current_conversation_id = database.create_conversation(
+                        title=message.get('title', f"Conversation-{datetime.now().isoformat()}"),
+                        teaching_mode=teaching_mode
+                    )
+                    logger.info(f"Created new conversation with ID: {current_conversation_id} and teaching mode: {teaching_mode}")
 
-                # Store the teaching mode in the session data
+                # Get the teaching mode from the message
                 teaching_mode = message.get('teaching_mode', 'teacher')
                 logger.info(f"Using teaching mode: {teaching_mode}")
 
-                # Store the teaching mode in a global variable or session data
-                # For now, we'll just log it
+                # Update the teaching mode in the database for this conversation
+                try:
+                    conn = database.get_db_connection()
+                    cursor = conn.cursor()
+                    cursor.execute(
+                        "UPDATE conversations SET teaching_mode = ? WHERE id = ?",
+                        (teaching_mode, current_conversation_id)
+                    )
+                    conn.commit()
+                    logger.info(f"Updated teaching mode for conversation {current_conversation_id}: {teaching_mode}")
+                except Exception as e:
+                    logger.error(f"Error updating teaching mode: {e}")
+                finally:
+                    database.release_connection(conn)
 
                 response_message = {
                     "type": "new_conversation_created",
@@ -1071,8 +1154,14 @@ async def entrypoint(ctx: JobContext):
 
                         # Use the optimized function to update timestamp and get conversation list in one transaction
                         try:
+                            # Get the teaching mode from the message
+                            teaching_mode = message.get('teaching_mode', 'teacher')
+
                             # This combines multiple operations into a single transaction
-                            result = database.reuse_empty_conversation(current_conversation_id)
+                            result = database.reuse_empty_conversation(
+                                conversation_id=current_conversation_id,
+                                teaching_mode=teaching_mode
+                            )
 
                             # Send the updated conversation list to the frontend
                             list_response = {
@@ -1085,8 +1174,12 @@ async def entrypoint(ctx: JobContext):
                             logger.error(f"Error reusing empty conversation: {e}")
                     else:
                         # Create a new conversation only if there are no empty ones
-                        current_conversation_id = database.create_conversation(f"Conversation-{ctx.room.name}-{datetime.now().isoformat()}")
-                        logger.info(f"Created new conversation with ID: {current_conversation_id}")
+                        teaching_mode = message.get('teaching_mode', 'teacher')
+                        current_conversation_id = database.create_conversation(
+                            title=f"Conversation-{ctx.room.name}-{datetime.now().isoformat()}",
+                            teaching_mode=teaching_mode
+                        )
+                        logger.info(f"Created new conversation with ID: {current_conversation_id} and teaching mode: {teaching_mode}")
 
                 # Check if this is a hidden instruction
                 is_hidden = message.get('hidden', False)

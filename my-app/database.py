@@ -68,6 +68,40 @@ def release_connection(conn):
     """Release a connection back to the pool"""
     _pool.release_connection(conn)
 
+def check_column_exists(conn, table, column):
+    """Check if a column exists in a table"""
+    cursor = conn.cursor()
+    cursor.execute(f"PRAGMA table_info({table})")
+    columns = cursor.fetchall()
+    return any(col["name"] == column for col in columns)
+
+def migrate_db():
+    """Perform database migrations to update schema"""
+    conn = get_db_connection()
+    try:
+        cursor = conn.cursor()
+
+        # Check if teaching_mode column exists in conversations table
+        if not check_column_exists(conn, "conversations", "teaching_mode"):
+            logger.info("Adding teaching_mode column to conversations table")
+            cursor.execute("ALTER TABLE conversations ADD COLUMN teaching_mode TEXT DEFAULT 'teacher'")
+
+            # Set default value for existing rows
+            cursor.execute("UPDATE conversations SET teaching_mode = 'teacher' WHERE teaching_mode IS NULL")
+
+            conn.commit()
+            logger.info("Migration completed: Added teaching_mode column")
+        else:
+            logger.info("teaching_mode column already exists, no migration needed")
+
+        conn.commit()
+    except Exception as e:
+        logger.error(f"Error migrating database: {e}")
+        conn.rollback()
+        raise
+    finally:
+        release_connection(conn)
+
 def init_db():
     """Initialize the database with required tables"""
     conn = get_db_connection()
@@ -80,7 +114,8 @@ def init_db():
             id TEXT PRIMARY KEY,
             title TEXT,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            teaching_mode TEXT DEFAULT 'teacher'
         )
         ''')
 
@@ -104,6 +139,9 @@ def init_db():
 
         conn.commit()
         logger.info("Database initialized")
+
+        # Run migrations to ensure schema is up to date
+        migrate_db()
     except Exception as e:
         logger.error(f"Error initializing database: {e}")
         conn.rollback()
@@ -111,7 +149,7 @@ def init_db():
     finally:
         release_connection(conn)
 
-def create_conversation(title: str = "New Conversation") -> str:
+def create_conversation(title: str = "New Conversation", teaching_mode: str = "teacher") -> str:
     """Create a new conversation and return its ID"""
     conn = get_db_connection()
     try:
@@ -120,13 +158,32 @@ def create_conversation(title: str = "New Conversation") -> str:
         conversation_id = str(uuid.uuid4())
         now = datetime.now().isoformat()
 
-        cursor.execute(
-            "INSERT INTO conversations (id, title, created_at, updated_at) VALUES (?, ?, ?, ?)",
-            (conversation_id, title, now, now)
-        )
+        # Check if teaching_mode column exists
+        has_teaching_mode = check_column_exists(conn, "conversations", "teaching_mode")
+
+        if has_teaching_mode:
+            # If the column exists, include it in the INSERT
+            cursor.execute(
+                "INSERT INTO conversations (id, title, created_at, updated_at, teaching_mode) VALUES (?, ?, ?, ?, ?)",
+                (conversation_id, title, now, now, teaching_mode)
+            )
+        else:
+            # If the column doesn't exist yet, use the old schema
+            cursor.execute(
+                "INSERT INTO conversations (id, title, created_at, updated_at) VALUES (?, ?, ?, ?)",
+                (conversation_id, title, now, now)
+            )
+            logger.warning(f"teaching_mode column doesn't exist yet, created conversation without it")
+
+            # Try to run the migration to add the column
+            try:
+                migrate_db()
+                logger.info("Ran migration after creating conversation")
+            except Exception as e:
+                logger.error(f"Failed to run migration after creating conversation: {e}")
 
         conn.commit()
-        logger.info(f"Created new conversation: {conversation_id}")
+        logger.info(f"Created new conversation: {conversation_id} with teaching mode: {teaching_mode}")
         return conversation_id
     except Exception as e:
         logger.error(f"Error creating conversation: {e}")
@@ -373,13 +430,14 @@ def generate_conversation_title(conversation_id: str) -> str:
     finally:
         release_connection(conn)
 
-def reuse_empty_conversation(conversation_id: str, limit: int = 20) -> Dict[str, Any]:
+def reuse_empty_conversation(conversation_id: str, teaching_mode: str = None, limit: int = 20) -> Dict[str, Any]:
     """
-    Reuse an empty conversation by updating its timestamp and returning the updated conversation list.
+    Reuse an empty conversation by updating its timestamp and teaching mode, and returning the updated conversation list.
     This combines multiple database operations into a single transaction for better performance.
 
     Args:
         conversation_id: The ID of the empty conversation to reuse
+        teaching_mode: The teaching mode to set for this conversation (if None, keeps existing mode)
         limit: Maximum number of conversations to return in the list
 
     Returns:
@@ -393,11 +451,39 @@ def reuse_empty_conversation(conversation_id: str, limit: int = 20) -> Dict[str,
         # Begin transaction
         cursor.execute("BEGIN TRANSACTION")
 
-        # Update the conversation's timestamp
-        cursor.execute(
-            "UPDATE conversations SET updated_at = ? WHERE id = ?",
-            (now, conversation_id)
-        )
+        # Check if teaching_mode column exists
+        has_teaching_mode = check_column_exists(conn, "conversations", "teaching_mode")
+
+        if has_teaching_mode and teaching_mode:
+            # If the column exists and teaching_mode is provided, update both
+            cursor.execute(
+                "UPDATE conversations SET updated_at = ?, teaching_mode = ? WHERE id = ?",
+                (now, teaching_mode, conversation_id)
+            )
+            logger.info(f"Updated conversation {conversation_id} with teaching mode: {teaching_mode}")
+        else:
+            # Otherwise just update the timestamp
+            cursor.execute(
+                "UPDATE conversations SET updated_at = ? WHERE id = ?",
+                (now, conversation_id)
+            )
+
+            # If teaching_mode was provided but column doesn't exist, try to run migration
+            if teaching_mode and not has_teaching_mode:
+                logger.warning(f"teaching_mode column doesn't exist yet, couldn't update teaching mode")
+                try:
+                    # Release the current connection and get a new one for the migration
+                    conn.commit()
+                    release_connection(conn)
+                    migrate_db()
+                    logger.info("Ran migration after updating conversation")
+
+                    # Get a new connection and start a new transaction
+                    conn = get_db_connection()
+                    cursor = conn.cursor()
+                    cursor.execute("BEGIN TRANSACTION")
+                except Exception as e:
+                    logger.error(f"Failed to run migration after updating conversation: {e}")
 
         # Get the updated conversation list
         cursor.execute(
