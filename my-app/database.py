@@ -84,6 +84,12 @@ def init_db():
         )
         ''')
 
+        # Create index on updated_at for faster sorting
+        cursor.execute('''
+        CREATE INDEX IF NOT EXISTS idx_conversations_updated_at
+        ON conversations(updated_at DESC)
+        ''')
+
         # Create messages table
         cursor.execute('''
         CREATE TABLE IF NOT EXISTS messages (
@@ -364,5 +370,74 @@ def generate_conversation_title(conversation_id: str) -> str:
     except Exception as e:
         logger.error(f"Error generating title for conversation {conversation_id}: {e}")
         return f"New Conversation {conversation_id[:8]}"
+    finally:
+        release_connection(conn)
+
+def reuse_empty_conversation(conversation_id: str, limit: int = 20) -> Dict[str, Any]:
+    """
+    Reuse an empty conversation by updating its timestamp and returning the updated conversation list.
+    This combines multiple database operations into a single transaction for better performance.
+
+    Args:
+        conversation_id: The ID of the empty conversation to reuse
+        limit: Maximum number of conversations to return in the list
+
+    Returns:
+        A dictionary with the updated conversation list and the reused conversation ID
+    """
+    conn = get_db_connection()
+    try:
+        cursor = conn.cursor()
+        now = datetime.now().isoformat()
+
+        # Begin transaction
+        cursor.execute("BEGIN TRANSACTION")
+
+        # Update the conversation's timestamp
+        cursor.execute(
+            "UPDATE conversations SET updated_at = ? WHERE id = ?",
+            (now, conversation_id)
+        )
+
+        # Get the updated conversation list
+        cursor.execute(
+            "SELECT * FROM conversations ORDER BY updated_at DESC LIMIT ?",
+            (limit,)
+        )
+        conversations = [dict(row) for row in cursor.fetchall()]
+
+        # Get message counts and last message for each conversation
+        for conv in conversations:
+            # Get message count
+            cursor.execute(
+                "SELECT COUNT(*) as count FROM messages WHERE conversation_id = ?",
+                (conv["id"],)
+            )
+            count = cursor.fetchone()["count"]
+            conv["message_count"] = count
+
+            # Get last message
+            cursor.execute(
+                "SELECT type, content FROM messages WHERE conversation_id = ? ORDER BY timestamp DESC LIMIT 1",
+                (conv["id"],)
+            )
+            last_message = cursor.fetchone()
+            if last_message:
+                conv["last_message"] = {
+                    "type": last_message["type"],
+                    "content": last_message["content"]
+                }
+
+        # Commit the transaction
+        conn.commit()
+
+        return {
+            "conversation_id": conversation_id,
+            "conversations": conversations
+        }
+    except Exception as e:
+        conn.rollback()
+        logger.error(f"Error reusing empty conversation {conversation_id}: {e}")
+        raise
     finally:
         release_connection(conn)

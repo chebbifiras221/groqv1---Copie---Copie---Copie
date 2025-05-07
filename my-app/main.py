@@ -1015,31 +1015,20 @@ async def entrypoint(ctx: JobContext):
                     current_conversation_id = empty_conversation_id
                     logger.info(f"Using existing empty conversation: {current_conversation_id}")
 
-                    # Update the conversation's timestamp to move it to the top of the list
+                    # Use the optimized function to update timestamp and get conversation list in one transaction
                     try:
-                        now = datetime.now().isoformat()
-                        conn = database.get_db_connection()
-                        cursor = conn.cursor()
-                        cursor.execute(
-                            "UPDATE conversations SET updated_at = ? WHERE id = ?",
-                            (now, current_conversation_id)
-                        )
-                        conn.commit()
-                        logger.info(f"Updated timestamp for conversation: {current_conversation_id}")
+                        # This combines multiple operations into a single transaction
+                        result = database.reuse_empty_conversation(current_conversation_id)
 
-                        # After updating the timestamp, send the updated conversation list
-                        # This ensures the frontend shows the empty conversation at the top
-                        conversations = database.list_conversations(limit=20)
+                        # Send the updated conversation list to the frontend
                         list_response = {
                             "type": "conversations_list",
-                            "conversations": conversations
+                            "conversations": result["conversations"]
                         }
                         await safe_publish_data(ctx.room.local_participant, json.dumps(list_response).encode())
-                        logger.info("Sent updated conversation list after timestamp update")
+                        logger.info("Sent updated conversation list after reusing empty conversation")
                     except Exception as e:
-                        logger.error(f"Error updating conversation timestamp: {e}")
-                    finally:
-                        database.release_connection(conn)
+                        logger.error(f"Error reusing empty conversation: {e}")
                 else:
                     # Create a new conversation only if there are no empty ones
                     current_conversation_id = database.create_conversation(message.get('title', f"Conversation-{datetime.now().isoformat()}"))
@@ -1080,31 +1069,20 @@ async def entrypoint(ctx: JobContext):
                         current_conversation_id = empty_conversation_id
                         logger.info(f"Using existing empty conversation: {current_conversation_id}")
 
-                        # Update the conversation's timestamp to move it to the top of the list
+                        # Use the optimized function to update timestamp and get conversation list in one transaction
                         try:
-                            now = datetime.now().isoformat()
-                            conn = database.get_db_connection()
-                            cursor = conn.cursor()
-                            cursor.execute(
-                                "UPDATE conversations SET updated_at = ? WHERE id = ?",
-                                (now, current_conversation_id)
-                            )
-                            conn.commit()
-                            logger.info(f"Updated timestamp for conversation: {current_conversation_id}")
+                            # This combines multiple operations into a single transaction
+                            result = database.reuse_empty_conversation(current_conversation_id)
 
-                            # After updating the timestamp, send the updated conversation list
-                            # This ensures the frontend shows the empty conversation at the top
-                            conversations = database.list_conversations(limit=20)
+                            # Send the updated conversation list to the frontend
                             list_response = {
                                 "type": "conversations_list",
-                                "conversations": conversations
+                                "conversations": result["conversations"]
                             }
                             await safe_publish_data(ctx.room.local_participant, json.dumps(list_response).encode())
-                            logger.info("Sent updated conversation list after timestamp update")
+                            logger.info("Sent updated conversation list after reusing empty conversation")
                         except Exception as e:
-                            logger.error(f"Error updating conversation timestamp: {e}")
-                        finally:
-                            database.release_connection(conn)
+                            logger.error(f"Error reusing empty conversation: {e}")
                     else:
                         # Create a new conversation only if there are no empty ones
                         current_conversation_id = database.create_conversation(f"Conversation-{ctx.room.name}-{datetime.now().isoformat()}")
