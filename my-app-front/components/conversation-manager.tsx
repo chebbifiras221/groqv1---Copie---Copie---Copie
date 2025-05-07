@@ -130,38 +130,30 @@ export function ConversationManager() {
       // Return a promise that resolves when the conversations are actually loaded
       // We'll wait for the server to respond and update the state
       return new Promise<void>((resolve) => {
-        // Store the current number of conversations
-        const initialCount = conversations.length;
-        let checkCount = 0;
-        const maxChecks = 20; // Maximum number of checks (6 seconds total)
-
-        // Create a function to check if conversations have been loaded
-        const checkConversationsLoaded = () => {
-          checkCount++;
-
-          // If conversations have been updated, resolve the promise
-          if (conversations.length > initialCount) {
-            console.log(`Conversations loaded: ${conversations.length} (was ${initialCount})`);
-            resolve();
-            return;
+        // Create a one-time event listener for the conversations_list message
+        const handleConversationsLoaded = (event: any) => {
+          try {
+            const data = JSON.parse(event.detail);
+            if (data.type === "conversations_list") {
+              console.log("Received conversations_list event, resolving promise");
+              // Remove the event listener
+              window.removeEventListener('data-message-received', handleConversationsLoaded);
+              resolve();
+            }
+          } catch (e) {
+            // Ignore parsing errors
           }
-
-          // If we've been checking for too long, resolve anyway
-          if (checkCount >= maxChecks) {
-            console.log(`Timed out waiting for conversations after ${checkCount} checks`);
-            resolve();
-            return;
-          }
-
-          // Log progress
-          console.log(`Waiting for conversations to load... (check ${checkCount}/${maxChecks})`);
-
-          // Check again in 300ms
-          setTimeout(checkConversationsLoaded, 300);
         };
 
-        // Start checking immediately
-        checkConversationsLoaded();
+        // Add the event listener
+        window.addEventListener('data-message-received', handleConversationsLoaded);
+
+        // Also set a timeout as a fallback
+        setTimeout(() => {
+          console.log("Timed out waiting for conversations_list event, resolving anyway");
+          window.removeEventListener('data-message-received', handleConversationsLoaded);
+          resolve();
+        }, 3000); // 3 second timeout
       });
     } catch (error) {
       handleError(error, 'conversation', 'Error loading conversations');
@@ -273,6 +265,43 @@ export function ConversationManager() {
       return;
     }
 
+    // Check if we already have an empty conversation in the list
+    const hasEmptyConversation = conversations.some(conv => {
+      // If we have the full conversation data in currentConversation
+      if (currentConversation && currentConversation.id === conv.id) {
+        // Check if it has no user messages or meaningful AI messages
+        const hasUserMessages = currentConversation.messages?.some(
+          msg => msg.type === 'user' || (msg.type === 'ai' && msg.content.trim().length > 0)
+        );
+        return !hasUserMessages;
+      }
+
+      // If we don't have full data, check if it has any messages at all
+      return !conv.message_count || conv.message_count === 0;
+    });
+
+    if (hasEmptyConversation) {
+      console.log("An empty conversation already exists, not creating a new one");
+
+      // Find the empty conversation and switch to it instead of creating a new one
+      const emptyConversation = conversations.find(conv => {
+        if (currentConversation && currentConversation.id === conv.id) {
+          const hasUserMessages = currentConversation.messages?.some(
+            msg => msg.type === 'user' || (msg.type === 'ai' && msg.content.trim().length > 0)
+          );
+          return !hasUserMessages;
+        }
+        return !conv.message_count || conv.message_count === 0;
+      });
+
+      if (emptyConversation && (!currentConversation || currentConversation.id !== emptyConversation.id)) {
+        console.log("Switching to existing empty conversation:", emptyConversation.id);
+        fetchConversation(emptyConversation.id);
+      }
+
+      return;
+    }
+
     // Check if current conversation is empty and we're trying to create another one
     if (currentConversation) {
       // Check if the conversation has no messages or only system messages
@@ -334,7 +363,7 @@ export function ConversationManager() {
   /**
    * Handle initial conversation loading when connected
    * This ensures we IMMEDIATELY load the conversation list in the sidebar
-   * and then create a new conversation by default
+   * and then create a new conversation by default only if needed
    */
   useEffect(() => {
     // Only run this effect when we first connect
@@ -374,8 +403,39 @@ export function ConversationManager() {
           // Wait for the conversations to be fetched
           await fetchConversations();
 
-          // Always create a new conversation by default, regardless of whether we loaded history
-          console.log("Creating a new conversation by default");
+          // Check if we already have conversations
+          if (conversations.length > 0) {
+            console.log("Conversations loaded, checking for empty conversations");
+
+            // Check if there's already an empty conversation
+            const emptyConversation = conversations.find(conv =>
+              !conv.message_count || conv.message_count === 0
+            );
+
+            if (emptyConversation) {
+              console.log("Found existing empty conversation, loading it:", emptyConversation.id);
+              // Load the empty conversation instead of creating a new one
+              localStorage.setItem('current-conversation-id', emptyConversation.id);
+              fetchConversation(emptyConversation.id);
+              return;
+            }
+
+            // If there's a current conversation ID in localStorage, try to load it
+            const currentId = localStorage.getItem('current-conversation-id');
+            if (currentId) {
+              const conversationExists = conversations.some(c => c.id === currentId);
+              if (conversationExists) {
+                console.log("Loading existing conversation from localStorage:", currentId);
+                fetchConversation(currentId);
+                return;
+              }
+            }
+          }
+
+
+
+          // Only create a new conversation if we don't have any or don't have an empty one
+          console.log("No empty conversations found, creating a new one");
 
           // Clear any existing conversation ID from localStorage
           localStorage.removeItem('current-conversation-id');
@@ -404,7 +464,7 @@ export function ConversationManager() {
       // This gives the direct request a chance to complete first
       setTimeout(() => loadConversationsWithRetry(), 500);
     }
-  }, [isConnected, room, initialLoadDone]);
+  }, [isConnected, room, initialLoadDone, conversations]);
 
   // Check localStorage on component mount to see if we've already done the initial load
   useEffect(() => {
@@ -451,6 +511,14 @@ export function ConversationManager() {
           // Update the conversations list in state with sorted conversations
           setConversations(sortedConversations);
 
+          // Dispatch a custom event that our promise can listen for
+          if (typeof window !== 'undefined') {
+            const event = new CustomEvent('data-message-received', {
+              detail: JSON.stringify(data)
+            });
+            window.dispatchEvent(event);
+          }
+
           // Get the current conversation ID from localStorage
           const currentId = localStorage.getItem('current-conversation-id');
 
@@ -491,6 +559,39 @@ export function ConversationManager() {
         } else if (data.type === "new_conversation_created") {
           // Handle new conversation creation
           console.log("New conversation created with ID:", data.conversation_id);
+
+          // Check if we already have an empty conversation in the list
+          const hasEmptyConversation = conversations.some(conv => {
+            // Skip the newly created conversation
+            if (conv.id === data.conversation_id) return false;
+
+            // If we have the full conversation data in currentConversation
+            if (currentConversation && currentConversation.id === conv.id) {
+              // Check if it has no user messages or meaningful AI messages
+              const hasUserMessages = currentConversation.messages?.some(
+                msg => msg.type === 'user' || (msg.type === 'ai' && msg.content.trim().length > 0)
+              );
+              return !hasUserMessages;
+            }
+
+            // If we don't have full data, check if it has any messages at all
+            return !conv.message_count || conv.message_count === 0;
+          });
+
+          if (hasEmptyConversation && !isCreatingNewConversation) {
+            console.log("Ignoring new conversation creation as we already have an empty one");
+            // Don't update localStorage or load the new conversation
+            // This prevents having multiple empty conversations
+
+            // Reset the creating flag
+            setIsCreatingNewConversation(false);
+
+            // Refresh the conversation list to include the new conversation
+            // but don't switch to it
+            fetchConversations();
+
+            return;
+          }
 
           // Update localStorage with the new conversation ID
           localStorage.setItem('current-conversation-id', data.conversation_id);

@@ -999,12 +999,55 @@ async def entrypoint(ctx: JobContext):
                         }
                         await safe_publish_data(ctx.room.local_participant, json.dumps(response_message).encode())
             elif message.get('type') == 'new_conversation':
-                # Create a new conversation
-                current_conversation_id = database.create_conversation(message.get('title', f"Conversation-{datetime.now().isoformat()}"))
+                # Check if there are any existing empty conversations
+                empty_conversation_id = None
+                conversations = database.list_conversations(limit=10)
+
+                for conv in conversations:
+                    # Check if this conversation has any messages
+                    if not conv.get("message_count") or conv.get("message_count") == 0:
+                        empty_conversation_id = conv["id"]
+                        logger.info(f"Found existing empty conversation: {empty_conversation_id}")
+                        break
+
+                # If we found an empty conversation, use it instead of creating a new one
+                if empty_conversation_id:
+                    current_conversation_id = empty_conversation_id
+                    logger.info(f"Using existing empty conversation: {current_conversation_id}")
+
+                    # Update the conversation's timestamp to move it to the top of the list
+                    try:
+                        now = datetime.now().isoformat()
+                        conn = database.get_db_connection()
+                        cursor = conn.cursor()
+                        cursor.execute(
+                            "UPDATE conversations SET updated_at = ? WHERE id = ?",
+                            (now, current_conversation_id)
+                        )
+                        conn.commit()
+                        logger.info(f"Updated timestamp for conversation: {current_conversation_id}")
+
+                        # After updating the timestamp, send the updated conversation list
+                        # This ensures the frontend shows the empty conversation at the top
+                        conversations = database.list_conversations(limit=20)
+                        list_response = {
+                            "type": "conversations_list",
+                            "conversations": conversations
+                        }
+                        await safe_publish_data(ctx.room.local_participant, json.dumps(list_response).encode())
+                        logger.info("Sent updated conversation list after timestamp update")
+                    except Exception as e:
+                        logger.error(f"Error updating conversation timestamp: {e}")
+                    finally:
+                        database.release_connection(conn)
+                else:
+                    # Create a new conversation only if there are no empty ones
+                    current_conversation_id = database.create_conversation(message.get('title', f"Conversation-{datetime.now().isoformat()}"))
+                    logger.info(f"Created new conversation with ID: {current_conversation_id}")
 
                 # Store the teaching mode in the session data
                 teaching_mode = message.get('teaching_mode', 'teacher')
-                logger.info(f"New conversation created with teaching mode: {teaching_mode}")
+                logger.info(f"Using teaching mode: {teaching_mode}")
 
                 # Store the teaching mode in a global variable or session data
                 # For now, we'll just log it
@@ -1021,8 +1064,51 @@ async def entrypoint(ctx: JobContext):
 
                 # Check if we need to create a new conversation
                 if message.get('new_conversation'):
-                    current_conversation_id = database.create_conversation(f"Conversation-{ctx.room.name}-{datetime.now().isoformat()}")
-                    logger.info(f"Created new conversation with ID: {current_conversation_id}")
+                    # Check if there are any existing empty conversations
+                    empty_conversation_id = None
+                    conversations = database.list_conversations(limit=10)
+
+                    for conv in conversations:
+                        # Check if this conversation has any messages
+                        if not conv.get("message_count") or conv.get("message_count") == 0:
+                            empty_conversation_id = conv["id"]
+                            logger.info(f"Found existing empty conversation: {empty_conversation_id}")
+                            break
+
+                    # If we found an empty conversation, use it instead of creating a new one
+                    if empty_conversation_id:
+                        current_conversation_id = empty_conversation_id
+                        logger.info(f"Using existing empty conversation: {current_conversation_id}")
+
+                        # Update the conversation's timestamp to move it to the top of the list
+                        try:
+                            now = datetime.now().isoformat()
+                            conn = database.get_db_connection()
+                            cursor = conn.cursor()
+                            cursor.execute(
+                                "UPDATE conversations SET updated_at = ? WHERE id = ?",
+                                (now, current_conversation_id)
+                            )
+                            conn.commit()
+                            logger.info(f"Updated timestamp for conversation: {current_conversation_id}")
+
+                            # After updating the timestamp, send the updated conversation list
+                            # This ensures the frontend shows the empty conversation at the top
+                            conversations = database.list_conversations(limit=20)
+                            list_response = {
+                                "type": "conversations_list",
+                                "conversations": conversations
+                            }
+                            await safe_publish_data(ctx.room.local_participant, json.dumps(list_response).encode())
+                            logger.info("Sent updated conversation list after timestamp update")
+                        except Exception as e:
+                            logger.error(f"Error updating conversation timestamp: {e}")
+                        finally:
+                            database.release_connection(conn)
+                    else:
+                        # Create a new conversation only if there are no empty ones
+                        current_conversation_id = database.create_conversation(f"Conversation-{ctx.room.name}-{datetime.now().isoformat()}")
+                        logger.info(f"Created new conversation with ID: {current_conversation_id}")
 
                 # Check if this is a hidden instruction
                 is_hidden = message.get('hidden', False)
