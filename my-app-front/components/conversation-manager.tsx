@@ -5,9 +5,11 @@ import { useMaybeRoomContext } from "@livekit/components-react";
 import { ConnectionState, Room } from "livekit-client";
 import { useConnectionState } from "@livekit/components-react";
 import { Button } from "./ui/button";
-import { Trash2, Edit, Check, X, MessageSquare, Clock } from "lucide-react";
+import { Trash2, Edit, Check, X, MessageSquare, Clock, BookOpen, HelpCircle } from "lucide-react";
 import { motion } from "framer-motion";
 import { useErrorHandler } from "@/hooks/use-error-handler";
+import { useSettings } from "@/hooks/use-settings";
+import { ProgressBar } from "./ui/progress-bar";
 
 // Helper function to check if a room is connected
 // This avoids TypeScript errors with ConnectionState comparison
@@ -20,6 +22,7 @@ interface Conversation {
   title: string;
   created_at: string;
   updated_at: string;
+  teaching_mode?: 'teacher' | 'qa'; // Add teaching mode to the interface
   message_count?: number;
   last_message?: {
     type: string;
@@ -46,11 +49,9 @@ interface ConversationData {
   title: string;
   created_at: string;
   updated_at: string;
+  teaching_mode?: 'teacher' | 'qa'; // Add teaching mode to the interface
   messages: ConversationMessage[];
 }
-
-// Import the progress bar
-import { ProgressBar } from "./ui/progress-bar";
 
 export function ConversationManager() {
   const [conversations, setConversations] = useState<Conversation[]>([]);
@@ -61,10 +62,12 @@ export function ConversationManager() {
   const [editTitle, setEditTitle] = useState("");
   const [initialLoadDone, setInitialLoadDone] = useState(false); // Flag to track initial load
   const [isCreatingNewConversation, setIsCreatingNewConversation] = useState(false); // Flag to prevent multiple creations
+  const [modeWarning, setModeWarning] = useState<string | null>(null); // Warning message for mode mismatch
   const room = useMaybeRoomContext();
   const connectionState = useConnectionState();
   const isConnected = connectionState === ConnectionState.Connected;
   const { handleError } = useErrorHandler();
+  const { settings } = useSettings(); // Get current settings including teaching mode
 
   /**
    * Function to fetch the list of conversations from the server
@@ -174,6 +177,31 @@ export function ConversationManager() {
    */
   const fetchConversation = async (conversationId: string) => {
     if (!room) return;
+
+    // Clear any previous mode warning
+    setModeWarning(null);
+
+    // Find the conversation in our list to check its teaching mode
+    const conversation = conversations.find(c => c.id === conversationId);
+
+    // Check if the conversation's teaching mode matches the current mode
+    if (conversation && conversation.teaching_mode) {
+      const currentMode = settings.teachingMode;
+
+      // If the modes don't match, show a warning and don't switch
+      if (conversation.teaching_mode !== currentMode) {
+        console.log(`Mode mismatch: Conversation is in ${conversation.teaching_mode} mode, but current mode is ${currentMode}`);
+
+        // Set a warning message
+        setModeWarning(
+          `This conversation is in ${conversation.teaching_mode === 'teacher' ? 'Teacher' : 'Q&A'} mode. ` +
+          `Please switch to ${conversation.teaching_mode === 'teacher' ? 'Teacher' : 'Q&A'} mode to access it.`
+        );
+
+        // Don't proceed with loading the conversation
+        return;
+      }
+    }
 
     setIsLoading(true);
     try {
@@ -335,10 +363,11 @@ export function ConversationManager() {
       // Clear the current conversation in state to show loading state
       setCurrentConversation(null);
 
-      // Create a message to request a new conversation
+      // Create a message to request a new conversation with the current teaching mode
       const message = {
         type: "new_conversation",
-        title: `New Conversation`
+        title: "New Conversation",
+        teaching_mode: settings.teachingMode
       };
 
       console.log("Creating new conversation...");
@@ -473,6 +502,62 @@ export function ConversationManager() {
       setInitialLoadDone(true);
     }
   }, []);
+
+  // Listen for the custom event to create a new conversation when switching modes
+  useEffect(() => {
+    if (!room) return;
+
+    const handleCreateNewConversationForModeSwitch = (event: Event) => {
+      const customEvent = event as CustomEvent;
+      const teachingMode = customEvent.detail?.teachingMode;
+
+      console.log(`Creating new conversation for mode switch to: ${teachingMode}`);
+
+      // Clear the current conversation ID in localStorage
+      localStorage.removeItem('current-conversation-id');
+
+      // Clear the current conversation in state
+      setCurrentConversation(null);
+
+      // Clear any existing conversations from the UI that don't match the new mode
+      setConversations(prev =>
+        prev.filter(conv => conv.teaching_mode === teachingMode)
+      );
+
+      // Create a message to request a new conversation with the specified teaching mode
+      const message = {
+        type: "new_conversation",
+        title: "New Conversation",
+        teaching_mode: teachingMode
+      };
+
+      // Set the creating flag to prevent duplicate creations
+      setIsCreatingNewConversation(true);
+
+      // Send the request to create a new conversation
+      room.localParticipant.publishData(
+        new TextEncoder().encode(JSON.stringify(message))
+      ).catch(error => {
+        console.error("Error creating new conversation for mode switch:", error);
+      }).finally(() => {
+        // Reset the creating flag after a short delay
+        setTimeout(() => {
+          setIsCreatingNewConversation(false);
+        }, 1000);
+      });
+
+      // Also refresh the conversation list to ensure we have the latest data
+      fetchConversations().catch(err =>
+        console.error("Error refreshing conversation list after mode switch:", err)
+      );
+    };
+
+    window.addEventListener('create-new-conversation-for-mode-switch', handleCreateNewConversationForModeSwitch);
+
+    return () => {
+      window.removeEventListener('create-new-conversation-for-mode-switch', handleCreateNewConversationForModeSwitch);
+    };
+  }, [room]);
 
   // Listen for data messages from the server
   useEffect(() => {
@@ -632,9 +717,12 @@ export function ConversationManager() {
           if (currentConversation?.id === data.conversation_id) {
             setCurrentConversation(null);
 
-            // If a new conversation was created, load it
-            if (data.new_conversation_id) {
-              fetchConversation(data.new_conversation_id);
+            // If a new conversation was created, load it after a short delay
+            // This ensures state updates are processed in the correct order
+            if (data.new_conversation_id && data.new_conversation_id !== data.conversation_id) {
+              setTimeout(() => {
+                fetchConversation(data.new_conversation_id);
+              }, 100);
             }
           }
 
@@ -643,19 +731,46 @@ export function ConversationManager() {
             console.error("Error refreshing conversation list:", err)
           );
         } else if (data.type === "all_conversations_cleared") {
-          // Clear the conversations list
-          setConversations([]);
-          setCurrentConversation(null);
+          const currentMode = settings.teachingMode;
+          const responseMode = data.teaching_mode;
 
-          // Load the new conversation
-          if (data.new_conversation_id) {
-            fetchConversation(data.new_conversation_id);
+          // Only update UI if the response matches our current mode
+          if (responseMode === currentMode) {
+            console.log(`Cleared ${data.deleted_count} conversations in ${responseMode} mode`);
+
+            // Filter out conversations with the cleared mode
+            setConversations(prev =>
+              prev.filter(conv => conv.teaching_mode && conv.teaching_mode !== responseMode)
+            );
+
+            // Clear current conversation if it was in the cleared mode
+            if (currentConversation?.teaching_mode === responseMode) {
+              setCurrentConversation(null);
+            }
+
+            // Load the new conversation
+            if (data.new_conversation_id) {
+              // Store the new conversation ID in localStorage first
+              localStorage.setItem('current-conversation-id', data.new_conversation_id);
+              console.log(`Stored new conversation ID after clearing: ${data.new_conversation_id}`);
+
+              // Then fetch the conversation with a small delay to ensure the backend is ready
+              setTimeout(() => {
+                fetchConversation(data.new_conversation_id);
+              }, 100);
+            }
+
+            // Refresh the conversation list
+            fetchConversations().catch(err =>
+              console.error("Error refreshing conversation list:", err)
+            );
+          } else {
+            console.log(`Received clear confirmation for ${responseMode} mode, but we're in ${currentMode} mode. Ignoring.`);
+            // Still refresh the list to get the updated state
+            fetchConversations().catch(err =>
+              console.error("Error refreshing conversation list:", err)
+            );
           }
-
-          // Refresh the conversation list
-          fetchConversations().catch(err =>
-            console.error("Error refreshing conversation list:", err)
-          );
         }
       } catch (e) {
         handleError(e, 'conversation', 'Error processing conversation data');
@@ -727,20 +842,24 @@ export function ConversationManager() {
   const clearAllConversations = async () => {
     if (!room) return;
 
-    if (!window.confirm("Are you sure you want to clear all conversations? This cannot be undone.")) {
+    const currentMode = settings.teachingMode;
+    const modeText = currentMode === 'teacher' ? 'Teacher' : 'Q&A';
+
+    if (!window.confirm(`Are you sure you want to clear all ${modeText} mode conversations? This cannot be undone.`)) {
       return;
     }
 
     setIsLoading(true);
     try {
       const message = {
-        type: "clear_all_conversations"
+        type: "clear_all_conversations",
+        teaching_mode: currentMode // Include the current teaching mode
       };
       await room.localParticipant.publishData(
         new TextEncoder().encode(JSON.stringify(message))
       );
     } catch (error) {
-      handleError(error, 'conversation', 'Error clearing all conversations');
+      handleError(error, 'conversation', `Error clearing ${modeText} mode conversations`);
     } finally {
       setIsLoading(false);
     }
@@ -793,8 +912,8 @@ export function ConversationManager() {
             variant="ghost"
             size="icon"
             className="h-10 w-10 rounded-full text-danger-DEFAULT hover:text-danger-hover hover:bg-danger-DEFAULT/10 transition-colors duration-200"
-            title="Clear All Conversations"
-            disabled={isLoading || conversations.length === 0}
+            title={`Clear All ${settings.teachingMode === 'teacher' ? 'Teacher' : 'Q&A'} Mode Conversations`}
+            disabled={isLoading || conversations.filter(c => !c.teaching_mode || c.teaching_mode === settings.teachingMode).length === 0}
           >
             <Trash2 size={18} />
           </Button>
@@ -817,6 +936,21 @@ export function ConversationManager() {
 
       <div className="flex-1 overflow-y-auto">
         <div className="p-4">
+          {/* Mode information banner */}
+          <div className="mb-4 p-3 bg-bg-tertiary/20 border border-bg-tertiary/30 rounded-lg text-sm text-text-secondary">
+            <div className="flex items-center gap-2">
+              {settings.teachingMode === 'qa' ? (
+                <HelpCircle className="w-4 h-4 text-primary-DEFAULT" />
+              ) : (
+                <BookOpen className="w-4 h-4 text-primary-DEFAULT" />
+              )}
+              <p>
+                You are in <span className="font-medium text-primary-DEFAULT">
+                  {settings.teachingMode === 'qa' ? 'Q&A' : 'Teacher'}
+                </span> mode. Only conversations in this mode are shown.
+              </p>
+            </div>
+          </div>
           {isLoading && conversations.length === 0 && (
             <div className="flex flex-col items-center justify-center py-12 gap-5">
               <div className="w-14 h-14 rounded-full bg-bg-tertiary/50 flex items-center justify-center shadow-inner">
@@ -843,11 +977,26 @@ export function ConversationManager() {
             </div>
           )}
 
+          {/* Warning message for mode mismatch */}
+          {modeWarning && (
+            <div className="mb-4 p-3 bg-warning-light border border-warning-DEFAULT rounded-lg text-sm text-warning-dark">
+              <p>{modeWarning}</p>
+            </div>
+          )}
+
           {conversations.length > 0 && (
             <div className="space-y-1.5">
-              {conversations.map((conversation) => (
+              {/* Filter conversations based on current mode */}
+              {conversations
+                .filter(conversation => {
+                  // Filter out conversations with null IDs
+                  if (!conversation.id) return false;
+                  // Filter based on teaching mode
+                  return !conversation.teaching_mode || conversation.teaching_mode === settings.teachingMode;
+                })
+                .map((conversation) => (
                 <motion.div
-                  key={conversation.id}
+                  key={conversation.id || `temp-${Date.now()}`} // Ensure we always have a unique key
                   className={`p-3 rounded-lg mb-2 shadow-sm border group cursor-pointer transition-all duration-200 ${currentConversation?.id === conversation.id
                     ? "bg-bg-tertiary/30 border-primary-DEFAULT/30"
                     : "hover:bg-bg-tertiary/10 border-bg-tertiary/30 hover:shadow-md hover:-translate-y-0.5"}`}
@@ -855,7 +1004,7 @@ export function ConversationManager() {
                   animate={{ opacity: 1 }}
                   transition={{ duration: 0.2, ease: "easeOut" }}
                   style={{ willChange: "opacity, transform" }}
-                  onClick={() => fetchConversation(conversation.id)}
+                  onClick={() => conversation.id && fetchConversation(conversation.id)}
                 >
                   {editingId === conversation.id ? (
                     <div className="flex flex-col gap-2">
@@ -897,7 +1046,16 @@ export function ConversationManager() {
                   ) : (
                     <div>
                       <div className="flex justify-between items-start mb-3">
-                        <h3 className="font-medium text-text-primary break-words pr-2 text-sm">{conversation.title}</h3>
+                        <div className="flex items-center gap-1.5">
+                          {/* Mode indicator icon - always show based on teaching_mode */}
+                          {conversation.teaching_mode === 'qa' ? (
+                            <HelpCircle className="w-3.5 h-3.5 text-primary-DEFAULT flex-shrink-0" />
+                          ) : (
+                            // Default to teacher mode icon if teaching_mode is missing or is 'teacher'
+                            <BookOpen className="w-3.5 h-3.5 text-primary-DEFAULT flex-shrink-0" />
+                          )}
+                          <h3 className="font-medium text-text-primary break-words pr-2 text-sm">{conversation.title}</h3>
+                        </div>
                         <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                           <Button
                             onClick={(e) => {

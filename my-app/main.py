@@ -11,6 +11,7 @@ from livekit.plugins.openai import stt as plugin
 from livekit.plugins import silero
 from dotenv import load_dotenv
 import database
+import database_updates
 from tts_web import WebTTS
 
 load_dotenv(dotenv_path=".env.local")
@@ -976,17 +977,22 @@ async def entrypoint(ctx: JobContext):
             message = json.loads(message_str)
 
             if message.get('type') == 'clear_all_conversations':
-                # Clear all conversations
-                deleted_count = database.clear_all_conversations()
-                logger.info(f"Cleared {deleted_count} conversations")
+                # Get the teaching mode from the message
+                teaching_mode = message.get('teaching_mode', 'teacher')
 
-                # Create a new conversation
-                current_conversation_id = database.create_conversation(f"New Conversation")
-                logger.info(f"Created new conversation with ID: {current_conversation_id}")
+                # Clear conversations for the specified teaching mode
+                result = database_updates.clear_conversations_by_mode(teaching_mode)
+                deleted_count = result["deleted_count"]
+                current_conversation_id = result["new_conversation_id"]
+
+                logger.info(f"Cleared {deleted_count} conversations with teaching mode: {teaching_mode}")
+                logger.info(f"Created new conversation with ID: {current_conversation_id} and teaching mode: {teaching_mode}")
 
                 response_message = {
                     "type": "all_conversations_cleared",
-                    "new_conversation_id": current_conversation_id
+                    "new_conversation_id": current_conversation_id,
+                    "teaching_mode": teaching_mode,
+                    "deleted_count": deleted_count
                 }
                 await safe_publish_data(ctx.room.local_participant, json.dumps(response_message).encode())
             elif message.get('type') == 'rename_conversation':
@@ -1022,14 +1028,40 @@ async def entrypoint(ctx: JobContext):
                                 logger.info(f"Switched to existing conversation with ID: {current_conversation_id}")
                             else:
                                 # Create a new conversation if none exist
-                                current_conversation_id = database.create_conversation(f"New Conversation")
+                                current_conversation_id = database.create_conversation("New Conversation")
                                 logger.info(f"Created new conversation with ID: {current_conversation_id}")
 
                         # If we deleted the current conversation, we need to send the new conversation ID
                         # Otherwise, we don't need to send a new conversation ID
                         new_conversation_id = None
                         if current_conversation_id == conversation_id:
+                            # The current conversation is the one we just deleted
+                            # We need to create or find a new one
+                            # Get remaining conversations with the current teaching mode
+                            teaching_mode = None
+                            try:
+                                # Try to get the teaching mode from the deleted conversation
+                                conn = database.get_db_connection()
+                                cursor = conn.cursor()
+                                cursor.execute(
+                                    "SELECT teaching_mode FROM conversations WHERE id = ?",
+                                    (conversation_id,)
+                                )
+                                result = cursor.fetchone()
+                                if result:
+                                    teaching_mode = result['teaching_mode']
+                            except Exception as e:
+                                logger.error(f"Error getting teaching mode: {e}")
+                            finally:
+                                database.release_connection(conn)
+
+                            # Create a new conversation with the same teaching mode
+                            current_conversation_id = database.create_conversation(
+                                title="New Conversation",
+                                teaching_mode=teaching_mode
+                            )
                             new_conversation_id = current_conversation_id
+                            logger.info(f"Created new conversation with ID: {new_conversation_id} and teaching mode: {teaching_mode}")
 
                         response_message = {
                             "type": "conversation_deleted",
@@ -1099,8 +1131,12 @@ async def entrypoint(ctx: JobContext):
                 else:
                     # Create a new conversation only if there are no empty ones
                     teaching_mode = message.get('teaching_mode', 'teacher')
+                    # Ensure teaching_mode is either 'teacher' or 'qa'
+                    if teaching_mode not in ['teacher', 'qa']:
+                        teaching_mode = 'teacher'  # Default to teacher mode if invalid
+
                     current_conversation_id = database.create_conversation(
-                        title=message.get('title', f"Conversation-{datetime.now().isoformat()}"),
+                        title="New Conversation",
                         teaching_mode=teaching_mode
                     )
                     logger.info(f"Created new conversation with ID: {current_conversation_id} and teaching mode: {teaching_mode}")
@@ -1140,12 +1176,33 @@ async def entrypoint(ctx: JobContext):
                     empty_conversation_id = None
                     conversations = database.list_conversations(limit=10)
 
-                    for conv in conversations:
-                        # Check if this conversation has any messages
-                        if not conv.get("message_count") or conv.get("message_count") == 0:
-                            empty_conversation_id = conv["id"]
-                            logger.info(f"Found existing empty conversation: {empty_conversation_id}")
-                            break
+                    # First, verify if the current conversation exists
+                    current_exists = False
+                    if current_conversation_id:
+                        try:
+                            # Check if the conversation exists in the database
+                            conn = database.get_db_connection()
+                            cursor = conn.cursor()
+                            cursor.execute("SELECT id FROM conversations WHERE id = ?", (current_conversation_id,))
+                            result = cursor.fetchone()
+                            if result:
+                                current_exists = True
+                            database.release_connection(conn)
+                        except Exception as e:
+                            logger.error(f"Error checking if conversation exists: {e}")
+
+                    # If current conversation doesn't exist, force creating a new one
+                    if not current_exists:
+                        logger.warning(f"Current conversation ID {current_conversation_id} does not exist, will create a new one")
+                        current_conversation_id = None
+                    else:
+                        # Look for empty conversations
+                        for conv in conversations:
+                            # Check if this conversation has any messages
+                            if not conv.get("message_count") or conv.get("message_count") == 0:
+                                empty_conversation_id = conv["id"]
+                                logger.info(f"Found existing empty conversation: {empty_conversation_id}")
+                                break
 
                     # If we found an empty conversation, use it instead of creating a new one
                     if empty_conversation_id:
@@ -1175,8 +1232,12 @@ async def entrypoint(ctx: JobContext):
                     else:
                         # Create a new conversation only if there are no empty ones
                         teaching_mode = message.get('teaching_mode', 'teacher')
+                        # Ensure teaching_mode is either 'teacher' or 'qa'
+                        if teaching_mode not in ['teacher', 'qa']:
+                            teaching_mode = 'teacher'  # Default to teacher mode if invalid
+
                         current_conversation_id = database.create_conversation(
-                            title=f"Conversation-{ctx.room.name}-{datetime.now().isoformat()}",
+                            title="New Conversation",
                             teaching_mode=teaching_mode
                         )
                         logger.info(f"Created new conversation with ID: {current_conversation_id} and teaching mode: {teaching_mode}")

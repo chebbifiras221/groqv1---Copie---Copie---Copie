@@ -31,10 +31,29 @@ export function Header({ title = "Programming Teacher" }: HeaderProps) {
     setCurrentMode(settings.teachingMode || 'teacher');
   }, [settings.teachingMode]);
 
-  // Toggle between teacher and Q&A modes
+  // Toggle between teacher and Q&A modes and create a new conversation
   const toggleTeachingMode = () => {
     const newMode = currentMode === 'teacher' ? 'qa' : 'teacher';
+
+    // First update the teaching mode in settings
     updateSettings({ teachingMode: newMode });
+
+    // Then create a new conversation with the new mode
+    // This ensures the conversation uses the new teaching mode
+    if (typeof window !== 'undefined') {
+      // Create a custom event to trigger a new conversation creation
+      // This is more reliable than directly manipulating localStorage
+      const createNewConversationEvent = new CustomEvent('create-new-conversation-for-mode-switch', {
+        detail: { teachingMode: newMode }
+      });
+      window.dispatchEvent(createNewConversationEvent);
+
+      // Also dispatch a course UI reset event
+      const resetEvent = new CustomEvent('course-ui-reset', {
+        detail: { conversationId: 'new' }
+      });
+      window.dispatchEvent(resetEvent);
+    }
   };
 
   const handleDisconnect = () => {

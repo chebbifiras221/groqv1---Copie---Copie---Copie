@@ -87,8 +87,25 @@ export function useConversation() {
     // Check for changes every 300ms as a fallback
     const interval = setInterval(checkForConversationChanges, 300);
 
+    // Listen for mode switch events to clear messages
+    const handleModeSwitch = () => {
+      // Clear messages when switching modes
+      setMessages([]);
+      setLastProcessedTranscription('');
+      setLastProcessedResponseId('');
+
+      // Clear the current conversation ID to force creating a new one
+      setCurrentConversationId(null);
+      localStorage.removeItem('current-conversation-id');
+
+      console.log("Mode switch detected - cleared conversation state");
+    };
+
+    window.addEventListener('create-new-conversation-for-mode-switch', handleModeSwitch);
+
     return () => {
       window.removeEventListener('storage', handleStorageChange);
+      window.removeEventListener('create-new-conversation-for-mode-switch', handleModeSwitch);
       clearInterval(interval);
     };
   }, [currentConversationId]);
@@ -112,6 +129,48 @@ export function useConversation() {
   // Track the last processed transcription and response
   const [lastProcessedTranscription, setLastProcessedTranscription] = useState<string>('');
   const [lastProcessedResponseId, setLastProcessedResponseId] = useState<string>('');
+
+  // Helper function to get the current conversation's teaching mode
+  const getCurrentConversationMode = useCallback((): string | null => {
+    // Get the current conversation ID from localStorage
+    const storedConversationId = localStorage.getItem('current-conversation-id');
+
+    // Try to get the mode from the current conversation
+    if (storedConversationId) {
+      try {
+        // First try to get it from the state if available
+        if (currentConversationId === storedConversationId) {
+          // Check localStorage for conversation data
+          const conversationData = localStorage.getItem(`conversation-${storedConversationId}`);
+          if (conversationData) {
+            try {
+              const parsedData = JSON.parse(conversationData);
+              if (parsedData && parsedData.teaching_mode) {
+                return parsedData.teaching_mode;
+              }
+            } catch (parseError) {
+              console.error('Error parsing conversation data:', parseError);
+            }
+          }
+        }
+
+        // If we can't get it from state, try to infer it from settings
+        // This is a fallback and might not be accurate
+        const storedSettings = localStorage.getItem("app-settings");
+        if (storedSettings) {
+          const parsedSettings = JSON.parse(storedSettings);
+          if (parsedSettings && parsedSettings.teachingMode) {
+            return parsedSettings.teachingMode;
+          }
+        }
+      } catch (e) {
+        console.error('Error getting conversation mode:', e);
+      }
+    }
+
+    // Default to teacher mode if we can't determine
+    return 'teacher';
+  }, [currentConversationId]);
 
   // Listen for user message echoes from the backend
   useEffect(() => {
@@ -330,10 +389,27 @@ export function useConversation() {
           console.error('Error getting teaching mode from settings:', e);
         }
 
+        // Get the current conversation ID from localStorage
+        const storedConversationId = localStorage.getItem('current-conversation-id');
+
+        // Check if we need to create a new conversation for this message
+        // This happens when there's no conversation or the current conversation mode doesn't match the current teaching mode
+        const currentMode = getCurrentConversationMode();
+
+        // Always force a new conversation if we don't have a valid stored ID
+        // This ensures we don't try to send messages to non-existent conversations
+        const needsNewConversation = !storedConversationId ||
+          storedConversationId === 'null' ||
+          storedConversationId === 'undefined' ||
+          (storedConversationId && teachingMode !== currentMode);
+
+        console.log(`Current mode: ${teachingMode}, conversation mode: ${currentMode}, stored ID: ${storedConversationId}, needs new conversation: ${needsNewConversation}`);
+
         const message = {
           type: "text_input",
           text: text.trim(),
-          teaching_mode: teachingMode
+          teaching_mode: teachingMode,
+          new_conversation: needsNewConversation
         };
 
         // Check if the room is connected before attempting to publish
@@ -406,7 +482,7 @@ export function useConversation() {
     }
 
     return undefined;
-  }, [room]);
+  }, [room, currentConversationId, getCurrentConversationMode]);
 
   // Clear all messages and create a new conversation
   const clearMessages = useCallback(() => {
@@ -503,12 +579,29 @@ export function useConversation() {
         console.error('Error getting teaching mode from settings:', e);
       }
 
+      // Get the current conversation ID from localStorage
+      const storedConversationId = localStorage.getItem('current-conversation-id');
+
+      // Check if we need to create a new conversation for this message
+      // This happens when there's no conversation or the current conversation mode doesn't match the current teaching mode
+      const currentMode = getCurrentConversationMode();
+
+      // Always force a new conversation if we don't have a valid stored ID
+      // This ensures we don't try to send messages to non-existent conversations
+      const needsNewConversation = !storedConversationId ||
+        storedConversationId === 'null' ||
+        storedConversationId === 'undefined' ||
+        (storedConversationId && teachingMode !== currentMode);
+
+      console.log(`Hidden instruction - Current mode: ${teachingMode}, conversation mode: ${currentMode}, stored ID: ${storedConversationId}, needs new conversation: ${needsNewConversation}`);
+
       // Create a message with a special flag indicating it's a hidden instruction
       const message = {
         type: "text_input",
         text: text.trim(),
         teaching_mode: teachingMode,
-        hidden: true // This flag tells the backend not to echo the message back
+        hidden: true, // This flag tells the backend not to echo the message back
+        new_conversation: needsNewConversation
       };
 
       // Send the message to the backend
@@ -520,7 +613,7 @@ export function useConversation() {
     } catch (error) {
       console.error("Error sending hidden instruction:", error);
     }
-  }, [room]);
+  }, [room, currentConversationId, getCurrentConversationMode]);
 
   return {
     messages,
