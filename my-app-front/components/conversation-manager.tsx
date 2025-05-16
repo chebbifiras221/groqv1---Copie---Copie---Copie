@@ -2,20 +2,20 @@
 
 import { useState, useEffect } from "react";
 import { useMaybeRoomContext } from "@livekit/components-react";
-import { ConnectionState, Room } from "livekit-client";
+import { ConnectionState } from "livekit-client";
 import { useConnectionState } from "@livekit/components-react";
 import { Button } from "./ui/button";
-import { Trash2, Edit, Check, X, MessageSquare, Clock, BookOpen, HelpCircle } from "lucide-react";
-import { motion } from "framer-motion";
+import { Trash2, MessageSquare, BookOpen, HelpCircle } from "lucide-react";
 import { useErrorHandler } from "@/hooks/use-error-handler";
 import { useSettings } from "@/hooks/use-settings";
 import { ProgressBar } from "./ui/progress-bar";
-
-// Helper function to check if a room is connected
-// This avoids TypeScript errors with ConnectionState comparison
-function isRoomConnected(room: Room): boolean {
-  return room.state === ConnectionState.Connected;
-}
+import { ConversationItem } from "./conversation-item";
+import {
+  isRoomConnected,
+  publishDataWithRetry,
+  isConversationEmpty,
+  waitForEvent
+} from "@/utils/conversation-utils";
 
 interface Conversation {
   id: string;
@@ -58,8 +58,6 @@ export function ConversationManager() {
   const [currentConversation, setCurrentConversation] = useState<ConversationData | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [isLoadingHistory, setIsLoadingHistory] = useState(false); // Specific state for history loading
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [editTitle, setEditTitle] = useState("");
   const [initialLoadDone, setInitialLoadDone] = useState(false); // Flag to track initial load
   const [isCreatingNewConversation, setIsCreatingNewConversation] = useState(false); // Flag to prevent multiple creations
   const [modeWarning, setModeWarning] = useState<string | null>(null); // Warning message for mode mismatch
@@ -78,86 +76,20 @@ export function ConversationManager() {
 
     setIsLoading(true);
     setIsLoadingHistory(true); // Set history loading state for progress bar
+
     try {
       const message = {
         type: "list_conversations"
       };
 
-      // Check if the room is connected before attempting to publish
-      if (room.state !== ConnectionState.Connected) {
-        console.warn('Room not connected, attempting to reconnect...');
+      // Use our utility to publish data with retry logic
+      await publishDataWithRetry(room, message);
+      console.log('Successfully requested conversation list');
 
-        // Wait for the room to reconnect (up to 5 seconds)
-        for (let i = 0; i < 5; i++) {
-          await new Promise(resolve => setTimeout(resolve, 1000));
+      // Wait for the conversations_list event
+      await waitForEvent("conversations_list");
 
-          // Need to check the current state each time
-          // Using a function to check the state to avoid TypeScript errors
-          if (isRoomConnected(room)) {
-            console.log('Room reconnected successfully');
-            break;
-          }
-
-          // If we've waited 5 seconds and still not connected, throw an error
-          if (i === 4) {
-            throw new Error('Room failed to reconnect after 5 seconds');
-          }
-        }
-      }
-
-      // Send the request to the server with retry logic
-      let retryCount = 0;
-      const maxRetries = 3;
-
-      while (retryCount < maxRetries) {
-        try {
-          await room.localParticipant.publishData(
-            new TextEncoder().encode(JSON.stringify(message))
-          );
-          console.log('Successfully requested conversation list');
-          break; // Success, exit the loop
-        } catch (publishError) {
-          retryCount++;
-          console.warn(`Publish attempt ${retryCount} failed:`, publishError);
-
-          if (retryCount >= maxRetries) {
-            throw publishError; // Rethrow after max retries
-          }
-
-          // Wait with exponential backoff before retrying
-          const delay = 300 * Math.pow(2, retryCount - 1);
-          await new Promise(resolve => setTimeout(resolve, delay));
-        }
-      }
-
-      // Return a promise that resolves when the conversations are actually loaded
-      // We'll wait for the server to respond and update the state
-      return new Promise<void>((resolve) => {
-        // Create a one-time event listener for the conversations_list message
-        const handleConversationsLoaded = (event: any) => {
-          try {
-            const data = JSON.parse(event.detail);
-            if (data.type === "conversations_list") {
-              console.log("Received conversations_list event, resolving promise");
-              // Remove the event listener
-              window.removeEventListener('data-message-received', handleConversationsLoaded);
-              resolve();
-            }
-          } catch (e) {
-            // Ignore parsing errors
-          }
-        };
-
-        // Add the event listener
-        window.addEventListener('data-message-received', handleConversationsLoaded);
-
-        // Also set a timeout as a fallback
-        setTimeout(() => {
-          console.log("Timed out waiting for conversations_list event, resolving anyway");
-          window.removeEventListener('data-message-received', handleConversationsLoaded);
-          resolve();
-        }, 3000); // 3 second timeout
-      });
+      return Promise.resolve();
     } catch (error) {
       handleError(error, 'conversation', 'Error loading conversations');
       return Promise.resolve(); // Resolve even on error
@@ -223,49 +155,9 @@ export function ConversationManager() {
         conversation_id: conversationId
       };
 
-      // Check if the room is connected before attempting to publish
-      if (room.state !== ConnectionState.Connected) {
-        console.warn('Room not connected, attempting to reconnect...');
-
-        // Wait for the room to reconnect (up to 5 seconds)
-        for (let i = 0; i < 5; i++) {
-          await new Promise(resolve => setTimeout(resolve, 1000));
-          if (isRoomConnected(room)) {
-            console.log('Room reconnected successfully');
-            break;
-          }
-
-          // If we've waited 5 seconds and still not connected, throw an error
-          if (i === 4) {
-            throw new Error('Room failed to reconnect after 5 seconds');
-          }
-        }
-      }
-
-      // Send the request to the server with retry logic
-      let retryCount = 0;
-      const maxRetries = 3;
-
-      while (retryCount < maxRetries) {
-        try {
-          await room.localParticipant.publishData(
-            new TextEncoder().encode(JSON.stringify(message))
-          );
-          console.log(`Successfully requested conversation: ${conversationId}`);
-          break; // Success, exit the loop
-        } catch (publishError) {
-          retryCount++;
-          console.warn(`Publish attempt ${retryCount} failed:`, publishError);
-
-          if (retryCount >= maxRetries) {
-            throw publishError; // Rethrow after max retries
-          }
-
-          // Wait with exponential backoff before retrying
-          const delay = 300 * Math.pow(2, retryCount - 1);
-          await new Promise(resolve => setTimeout(resolve, delay));
-        }
-      }
+      // Use our utility to publish data with retry logic
+      await publishDataWithRetry(room, message);
+      console.log(`Successfully requested conversation: ${conversationId}`);
 
       // Store the current conversation ID in memory for better state tracking
       // This helps with UI updates and prevents loading issues
@@ -294,33 +186,21 @@ export function ConversationManager() {
     }
 
     // Check if we already have an empty conversation in the list
-    const hasEmptyConversation = conversations.some(conv => {
-      // If we have the full conversation data in currentConversation
-      if (currentConversation && currentConversation.id === conv.id) {
-        // Check if it has no user messages or meaningful AI messages
-        const hasUserMessages = currentConversation.messages?.some(
-          msg => msg.type === 'user' || (msg.type === 'ai' && msg.content.trim().length > 0)
-        );
-        return !hasUserMessages;
-      }
-
-      // If we don't have full data, check if it has any messages at all
-      return !conv.message_count || conv.message_count === 0;
-    });
+    const hasEmptyConversation = conversations.some(conv =>
+      isConversationEmpty(currentConversation && currentConversation.id === conv.id
+        ? currentConversation
+        : conv)
+    );
 
     if (hasEmptyConversation) {
       console.log("An empty conversation already exists, not creating a new one");
 
       // Find the empty conversation and switch to it instead of creating a new one
-      const emptyConversation = conversations.find(conv => {
-        if (currentConversation && currentConversation.id === conv.id) {
-          const hasUserMessages = currentConversation.messages?.some(
-            msg => msg.type === 'user' || (msg.type === 'ai' && msg.content.trim().length > 0)
-          );
-          return !hasUserMessages;
-        }
-        return !conv.message_count || conv.message_count === 0;
-      });
+      const emptyConversation = conversations.find(conv =>
+        isConversationEmpty(currentConversation && currentConversation.id === conv.id
+          ? currentConversation
+          : conv)
+      );
 
       if (emptyConversation && (!currentConversation || currentConversation.id !== emptyConversation.id)) {
         console.log("Switching to existing empty conversation:", emptyConversation.id);
@@ -331,16 +211,9 @@ export function ConversationManager() {
     }
 
     // Check if current conversation is empty and we're trying to create another one
-    if (currentConversation) {
-      // Check if the conversation has no messages or only system messages
-      const hasUserMessages = currentConversation.messages?.some(
-        msg => msg.type === 'user' || (msg.type === 'ai' && msg.content.trim().length > 0)
-      );
-
-      if (!hasUserMessages) {
-        console.log("Current conversation is empty (no user messages), not creating a new one");
-        return;
-      }
+    if (currentConversation && isConversationEmpty(currentConversation)) {
+      console.log("Current conversation is empty (no user messages), not creating a new one");
+      return;
     }
 
     setIsLoading(true);
@@ -372,12 +245,8 @@ export function ConversationManager() {
 
       console.log("Creating new conversation...");
 
-      // Send the request to create a new conversation
-      // The server will respond with a new_conversation_created message
-      // which will be handled by the data received handler
-      await room.localParticipant.publishData(
-        new TextEncoder().encode(JSON.stringify(message))
-      );
+      // Use our utility to publish data with retry logic
+      await publishDataWithRetry(room, message);
     } catch (error) {
       handleError(error, 'conversation', 'Error creating new conversation');
     } finally {
@@ -785,30 +654,17 @@ export function ConversationManager() {
 
 
 
-  const startEditingTitle = (conversation: Conversation) => {
-    setEditingId(conversation.id);
-    setEditTitle(conversation.title);
-  };
-
-  const cancelEditing = () => {
-    setEditingId(null);
-    setEditTitle("");
-  };
-
-  const saveTitle = async (conversationId: string) => {
-    if (!room || !editTitle.trim()) return;
+  const saveTitle = async (conversationId: string, newTitle: string) => {
+    if (!room || !newTitle.trim()) return;
 
     setIsLoading(true);
     try {
       const message = {
         type: "rename_conversation",
         conversation_id: conversationId,
-        title: editTitle.trim()
+        title: newTitle.trim()
       };
-      await room.localParticipant.publishData(
-        new TextEncoder().encode(JSON.stringify(message))
-      );
-      setEditingId(null);
+      await publishDataWithRetry(room, message);
     } catch (error) {
       handleError(error, 'conversation', 'Error renaming conversation');
     } finally {
@@ -829,9 +685,7 @@ export function ConversationManager() {
         type: "delete_conversation",
         conversation_id: conversationId
       };
-      await room.localParticipant.publishData(
-        new TextEncoder().encode(JSON.stringify(message))
-      );
+      await publishDataWithRetry(room, message);
     } catch (error) {
       handleError(error, 'conversation', 'Error deleting conversation');
     } finally {
@@ -855,39 +709,11 @@ export function ConversationManager() {
         type: "clear_all_conversations",
         teaching_mode: currentMode // Include the current teaching mode
       };
-      await room.localParticipant.publishData(
-        new TextEncoder().encode(JSON.stringify(message))
-      );
+      await publishDataWithRetry(room, message);
     } catch (error) {
       handleError(error, 'conversation', `Error clearing ${modeText} mode conversations`);
     } finally {
       setIsLoading(false);
-    }
-  };
-
-  const formatDate = (dateString: string) => {
-    try {
-      const date = new Date(dateString);
-      const now = new Date();
-      const isToday = date.getDate() === now.getDate() &&
-                     date.getMonth() === now.getMonth() &&
-                     date.getFullYear() === now.getFullYear();
-
-      // Format hours and minutes with leading zeros
-      const hours = date.getHours();
-      const minutes = date.getMinutes().toString().padStart(2, '0');
-      const ampm = hours >= 12 ? 'PM' : 'AM';
-      const hour12 = hours % 12 || 12; // Convert 0 to 12 for 12 AM
-
-      // If today, show only time, otherwise show date and time
-      if (isToday) {
-        return `Today at ${hour12}:${minutes} ${ampm}`;
-      } else {
-        // Format as MM/DD/YY, HH:MM AM/PM
-        return `${date.getMonth()+1}/${date.getDate()}/${date.getFullYear().toString().slice(-2)} · ${hour12}:${minutes} ${ampm}`;
-      }
-    } catch (e) {
-      return dateString;
     }
   };
 
@@ -995,134 +821,15 @@ export function ConversationManager() {
                   return !conversation.teaching_mode || conversation.teaching_mode === settings.teachingMode;
                 })
                 .map((conversation) => (
-                <motion.div
-                  key={conversation.id || `temp-${Date.now()}`} // Ensure we always have a unique key
-                  className={`p-3 rounded-lg mb-2 shadow-sm border group cursor-pointer transition-all duration-200 ${currentConversation?.id === conversation.id
-                    ? "bg-bg-tertiary/30 border-primary-DEFAULT/30"
-                    : "hover:bg-bg-tertiary/10 border-bg-tertiary/30 hover:shadow-md hover:-translate-y-0.5"}`}
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  transition={{ duration: 0.2, ease: "easeOut" }}
-                  style={{ willChange: "opacity, transform" }}
-                  onClick={() => conversation.id && fetchConversation(conversation.id)}
-                >
-                  {editingId === conversation.id ? (
-                    <div className="flex flex-col gap-2">
-                      <input
-                        type="text"
-                        value={editTitle}
-                        onChange={(e) => setEditTitle(e.target.value)}
-                        className="bg-bg-primary border-0 focus:ring-1 focus:ring-primary-DEFAULT rounded-md px-2 py-1 text-text-primary w-full text-sm"
-                        style={{ boxShadow: 'var(--shadow-sm)' }}
-                        autoFocus
-                        onClick={(e) => e.stopPropagation()}
-                      />
-                      <div className="flex justify-end gap-2">
-                        <Button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            cancelEditing();
-                          }}
-                          variant="ghost"
-                          size="icon"
-                          className="h-7 w-7"
-                        >
-                          <X size={14} />
-                        </Button>
-                        <Button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            saveTitle(conversation.id);
-                          }}
-                          variant="primary"
-                          size="icon"
-                          className="h-7 w-7"
-                          disabled={!editTitle.trim()}
-                        >
-                          <Check size={14} />
-                        </Button>
-                      </div>
-                    </div>
-                  ) : (
-                    <div>
-                      <div className="flex justify-between items-start mb-3">
-                        <div className="flex items-center gap-1.5">
-                          {/* Mode indicator icon - always show based on teaching_mode */}
-                          {conversation.teaching_mode === 'qa' ? (
-                            <HelpCircle className="w-3.5 h-3.5 text-primary-DEFAULT flex-shrink-0" />
-                          ) : (
-                            // Default to teacher mode icon if teaching_mode is missing or is 'teacher'
-                            <BookOpen className="w-3.5 h-3.5 text-primary-DEFAULT flex-shrink-0" />
-                          )}
-                          <h3 className="font-medium text-text-primary break-words pr-2 text-sm">{conversation.title}</h3>
-                        </div>
-                        <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                          <Button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              startEditingTitle(conversation);
-                            }}
-                            variant="ghost"
-                            size="icon"
-                            className="h-6 w-6 text-text-tertiary hover:text-text-primary hover:bg-bg-tertiary/50 rounded-full"
-                          >
-                            <Edit size={12} />
-                          </Button>
-                          <Button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              deleteConversation(conversation.id);
-                            }}
-                            variant="ghost"
-                            size="icon"
-                            className="h-6 w-6 text-danger-DEFAULT hover:text-danger-hover hover:bg-danger-DEFAULT/10 rounded-full"
-                          >
-                            <Trash2 size={12} />
-                          </Button>
-                        </div>
-                      </div>
-
-                      <div className="flex items-center gap-1.5 text-xs text-text-tertiary mb-2">
-                        <Clock size={12} className="flex-shrink-0" />
-                        <span>{formatDate(conversation.updated_at)}</span>
-                      </div>
-
-                      {/* Message preview */}
-                      {(currentConversation?.id === conversation.id && currentConversation.messages && currentConversation.messages.length > 0) ? (
-                        <div className="text-xs text-text-secondary bg-bg-tertiary/20 p-2.5 rounded-md border border-bg-tertiary/30 shadow-sm">
-                          <span className="font-medium text-primary-DEFAULT">
-                            {currentConversation.messages[currentConversation.messages.length - 1].type === 'user' ? 'You: ' : 'AI: '}
-                          </span>
-                          <span className="line-clamp-2">
-                            {currentConversation.messages[currentConversation.messages.length - 1].content.substring(0, 100)}
-                            {currentConversation.messages[currentConversation.messages.length - 1].content.length > 100 ? '...' : ''}
-                          </span>
-                        </div>
-                      ) : conversation.messages && conversation.messages.length > 0 ? (
-                        <div className="text-xs text-text-secondary bg-bg-tertiary/20 p-2.5 rounded-md border border-bg-tertiary/30 shadow-sm">
-                          <span className="font-medium text-primary-DEFAULT">
-                            {conversation.messages[conversation.messages.length - 1].type === 'user' ? 'You: ' : 'AI: '}
-                          </span>
-                          <span className="line-clamp-2">
-                            {conversation.messages[conversation.messages.length - 1].content.substring(0, 100)}
-                            {conversation.messages[conversation.messages.length - 1].content.length > 100 ? '...' : ''}
-                          </span>
-                        </div>
-                      ) : conversation.last_message ? (
-                        <div className="text-xs text-text-secondary bg-bg-tertiary/20 p-2.5 rounded-md border border-bg-tertiary/30 shadow-sm">
-                          <span className="font-medium text-primary-DEFAULT">
-                            {conversation.last_message.type === 'user' ? 'You: ' : 'AI: '}
-                          </span>
-                          <span className="line-clamp-2">
-                            {conversation.last_message.content.substring(0, 100)}
-                            {conversation.last_message.content.length > 100 ? '...' : ''}
-                          </span>
-                        </div>
-                      ) : null}
-                    </div>
-                  )}
-                </motion.div>
-              ))}
+                  <ConversationItem
+                    key={conversation.id || `temp-${Date.now()}`}
+                    conversation={conversation}
+                    currentConversationId={currentConversation?.id || null}
+                    onSelect={fetchConversation}
+                    onEdit={saveTitle}
+                    onDelete={deleteConversation}
+                  />
+                ))}
             </div>
           )}
         </div>
