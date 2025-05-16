@@ -20,6 +20,7 @@ import {
   ChevronRight,
   ChevronDown
 } from "lucide-react";
+import { decodeHtmlEntities } from "@/utils/html-entities";
 import { useTranscriber } from "@/hooks/use-transcriber";
 import { useAIResponses } from "@/hooks/use-ai-responses";
 import { useConversation } from "@/hooks/use-conversation";
@@ -258,9 +259,41 @@ export function Typewriter({ typingSpeed = 50 }: TypewriterProps) {
     }
   }, [messages, currentConversationId, processMessageForCourseStructure]);
 
+  // Helper function to process [CODE] tags and ensure HTML entities are properly decoded
+  const processCodeTags = (text: string) => {
+    if (!text) return text;
+
+    // Find all [CODE]...[/CODE] sections and decode HTML entities inside them
+    const codeTagRegex = /\[\s*CODE\s*\]([\s\S]*?)\[\s*\/\s*CODE\s*\]/g;
+
+    // Log the original text to debug
+    console.log("Processing [CODE] tags in text:", text.substring(0, 100) + "...");
+
+    const processedText = text.replace(codeTagRegex, (match, codeContent) => {
+      // Log the original code content
+      console.log("Original [CODE] content:", codeContent.substring(0, 100) + "...");
+
+      // Decode HTML entities in the code content multiple times to handle nested encodings
+      let decodedContent = codeContent;
+      for (let i = 0; i < 3; i++) {
+        decodedContent = decodeHtmlEntities(decodedContent);
+      }
+
+      // Log the decoded content
+      console.log("Decoded [CODE] content:", decodedContent.substring(0, 100) + "...");
+
+      return `[CODE]${decodedContent}[/CODE]`;
+    });
+
+    return processedText;
+  };
+
   // Function to render AI responses with enhanced formatting
   const renderEnhancedResponse = (text: string) => {
     if (!text) return null;
+
+    // First, process any [CODE] tags to ensure HTML entities are properly decoded
+    text = processCodeTags(text);
 
     // Reset regex lastIndex to ensure we start from the beginning
     codeBlockRegex.lastIndex = 0;
@@ -282,7 +315,25 @@ export function Typewriter({ typingSpeed = 50 }: TypewriterProps) {
       // Add special styling for practical application
       .replace(/####\s+Practical Application/g, '#### 🛠️ Practical Application')
       // Add special styling for course progress
-      .replace(/####\s+Course Progress/g, '#### 📊 Course Progress');
+      .replace(/####\s+Course Progress/g, '#### 📊 Course Progress')
+      // Add special handling for code snippets between board and explain sections
+      .replace(/\[\s*\/\s*BOARD\s*\]\s*(```[\s\S]*?```)\s*\[\s*EXPLAIN\s*\]/g, '[/BOARD]\n\n$1\n\n[EXPLAIN]')
+      // Ensure there's a title in the board section before code snippets
+      .replace(/\[\s*BOARD\s*\]\s*(?!\s*##)([^\n]*?)\s*\[\s*\/\s*BOARD\s*\]\s*(```[\s\S]*?```)/g, (match, content, code) => {
+        // If there's content but no title, add a title format
+        if (content.trim()) {
+          return `[BOARD]\n## ${content.trim()}\n[/BOARD]\n\n${code}`;
+        }
+        // If there's no content, add a generic title based on the code language
+        const langMatch = code.match(/```(\w+)/);
+        const lang = langMatch ? langMatch[1] : 'code';
+        return `[BOARD]\n## Code Example in ${lang.charAt(0).toUpperCase() + lang.slice(1)}\n[/BOARD]\n\n${code}`;
+      })
+      // Remove any remaining markers that might be visible in the final output
+      .replace(/\[\s*BOARD\s*\]\s*$/g, '')  // Remove [BOARD] at the end of the text
+      .replace(/\[\s*EXPLAIN\s*\]\s*$/g, '') // Remove [EXPLAIN] at the end of the text
+      .replace(/^\s*\[\s*\/BOARD\s*\]/g, '') // Remove [/BOARD] at the beginning of the text
+      .replace(/^\s*\[\s*\/EXPLAIN\s*\]/g, ''); // Remove [/EXPLAIN] at the beginning of the text
 
     // Split the text into segments (code blocks and regular text)
     const segments = [];
@@ -301,11 +352,23 @@ export function Typewriter({ typingSpeed = 50 }: TypewriterProps) {
         });
       }
 
-      // Add the code block
+      // Log the original code content
+      console.log("Original markdown code block content:", match[2].substring(0, 100) + "...");
+
+      // Decode HTML entities in the code content multiple times to handle nested encodings
+      let decodedCodeContent = match[2].trim();
+      for (let i = 0; i < 3; i++) {
+        decodedCodeContent = decodeHtmlEntities(decodedCodeContent);
+      }
+
+      // Log the decoded content
+      console.log("Decoded markdown code block content:", decodedCodeContent.substring(0, 100) + "...");
+
+      // Add the code block with decoded content
       segments.push({
         type: 'code',
         language: match[1]?.trim() || 'javascript',
-        content: match[2].trim(),
+        content: decodedCodeContent,
         id: segmentId++
       });
 
@@ -323,28 +386,32 @@ export function Typewriter({ typingSpeed = 50 }: TypewriterProps) {
 
     // If no segments were found, return the original text
     if (segments.length === 0) {
-      return <div className="markdown-content">{formatTextWithMarkdown(processedText)}</div>;
+      // Wrap the formatted text in a div with a unique key
+      return <div className="markdown-content" key="single-content">{formatTextWithMarkdown(processedText)}</div>;
     }
 
     // Render each segment
     return (
-      <div className="markdown-content">
+      <div className="markdown-content" key="multi-segment-content">
         {segments.map(segment => {
           if (segment.type === 'code') {
             return (
               <CodeBlock
-                key={segment.id}
+                key={`code-${segment.id}`}
                 code={segment.content}
                 language={segment.language}
               />
             );
           } else {
-            return <div key={segment.id}>{formatTextWithMarkdown(segment.content)}</div>;
+            // Ensure the formatTextWithMarkdown result is wrapped in a div with a key
+            return <div key={`text-${segment.id}`}>{formatTextWithMarkdown(segment.content)}</div>;
           }
         })}
       </div>
     );
   };
+
+  // HTML entity handling is imported at the top of the file
 
   // Helper function to detect and parse markdown tables
   const parseMarkdownTable = (lines: string[], startIndex: number) => {
@@ -371,7 +438,11 @@ export function Typewriter({ typingSpeed = 50 }: TypewriterProps) {
         .trim()
         .split('|')
         .filter(cell => cell.trim() !== '')
-        .map(cell => cell.trim());
+        .map(cell => {
+          // Decode HTML entities in each cell
+          const decodedCell = decodeHtmlEntities(cell.trim());
+          return decodedCell;
+        });
 
       // Parse data rows
       const rows = dataRows.map(row => {
@@ -379,7 +450,11 @@ export function Typewriter({ typingSpeed = 50 }: TypewriterProps) {
           .trim()
           .split('|')
           .filter(cell => cell !== '')
-          .map(cell => cell.trim());
+          .map(cell => {
+            // Decode HTML entities in each cell
+            const decodedCell = decodeHtmlEntities(cell.trim());
+            return decodedCell;
+          });
       });
 
       // Create the table HTML
@@ -411,8 +486,986 @@ export function Typewriter({ typingSpeed = 50 }: TypewriterProps) {
     return { table: null, endIndex: startIndex }; // Not a valid table
   };
 
+  // Test function to check if dual-mode markers are being processed correctly
+  const testDualModeProcessing = () => {
+    const testText = `
+[BOARD]
+# Test Topic
+- Point 1
+- Point 2
+[/BOARD]
+
+[EXPLAIN]
+This is an explanation of the test topic.
+[/EXPLAIN]
+    `;
+
+    console.log("TEST: Running dual-mode test");
+    console.log("TEST: Text contains [BOARD]:", /\[\s*BOARD\s*\]/.test(testText));
+    console.log("TEST: Text contains [EXPLAIN]:", /\[\s*EXPLAIN\s*\]/.test(testText));
+
+    // Test regex extraction
+    const boardBlockRegex = /\[\s*BOARD\s*\]([\s\S]*?)\[\s*\/\s*BOARD\s*\]/g;
+    const explainBlockRegex = /\[\s*EXPLAIN\s*\]([\s\S]*?)\[\s*\/\s*EXPLAIN\s*\]/g;
+
+    let boardMatch = boardBlockRegex.exec(testText);
+    console.log("TEST: Board match:", boardMatch ? "Found" : "Not found");
+    if (boardMatch) {
+      console.log("TEST: Board content:", boardMatch[1].trim());
+    }
+
+    let explainMatch = explainBlockRegex.exec(testText);
+    console.log("TEST: Explain match:", explainMatch ? "Found" : "Not found");
+    if (explainMatch) {
+      console.log("TEST: Explain content:", explainMatch[1].trim());
+    }
+  };
+
+  // Run the test once when component loads
+  useEffect(() => {
+    testDualModeProcessing();
+  }, []);
+
+  // Get settings at the component level, not inside the helper function
+  const { settings, updateSettings } = useSettings();
+
+  // Use React state for explanation visibility with a more stable reference
+  const [visibleExplanations, setVisibleExplanations] = useState<Record<string, boolean>>({});
+
+  // Store the visibility state in a ref to ensure it persists between renders
+  const visibleExplanationsRef = useRef<Record<string, boolean>>({});
+
+  // Update the ref whenever the state changes
+  useEffect(() => {
+    visibleExplanationsRef.current = visibleExplanations;
+  }, [visibleExplanations]);
+
+  // Function to toggle a specific explanation's visibility
+  const toggleExplanation = useCallback((id: string) => {
+    console.log(`Toggling explanation ${id}`);
+    setVisibleExplanations(prev => {
+      const newState = {
+        ...prev,
+        [id]: !prev[id]
+      };
+      // Also update the ref immediately for any code that might use it before the next render
+      visibleExplanationsRef.current = newState;
+      console.log('New visibility state:', newState);
+      return newState;
+    });
+  }, []);
+
   // Helper function to format text with markdown-like styling
   const formatTextWithMarkdown = (text: string) => {
+    if (!text) return null;
+
+    // First, process any [CODE] tags to ensure HTML entities are properly decoded
+    text = processCodeTags(text);
+
+    // Define regex patterns for board, explain, and code blocks - more robust patterns
+    // These patterns will match even with whitespace or newlines around the markers
+    // Using balanced matching to ensure we don't capture nested sections
+    // We'll process the content in multiple passes to handle nested sections
+
+    // Improved function to find the outermost sections of each type
+    // This version is more strict about matching exact section types
+    const findOutermostSections = (text, sectionType) => {
+      const sections = [];
+      const openTagPattern = new RegExp(`\\[\\s*${sectionType}\\s*\\]`, 'g');
+      const closeTagPattern = new RegExp(`\\[\\s*\\/\\s*${sectionType}\\s*\\]`, 'g');
+
+      // Reset regex patterns
+      openTagPattern.lastIndex = 0;
+      closeTagPattern.lastIndex = 0;
+
+      // Find all opening tags
+      const openings = [];
+      let openMatch;
+      while ((openMatch = openTagPattern.exec(text)) !== null) {
+        openings.push({
+          index: openMatch.index,
+          end: openMatch.index + openMatch[0].length
+        });
+      }
+
+      // Find all closing tags
+      const closings = [];
+      let closeMatch;
+      while ((closeMatch = closeTagPattern.exec(text)) !== null) {
+        closings.push({
+          index: closeMatch.index,
+          end: closeMatch.index + closeMatch[0].length
+        });
+      }
+
+      // Match opening and closing tags
+      for (const opening of openings) {
+        // Find the next closing tag that comes after this opening tag
+        const matchingClosing = closings.find(closing =>
+          closing.index > opening.end &&
+          // Make sure there's no other opening tag of the same type between them
+          !openings.some(o => o.index > opening.end && o.index < closing.index)
+        );
+
+        if (matchingClosing) {
+          // Found a complete section
+          sections.push({
+            type: sectionType.toLowerCase(),
+            content: text.substring(opening.end, matchingClosing.index),
+            startIndex: opening.index,
+            endIndex: matchingClosing.end
+          });
+
+          // Remove this closing tag so it's not matched again
+          closings.splice(closings.indexOf(matchingClosing), 1);
+        }
+      }
+
+      return sections;
+    };
+
+    // These regex patterns are used for detecting if sections exist, not for extracting content
+    const boardBlockRegex = /\[\s*BOARD\s*\]([\s\S]*?)\[\s*\/\s*BOARD\s*\]/g;
+    const explainBlockRegex = /\[\s*EXPLAIN\s*\]([\s\S]*?)\[\s*\/\s*EXPLAIN\s*\]/g;
+    const codeBlockRegex = /\[\s*CODE\s*\]([\s\S]*?)\[\s*\/\s*CODE\s*\]/g;
+
+    // Additional regex patterns to detect incomplete markers
+    const openBoardRegex = /\[\s*BOARD\s*\](?![\s\S]*?\[\s*\/\s*BOARD\s*\])/g;
+    const openExplainRegex = /\[\s*EXPLAIN\s*\](?![\s\S]*?\[\s*\/\s*EXPLAIN\s*\])/g;
+    const openCodeRegex = /\[\s*CODE\s*\](?![\s\S]*?\[\s*\/\s*CODE\s*\])/g;
+    const closeBoardRegex = /\[\s*\/\s*BOARD\s*\](?<!\[\s*BOARD\s*\][\s\S]*?)/g;
+    const closeExplainRegex = /\[\s*\/\s*EXPLAIN\s*\](?<!\[\s*EXPLAIN\s*\][\s\S]*?)/g;
+    const closeCodeRegex = /\[\s*\/\s*CODE\s*\](?<!\[\s*CODE\s*\][\s\S]*?)/g;
+
+    // Regex to detect any remaining markers in the text that might be visible
+    const anyMarkerRegex = /\[\s*(BOARD|\/\s*BOARD|EXPLAIN|\/\s*EXPLAIN|CODE|\/\s*CODE)\s*\]/g;
+
+    // Check if the text contains explain or code blocks (more robust check)
+    const hasSpecialSections = /\[\s*EXPLAIN\s*\]/.test(text) || /\[\s*CODE\s*\]/.test(text);
+
+    // Debug logging
+    console.log("Special sections detected:", hasSpecialSections);
+    console.log("Text contains [EXPLAIN]:", /\[\s*EXPLAIN\s*\]/.test(text));
+    console.log("Text contains [CODE]:", /\[\s*CODE\s*\]/.test(text));
+    if (hasSpecialSections) {
+      console.log("First 100 chars:", text.substring(0, 100));
+
+      // Check for incomplete markers
+      const hasOpenBoard = openBoardRegex.test(text);
+      const hasOpenExplain = openExplainRegex.test(text);
+      const hasOpenCode = openCodeRegex.test(text);
+      const hasCloseBoard = closeBoardRegex.test(text);
+      const hasCloseExplain = closeExplainRegex.test(text);
+      const hasCloseCode = closeCodeRegex.test(text);
+
+      // Reset regex lastIndex
+      openBoardRegex.lastIndex = 0;
+      openExplainRegex.lastIndex = 0;
+      openCodeRegex.lastIndex = 0;
+      closeBoardRegex.lastIndex = 0;
+      closeExplainRegex.lastIndex = 0;
+      closeCodeRegex.lastIndex = 0;
+
+      if (hasOpenBoard || hasOpenExplain || hasOpenCode || hasCloseBoard || hasCloseExplain || hasCloseCode) {
+        console.log("Warning: Incomplete markers detected");
+        console.log("Open [BOARD] without close:", hasOpenBoard);
+        console.log("Open [EXPLAIN] without close:", hasOpenExplain);
+        console.log("Open [CODE] without close:", hasOpenCode);
+        console.log("Close [/BOARD] without open:", hasCloseBoard);
+        console.log("Close [/EXPLAIN] without open:", hasCloseExplain);
+        console.log("Close [/CODE] without open:", hasCloseCode);
+
+        // Fix incomplete markers
+        let fixedText = text;
+
+        // Fix open [BOARD] without close by adding a closing tag at the end
+        if (hasOpenBoard) {
+          fixedText = fixedText.replace(openBoardRegex, (match) => {
+            console.log("Fixing open [BOARD] marker");
+            return match + "\n\nContent\n\n[/BOARD]";
+          });
+        }
+
+        // Fix open [EXPLAIN] without close by adding a closing tag at the end
+        if (hasOpenExplain) {
+          fixedText = fixedText.replace(openExplainRegex, (match) => {
+            console.log("Fixing open [EXPLAIN] marker");
+            return match + "\n\nExplanation\n\n[/EXPLAIN]";
+          });
+        }
+
+        // Fix open [CODE] without close by adding a closing tag at the end
+        if (hasOpenCode) {
+          fixedText = fixedText.replace(openCodeRegex, (match) => {
+            console.log("Fixing open [CODE] marker");
+            return match + "\n\n```\n\n```\n\n[/CODE]";
+          });
+        }
+
+        // Fix close [/BOARD] without open by adding an opening tag before it
+        if (hasCloseBoard) {
+          fixedText = fixedText.replace(closeBoardRegex, (match) => {
+            console.log("Fixing close [/BOARD] marker");
+            return "[BOARD]\n\nContent\n\n" + match;
+          });
+        }
+
+        // Fix close [/EXPLAIN] without open by adding an opening tag before it
+        if (hasCloseExplain) {
+          fixedText = fixedText.replace(closeExplainRegex, (match) => {
+            console.log("Fixing close [/EXPLAIN] marker");
+            return "[EXPLAIN]\n\nExplanation\n\n" + match;
+          });
+        }
+
+        // Fix close [/CODE] without open by adding an opening tag before it
+        if (hasCloseCode) {
+          fixedText = fixedText.replace(closeCodeRegex, (match) => {
+            console.log("Fixing close [/CODE] marker");
+            return "[CODE]\n\n```\n\n```\n\n" + match;
+          });
+        }
+
+        // Use the fixed text
+        text = fixedText;
+
+        // Reset regex patterns with the fixed text
+        boardBlockRegex.lastIndex = 0;
+        explainBlockRegex.lastIndex = 0;
+      }
+    }
+
+    // If special sections are detected, process the blocks
+    if (hasSpecialSections) {
+      try {
+        // Extract all blocks in order of appearance using our balanced matching function
+        const allBlocks = [];
+
+        // Find all board sections and convert them to regular content
+        const boardSections = findOutermostSections(text, "BOARD");
+        let boardCount = 0;
+
+        for (const section of boardSections) {
+          // Create a unique ID for the regular content block
+          const messageId = messages.find(m => m.text === text)?.id || 'unknown';
+          const contentId = `content-${messageId}-${boardCount++}`;
+
+          // Clean the content - remove any nested markers
+          let content = section.content.trim();
+
+          // Check if there are any code blocks inside this content
+          // Use a comprehensive regex that can detect code blocks even when they're part of a sentence
+          const codeBlocksInContent = content.match(/```[\s\S]*?```/g);
+
+          // Also check for code blocks that might be preceded by text like "Python example:"
+          const codeBlocksWithPrefix = content.match(/[^\n]*?:?\s*```[\s\S]*?```/g);
+
+          // Process code blocks found in the content
+          if (codeBlocksInContent || codeBlocksWithPrefix) {
+            console.log("Found code blocks inside content, moving them outside");
+
+            // First, handle regular code blocks
+            if (codeBlocksInContent) {
+              // Create a new code section for each code block found
+              for (const codeBlock of codeBlocksInContent) {
+                // Create a unique ID for the code block
+                const codeId = `code-section-extracted-${boardCount}-${codeBlocksInContent.indexOf(codeBlock)}`;
+
+                // Only add the code block if it's not empty or just whitespace
+                if (codeBlock && codeBlock.trim() !== '') {
+                  // Decode HTML entities in the code content before adding it
+                  const decodedCodeBlock = decodeHtmlEntities(codeBlock);
+
+                  // Add the code block as a separate code section
+                  // Make sure we're using the decoded content for matchedText as well
+                  allBlocks.push({
+                    type: 'code-section',
+                    content: decodedCodeBlock,
+                    startIndex: section.startIndex + 0.1 + (0.01 * codeBlocksInContent.indexOf(codeBlock)),
+                    endIndex: section.startIndex + 0.2 + (0.01 * codeBlocksInContent.indexOf(codeBlock)),
+                    // Use decoded content in matchedText to ensure HTML entities are properly handled
+                    matchedText: `[CODE]${decodedCodeBlock}[/CODE]`,
+                    id: codeId
+                  });
+                }
+              }
+            }
+
+            // Then, handle code blocks with prefixes
+            if (codeBlocksWithPrefix) {
+              for (const prefixedBlock of codeBlocksWithPrefix) {
+                // Extract just the code block part (```...```)
+                const codeBlockMatch = prefixedBlock.match(/(```[\s\S]*?```)/);
+                if (codeBlockMatch && codeBlockMatch[1]) {
+                  const codeBlock = codeBlockMatch[1];
+
+                  // Extract any prefix text (e.g., "Python example:")
+                  const prefixMatch = prefixedBlock.match(/^([^\n]*?:?)\s*(```[\s\S]*?```)/);
+                  const prefix = prefixMatch && prefixMatch[1] ? prefixMatch[1].trim() : '';
+
+                  // Create a unique ID for the code block
+                  const codeId = `code-section-prefixed-${boardCount}-${codeBlocksWithPrefix.indexOf(prefixedBlock)}`;
+
+                  // Only add the code block if it's not empty or just whitespace
+                  if (codeBlock && codeBlock.trim() !== '') {
+                    // Decode HTML entities in the code content before adding it
+                    const decodedCodeBlock = decodeHtmlEntities(codeBlock);
+
+                    // Add the code block as a separate code section
+                    allBlocks.push({
+                      type: 'code-section',
+                      // If there's a prefix, add it as a comment at the top of the code block
+                      content: prefix ? `// ${prefix}\n${decodedCodeBlock}` : decodedCodeBlock,
+                      startIndex: section.startIndex + 0.3 + (0.01 * codeBlocksWithPrefix.indexOf(prefixedBlock)),
+                      endIndex: section.startIndex + 0.4 + (0.01 * codeBlocksWithPrefix.indexOf(prefixedBlock)),
+                      // Use decoded content in matchedText to ensure HTML entities are properly handled
+                      matchedText: `[CODE]${decodedCodeBlock}[/CODE]`,
+                      id: codeId
+                    });
+
+                    // Remove this specific prefixed block from the content
+                    content = content.replace(prefixedBlock, prefix);
+                  }
+                }
+              }
+            }
+
+            // Remove any remaining code blocks from the content
+            content = content.replace(/```[\s\S]*?```/g, '');
+
+            // Clean up any leftover colons or empty lines
+            content = content.replace(/:\s*$/gm, '');
+            content = content.replace(/\n\s*\n\s*\n/g, '\n\n');
+          }
+
+          // Remove any remaining section markers with a more comprehensive regex
+          content = content.replace(/\[\s*(BOARD|\/\s*BOARD|EXPLAIN|\/\s*EXPLAIN|CODE|\/\s*CODE)\s*\]/g, '');
+
+          // If content is empty or just whitespace, skip it
+          if (!content || content.trim() === '') {
+            console.log("Empty content detected, skipping");
+            continue;
+          }
+
+          // Add as regular content instead of board
+          allBlocks.push({
+            type: 'regular',
+            content: content,
+            startIndex: section.startIndex,
+            endIndex: section.endIndex,
+            matchedText: text.substring(section.startIndex, section.endIndex),
+            id: contentId
+          });
+        }
+
+        // Find all explanation sections
+        const explainSections = findOutermostSections(text, "EXPLAIN");
+        let explainIndex = 0;
+
+        for (const section of explainSections) {
+          // Create a unique ID for the explanation block
+          const messageId = messages.find(m => m.text === text)?.id || 'unknown';
+          const explainId = `explain-${messageId}-${explainIndex++}`;
+
+          // Clean the content - remove any nested markers
+          let content = section.content.trim();
+
+          // Check if there are any code blocks inside this explanation section
+          // Use a more comprehensive regex that can detect code blocks even when they're part of a sentence
+          const codeBlocksInExplain = content.match(/```[\s\S]*?```/g);
+
+          // Also check for code blocks that might be preceded by text like "Python example:"
+          const codeBlocksWithPrefixInExplain = content.match(/[^\n]*?:?\s*```[\s\S]*?```/g);
+          // We no longer extract code blocks from explanation sections
+          // Instead, we'll let them be rendered directly within the explanation
+          // This preserves the explanation text and ensures code blocks are properly formatted
+
+          // Just clean up any leftover colons or empty lines
+          content = content.replace(/:\s*$/gm, '');
+          content = content.replace(/\n\s*\n\s*\n/g, '\n\n');
+
+          // Remove any remaining section markers with a more comprehensive regex
+          content = content.replace(/\[\s*(BOARD|\/\s*BOARD|EXPLAIN|\/\s*EXPLAIN|CODE|\/\s*CODE)\s*\]/g, '');
+
+          // If content is empty or just whitespace, add a placeholder
+          if (!content || content.trim() === '') {
+            content = "This explanation provides additional context about the topic.";
+            console.log("Empty explanation content detected, adding placeholder");
+          }
+
+          allBlocks.push({
+            type: 'explain',
+            content: content,
+            startIndex: section.startIndex,
+            endIndex: section.endIndex,
+            matchedText: text.substring(section.startIndex, section.endIndex),
+            id: explainId
+          });
+        }
+
+        // Find all code sections
+        const codeSections = findOutermostSections(text, "CODE");
+        let codeIndex = 0;
+
+        for (const section of codeSections) {
+          // Create a unique ID for the code block
+          const messageId = messages.find(m => m.text === text)?.id || 'unknown';
+          const codeId = `code-section-${messageId}-${codeIndex++}`;
+
+          // Clean the content - remove any nested markers
+          let content = section.content.trim();
+
+          // Remove any remaining section markers with a more comprehensive regex
+          // This ensures no section markers are visible in the final output
+          content = content.replace(/\[\s*(BOARD|\/\s*BOARD|EXPLAIN|\/\s*EXPLAIN|CODE|\/\s*CODE)\s*\]/g, '');
+
+          // Additional check to ensure all section markers are removed
+          content = content.replace(/\[\s*\/?[A-Z]+\s*\]/g, '');
+
+          // If content is empty or just whitespace, log it but don't add a placeholder
+          if (!content || content.trim() === '') {
+            console.log("Empty code content detected");
+            // Don't add a default code snippet, let it be empty
+          }
+
+          // Decode HTML entities in the code content before adding it
+          const decodedContent = decodeHtmlEntities(content);
+
+          allBlocks.push({
+            type: 'code-section',
+            content: decodedContent,
+            startIndex: section.startIndex,
+            endIndex: section.endIndex,
+            matchedText: text.substring(section.startIndex, section.endIndex).replace(/\[\s*CODE\s*\]([\s\S]*?)\[\s*\/\s*CODE\s*\]/g, (match, codeContent) => {
+              // Decode HTML entities in the code content
+              const decodedContent = decodeHtmlEntities(codeContent);
+              return `[CODE]${decodedContent}[/CODE]`;
+            }),
+            id: codeId
+          });
+        }
+
+        // If no blocks were found but special sections were detected, create default blocks
+        if (allBlocks.length === 0 && hasSpecialSections) {
+          console.log("Special sections detected but no valid blocks found, creating default blocks");
+
+          // Create a default regular content block
+          allBlocks.push({
+            type: 'regular',
+            content: "# Topic\nThis section contains the main content.",
+            startIndex: 0,
+            endIndex: 0,
+            matchedText: "# Topic\nThis section contains the main content.",
+            id: `content-default-0`
+          });
+
+          // Create a default explain block with proper content
+          allBlocks.push({
+            type: 'explain',
+            content: "This explanation provides additional context about the topic.",
+            startIndex: 1,
+            endIndex: 1,
+            matchedText: "[EXPLAIN]This explanation provides additional context about the topic.[/EXPLAIN]",
+            id: `explain-default-0`
+          });
+        }
+
+        // Sort blocks by their appearance in the text
+        allBlocks.sort((a, b) => a.startIndex - b.startIndex);
+
+        console.log("Found blocks:", allBlocks.length);
+
+        // Don't enforce alternating pattern - respect the exact order from the backend
+        console.log("Original blocks order:", allBlocks.map(b => b.type).join(', '));
+
+        // Only add a regular content block at the beginning if there are no blocks at all
+        if (allBlocks.length === 0) {
+          console.log("No blocks found, adding default content block");
+          allBlocks.push({
+            type: 'regular',
+            content: text, // Use the original text as regular content
+            id: `content-auto-0`,
+            startIndex: 0,
+            endIndex: 0
+          });
+        }
+
+        // Sort blocks by their appearance in the text to maintain the exact order from the backend
+        allBlocks.sort((a, b) => a.startIndex - b.startIndex);
+        console.log("Final blocks order:", allBlocks.map(b => b.type).join(', '));
+
+        // Final check 1: Make sure no sections are completely empty
+        for (const block of allBlocks) {
+          if (!block.content || block.content.trim() === '') {
+            console.log(`Found empty ${block.type} section, adding default content`);
+
+            if (block.type === 'regular') {
+              block.content = "This section contains the main content.";
+            } else if (block.type === 'explain') {
+              block.content = "This explanation provides additional context about the topic.";
+            } else if (block.type === 'code-section') {
+              // Don't add a default code snippet for empty code sections
+              // Just log it and let it be empty
+              console.log("Empty code section detected in final check");
+            }
+          }
+        }
+
+        // Final check 2: scan only regular blocks for any remaining code blocks
+        // We no longer extract code blocks from explanation sections
+        for (const block of allBlocks) {
+          if (block.type === 'regular') {
+            // Use a more comprehensive regex to find any remaining code blocks
+            const codeBlocksRemaining = block.content.match(/```[\s\S]*?```/g);
+            const codeBlocksWithPrefixRemaining = block.content.match(/[^\n]*?:?\s*```[\s\S]*?```/g);
+            if (codeBlocksRemaining || codeBlocksWithPrefixRemaining) {
+              console.log(`Found remaining code blocks in ${block.type} section, extracting them`);
+
+              // First, handle regular code blocks
+              if (codeBlocksRemaining) {
+                // Create a new code section for each code block found
+                for (const codeBlock of codeBlocksRemaining) {
+                  // Create a unique ID for the code block
+                  const codeId = `code-section-final-${allBlocks.indexOf(block)}-${codeBlocksRemaining.indexOf(codeBlock)}`;
+
+                  // Only add the code block if it's not empty or just whitespace
+                  if (codeBlock && codeBlock.trim() !== '') {
+                    // Decode HTML entities in the code content before adding it
+                    const decodedCodeBlock = decodeHtmlEntities(codeBlock);
+
+                    // Add the code block as a separate code section
+                    allBlocks.push({
+                      type: 'code-section',
+                      content: decodedCodeBlock,
+                      startIndex: block.startIndex + 0.5 + (0.01 * codeBlocksRemaining.indexOf(codeBlock)), // Place right after the section
+                      endIndex: block.startIndex + 0.6 + (0.01 * codeBlocksRemaining.indexOf(codeBlock)),
+                      // Use decoded content in matchedText to ensure HTML entities are properly handled
+                      matchedText: `[CODE]${decodedCodeBlock}[/CODE]`,
+                      id: codeId
+                    });
+                  }
+                }
+              }
+
+              // Then, handle code blocks with prefixes
+              if (codeBlocksWithPrefixRemaining) {
+                for (const prefixedBlock of codeBlocksWithPrefixRemaining) {
+                  // Extract just the code block part (```...```)
+                  const codeBlockMatch = prefixedBlock.match(/(```[\s\S]*?```)/);
+                  if (codeBlockMatch && codeBlockMatch[1]) {
+                    const codeBlock = codeBlockMatch[1];
+
+                    // Extract any prefix text (e.g., "Python example:")
+                    const prefixMatch = prefixedBlock.match(/^([^\n]*?:?)\s*(```[\s\S]*?```)/);
+                    const prefix = prefixMatch && prefixMatch[1] ? prefixMatch[1].trim() : '';
+
+                    // Create a unique ID for the code block
+                    const codeId = `code-section-final-prefixed-${allBlocks.indexOf(block)}-${codeBlocksWithPrefixRemaining.indexOf(prefixedBlock)}`;
+
+                    // Only add the code block if it's not empty or just whitespace
+                    if (codeBlock && codeBlock.trim() !== '') {
+                      // Decode HTML entities in the code content before adding it
+                      const decodedCodeBlock = decodeHtmlEntities(codeBlock);
+
+                      // Add the code block as a separate code section
+                      allBlocks.push({
+                        type: 'code-section',
+                        // If there's a prefix, add it as a comment at the top of the code block
+                        content: prefix ? `// ${prefix}\n${decodedCodeBlock}` : decodedCodeBlock,
+                        startIndex: block.startIndex + 0.7 + (0.01 * codeBlocksWithPrefixRemaining.indexOf(prefixedBlock)),
+                        endIndex: block.startIndex + 0.8 + (0.01 * codeBlocksWithPrefixRemaining.indexOf(prefixedBlock)),
+                        // Use decoded content in matchedText to ensure HTML entities are properly handled
+                        matchedText: `[CODE]${decodedCodeBlock}[/CODE]`,
+                        id: codeId
+                      });
+
+                      // Remove this specific prefixed block from the content
+                      block.content = block.content.replace(prefixedBlock, prefix);
+                    }
+                  }
+                }
+              }
+
+              // Remove any remaining code blocks from the content
+              block.content = block.content.replace(/```[\s\S]*?```/g, '');
+
+              // Clean up any leftover colons or empty lines
+              block.content = block.content.replace(/:\s*$/gm, '');
+              block.content = block.content.replace(/\n\s*\n\s*\n/g, '\n\n');
+            }
+          }
+        }
+
+        // Re-sort blocks after the final check
+        allBlocks.sort((a, b) => a.startIndex - b.startIndex);
+        console.log("Final blocks order after code extraction:", allBlocks.map(b => b.type).join(', '));
+
+        // Process blocks in order and handle any text between blocks
+        const segments = [];
+        let lastIndex = 0;
+        let segmentId = 0;
+
+        // Process all blocks in order
+        for (const block of allBlocks) {
+          // Add any text before this block
+          if (block.startIndex > lastIndex) {
+            const regularContent = text.substring(lastIndex, block.startIndex).trim();
+            if (regularContent) {
+              // Check if the content between blocks contains a code block
+              const hasCodeBlock = /```[\s\S]*?```/.test(regularContent);
+
+              if (hasCodeBlock) {
+                // Extract code blocks and regular text
+                const codeSegments = [];
+                let codeLastIndex = 0;
+                let codeMatch;
+
+                // Reset regex lastIndex
+                codeBlockRegex.lastIndex = 0;
+
+                // Find all code blocks in the text
+                while ((codeMatch = codeBlockRegex.exec(regularContent)) !== null) {
+                  // Add text before the code block
+                  if (codeMatch.index > codeLastIndex) {
+                    const textBeforeCode = regularContent.substring(codeLastIndex, codeMatch.index).trim();
+                    if (textBeforeCode) {
+                      codeSegments.push({
+                        type: 'regular',
+                        content: textBeforeCode,
+                        id: `regular-code-${segmentId++}`
+                      });
+                    }
+                  }
+
+                  // Decode HTML entities in the code content before adding it
+                  const decodedCodeContent = decodeHtmlEntities(codeMatch[2].trim());
+
+                  // Add the code block with decoded content
+                  codeSegments.push({
+                    type: 'code',
+                    language: codeMatch[1]?.trim() || 'javascript',
+                    content: decodedCodeContent,
+                    id: `code-${segmentId++}`
+                  });
+
+                  codeLastIndex = codeMatch.index + codeMatch[0].length;
+                }
+
+                // Add any remaining text after the last code block
+                if (codeLastIndex < regularContent.length) {
+                  const textAfterCode = regularContent.substring(codeLastIndex).trim();
+                  if (textAfterCode) {
+                    codeSegments.push({
+                      type: 'regular',
+                      content: textAfterCode,
+                      id: `regular-code-${segmentId++}`
+                    });
+                  }
+                }
+
+                // Add all code segments
+                segments.push(...codeSegments);
+              } else {
+                // Add regular content without code blocks
+                segments.push({
+                  type: 'regular',
+                  content: regularContent,
+                  id: `regular-${segmentId++}`
+                });
+              }
+            }
+          }
+
+          // Add the current block
+          // Final check to remove any remaining markers - use a more aggressive approach
+          let cleanContent = block.content.replace(/\[\s*\/?[A-Z]+\s*\]/g, '');
+
+          // Additional check to ensure all section markers are removed
+          cleanContent = cleanContent.replace(/\[\s*(BOARD|\/\s*BOARD|EXPLAIN|\/\s*EXPLAIN|CODE|\/\s*CODE)\s*\]/g, '');
+
+          segments.push({
+            type: block.type,
+            content: cleanContent,
+            id: block.id || `${block.type}-${segmentId++}`
+          });
+
+          // Update lastIndex
+          lastIndex = block.endIndex;
+        }
+
+        // Add any remaining text after the last block
+        if (lastIndex < text.length) {
+          const remainingContent = text.substring(lastIndex).trim();
+          if (remainingContent) {
+            // Check if the remaining content contains a code block
+            const hasCodeBlock = /```[\s\S]*?```/.test(remainingContent);
+
+            if (hasCodeBlock) {
+              // Extract code blocks and regular text
+              const codeSegments = [];
+              let codeLastIndex = 0;
+              let codeMatch;
+
+              // Reset regex lastIndex
+              codeBlockRegex.lastIndex = 0;
+
+              // Find all code blocks in the text
+              while ((codeMatch = codeBlockRegex.exec(remainingContent)) !== null) {
+                // Add text before the code block
+                if (codeMatch.index > codeLastIndex) {
+                  const textBeforeCode = remainingContent.substring(codeLastIndex, codeMatch.index).trim();
+                  if (textBeforeCode) {
+                    codeSegments.push({
+                      type: 'regular',
+                      content: textBeforeCode,
+                      id: `regular-code-${segmentId++}`
+                    });
+                  }
+                }
+
+                // Decode HTML entities in the code content before adding it
+                const decodedCodeContent = decodeHtmlEntities(codeMatch[2].trim());
+
+                // Add the code block with decoded content
+                codeSegments.push({
+                  type: 'code',
+                  language: codeMatch[1]?.trim() || 'javascript',
+                  content: decodedCodeContent,
+                  id: `code-${segmentId++}`
+                });
+
+                codeLastIndex = codeMatch.index + codeMatch[0].length;
+              }
+
+              // Add any remaining text after the last code block
+              if (codeLastIndex < remainingContent.length) {
+                const textAfterCode = remainingContent.substring(codeLastIndex).trim();
+                if (textAfterCode) {
+                  codeSegments.push({
+                    type: 'regular',
+                    content: textAfterCode,
+                    id: `regular-code-${segmentId++}`
+                  });
+                }
+              }
+
+              // Add all code segments
+              segments.push(...codeSegments);
+            } else {
+              // Add regular content without code blocks
+              segments.push({
+                type: 'regular',
+                content: remainingContent,
+                id: `regular-${segmentId++}`
+              });
+            }
+          }
+        }
+
+        console.log("Processed segments:", segments.length);
+
+        // Render the segments
+        return (
+          <>
+            {segments.map(segment => {
+              if (segment.type === 'regular') {
+                return (
+                  <div key={segment.id}>
+                    {formatRegularContent(segment.content)}
+                  </div>
+                );
+              } else if (segment.type === 'explain') {
+                // Check if this specific explanation is visible using the ref for stability
+                const isVisible = visibleExplanationsRef.current[segment.id];
+
+                // If explanation is hidden, render a button to show just this explanation
+                if (!isVisible) {
+                  return (
+                    <div key={segment.id} className="my-2">
+                      <button
+                        onClick={() => toggleExplanation(segment.id)}
+                        className="text-xs bg-primary-DEFAULT/10 text-primary-DEFAULT px-3 py-1.5 rounded-full hover:bg-primary-DEFAULT/20 border border-primary-DEFAULT/20 shadow-none flex items-center gap-1"
+                      >
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z"></path>
+                        </svg>
+                        <span>Show Explanation</span>
+                      </button>
+                    </div>
+                  );
+                }
+
+                // If this explanation is visible, render the explanation block
+                return (
+                  <div key={segment.id} className="verbal-content p-4 my-4 bg-bg-secondary border border-dashed border-text-tertiary/30 rounded-md shadow-sm">
+                    <div className="flex items-center justify-end mb-2">
+                      <button
+                        onClick={() => toggleExplanation(segment.id)}
+                        className="text-xs text-text-tertiary hover:text-text-secondary"
+                        title="Hide this explanation"
+                      >
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12"></path>
+                        </svg>
+                      </button>
+                    </div>
+                    {/* Check if the explanation contains code blocks */}
+                    {segment.content.includes('```') ? (
+                      <>
+                        {/* Split the content by code blocks and render each part */}
+                        {segment.content.split(/(```[\s\S]*?```)/g).map((part, idx) => {
+                          if (part.startsWith('```') && part.endsWith('```')) {
+                            // This is a code block, extract language and code
+                            const match = part.match(/```([\w-]*)\n([\s\S]*?)```/);
+                            if (match) {
+                              const language = match[1] || 'text';
+
+                              // Log the original code content
+                              console.log("Original explanation code block content:", match[2].substring(0, 100) + "...");
+
+                              // Use our utility function for more comprehensive decoding
+                              // Decode multiple times to handle nested encodings
+                              let code = match[2];
+                              for (let i = 0; i < 3; i++) {
+                                code = decodeHtmlEntities(code);
+                              }
+
+                              // Log the decoded content
+                              console.log("Decoded explanation code block content:", code.substring(0, 100) + "...");
+
+                              // Render the code block
+                              return (
+                                <div key={`explain-code-${segment.id}-${idx}`} className="my-3">
+                                  <CodeBlock
+                                    code={code}
+                                    language={language}
+                                  />
+                                </div>
+                              );
+                            }
+                            return null;
+                          } else if (part.trim()) {
+                            // This is regular text, render it normally
+                            return (
+                              <div key={`explain-text-${segment.id}-${idx}`}>
+                                {formatRegularContent(part)}
+                              </div>
+                            );
+                          }
+                          return null;
+                        })}
+                      </>
+                    ) : (
+                      // If no code blocks, render normally
+                      formatRegularContent(segment.content)
+                    )}
+                  </div>
+                );
+              } else if (segment.type === 'code-section') {
+                // Extract code blocks from the content
+                const codeBlockMatches = segment.content.match(/```([\w-]*)\n([\s\S]*?)```/g);
+
+                if (codeBlockMatches && codeBlockMatches.length > 0) {
+                  // Process each code block
+                  return (
+                    <div key={segment.id} className="my-4">
+                      {codeBlockMatches.map((codeBlock, index) => {
+                        // Extract language and code content
+                        const match = codeBlock.match(/```([\w-]*)\n([\s\S]*?)```/);
+                        if (match) {
+                          const language = match[1] || 'text';
+
+                          // Log the original code content
+                          console.log("Original code block content:", match[2].substring(0, 100) + "...");
+
+                          // Use our utility function for more comprehensive decoding
+                          // Decode multiple times to handle nested encodings
+                          let code = match[2];
+                          for (let i = 0; i < 3; i++) {
+                            code = decodeHtmlEntities(code);
+                          }
+
+                          // Log the decoded content
+                          console.log("Decoded code block content:", code.substring(0, 100) + "...");
+
+                          // Only render the code block if it has content
+                          if (code && code.trim() !== '') {
+                            return (
+                              <CodeBlock
+                                key={`${segment.id}-code-${index}`}
+                                code={code}
+                                language={language}
+                              />
+                            );
+                          }
+                        }
+                        return null;
+                      })}
+
+                      {/* Render any text that's not a code block */}
+                      {segment.content.replace(/```([\w-]*)\n([\s\S]*?)```/g, '').trim() && (
+                        <div className="mt-2">
+                          {formatRegularContent(segment.content.replace(/```([\w-]*)\n([\s\S]*?)```/g, '').trim())}
+                        </div>
+                      )}
+                    </div>
+                  );
+                } else {
+                  // If no code blocks found or all are empty, check if there's any content to render
+                  const cleanContent = segment.content.replace(/```([\w-]*)\n([\s\S]*?)```/g, '').trim();
+                  if (cleanContent) {
+                    return (
+                      <div key={segment.id} className="my-4">
+                        {formatRegularContent(cleanContent)}
+                      </div>
+                    );
+                  }
+                  // If there's no content at all, don't render anything
+                  return null;
+                }
+
+              } else if (segment.type === 'code') {
+                // Log the original code content
+                console.log("Original segment code content:", segment.content.substring(0, 100) + "...");
+
+                // Use our utility function for more comprehensive decoding
+                // Decode multiple times to handle nested encodings
+                let decodedCode = segment.content;
+                for (let i = 0; i < 3; i++) {
+                  decodedCode = decodeHtmlEntities(decodedCode);
+                }
+
+                // Log the decoded content
+                console.log("Decoded segment code content:", decodedCode.substring(0, 100) + "...");
+
+                // Render code blocks using the CodeBlock component
+                return (
+                  <CodeBlock
+                    key={segment.id}
+                    code={decodedCode}
+                    language={segment.language}
+                  />
+                );
+              } else {
+                // Wrap the regular content in a div with a key to avoid React key warnings
+                return <div key={segment.id}>{formatRegularContent(segment.content)}</div>;
+              }
+            })}
+          </>
+        );
+      } catch (error) {
+        console.error("Error processing content with special sections:", error);
+        // Fallback to regular content processing if there's an error
+        return formatRegularContent(text);
+      }
+    }
+
+    // If no special sections are detected, process as regular content
+    return formatRegularContent(text);
+  };
+
+  // Helper function to format regular content
+  const formatRegularContent = (text: string) => {
     if (!text) return null;
 
     // Split the text by lines to process headers and lists
@@ -439,7 +1492,7 @@ export function Typewriter({ typingSpeed = 50 }: TypewriterProps) {
       // Process the line based on its content
       if (line.startsWith('# ')) {
         // Process course title
-        const courseTitle = line.substring(2);
+        const courseTitle = decodeHtmlEntities(line.substring(2));
         renderedElements.push(
           <div key={`heading-${i}`} className="mt-8 mb-6">
             <h1 className="text-2xl md:text-3xl font-bold text-primary-DEFAULT flex items-center gap-2 pb-2 border-b border-primary-DEFAULT/20">
@@ -470,7 +1523,7 @@ export function Typewriter({ typingSpeed = 50 }: TypewriterProps) {
 
         if (chapterMatch) {
           const chapterNumber = parseInt(chapterMatch[1]);
-          const chapterTitle = chapterMatch[2];
+          const chapterTitle = decodeHtmlEntities(chapterMatch[2]);
 
           renderedElements.push(
             <div key={`chapter-${i}`} className="mt-8 mb-6 bg-gradient-to-r from-bg-tertiary/40 to-bg-tertiary/20 rounded-lg p-5 border-l-4 border-success-DEFAULT shadow-sm">
@@ -495,10 +1548,12 @@ export function Typewriter({ typingSpeed = 50 }: TypewriterProps) {
             </div>
           );
         } else {
+          // Decode HTML entities in the heading
+          const heading = decodeHtmlEntities(line.substring(3));
           renderedElements.push(
             <div key={`heading2-${i}`} className="mt-6 mb-4">
               <h2 className="text-xl md:text-2xl font-bold flex items-center gap-2 text-text-primary">
-                {line.substring(3)}
+                {heading}
               </h2>
               <div className="h-1 w-16 bg-primary-DEFAULT/50 rounded mt-2"></div>
             </div>
@@ -507,7 +1562,8 @@ export function Typewriter({ typingSpeed = 50 }: TypewriterProps) {
       }
       // Process subtopics (section headings)
       else if (line.startsWith('### ')) {
-        const sectionTitle = line.substring(4);
+        // Decode HTML entities in the section title
+        const sectionTitle = decodeHtmlEntities(line.substring(4));
         const isNumberedSection = /^\d+\.\d+:/.test(sectionTitle);
 
         renderedElements.push(
@@ -522,7 +1578,8 @@ export function Typewriter({ typingSpeed = 50 }: TypewriterProps) {
       }
       // Process subsection headings with special icons
       else if (line.startsWith('#### ')) {
-        const heading = line.substring(5);
+        // Decode HTML entities in the heading
+        const heading = decodeHtmlEntities(line.substring(5));
         let icon = null;
         let colorClass = "text-text-primary/90";
 
@@ -565,22 +1622,30 @@ export function Typewriter({ typingSpeed = 50 }: TypewriterProps) {
       }
       // Process lists
       else if (line.match(/^\s*[\-\*]\s/)) {
-        const content = line.replace(/^\s*[\-\*]\s/, '');
+        // First decode HTML entities in the entire line
+        const decodedLine = decodeHtmlEntities(line);
+        const content = decodedLine.replace(/^\s*[\-\*]\s/, '');
 
         // Process any inline formatting in the content
         const formattedContent = content
           // Bold text
-          .replace(/\*\*([^*]+)\*\*/g, (_, text) => (
-            `<strong class="font-bold text-text-primary">${text}</strong>`
-          ))
+          .replace(/\*\*([^*]+)\*\*/g, (_, text) => {
+            // Decode HTML entities in the text
+            const decodedText = decodeHtmlEntities(text);
+            return `<strong class="font-bold text-text-primary">${decodedText}</strong>`;
+          })
           // Italic text
-          .replace(/\*([^*]+)\*/g, (_, text) => (
-            `<em class="text-primary-DEFAULT/90 font-medium not-italic">${text}</em>`
-          ))
+          .replace(/\*([^*]+)\*/g, (_, text) => {
+            // Decode HTML entities in the text
+            const decodedText = decodeHtmlEntities(text);
+            return `<em class="text-primary-DEFAULT/90 font-medium not-italic">${decodedText}</em>`;
+          })
           // Inline code
-          .replace(/`([^`]+)`/g, (_, text) => (
-            `<code class="px-1 py-0.5 bg-bg-tertiary rounded text-sm font-mono">${text}</code>`
-          ));
+          .replace(/`([^`]+)`/g, (_, text) => {
+            // Decode HTML entities in the text
+            const decodedText = decodeHtmlEntities(text);
+            return `<code class="px-1 py-0.5 bg-bg-tertiary rounded text-sm font-mono">${decodedText}</code>`;
+          });
 
         renderedElements.push(
           <div key={`list-${i}`} className="my-2 flex items-start">
@@ -591,25 +1656,34 @@ export function Typewriter({ typingSpeed = 50 }: TypewriterProps) {
       }
       // Process numbered lists
       else if (line.match(/^\s*\d+\.\s/)) {
+        // First decode HTML entities in the entire line
+        const decodedLine = decodeHtmlEntities(line);
+
         // Extract the number to preserve it in the rendered output
-        const match = line.match(/^\s*(\d+)\.\s/);
+        const match = decodedLine.match(/^\s*(\d+)\.\s/);
         const number = match ? match[1] : "1";
-        const content = line.replace(/^\s*\d+\.\s/, '');
+        const content = decodedLine.replace(/^\s*\d+\.\s/, '');
 
         // Process any inline formatting in the content
         const formattedContent = content
           // Bold text
-          .replace(/\*\*([^*]+)\*\*/g, (_, text) => (
-            `<strong class="font-bold text-text-primary">${text}</strong>`
-          ))
+          .replace(/\*\*([^*]+)\*\*/g, (_, text) => {
+            // Decode HTML entities in the text
+            const decodedText = decodeHtmlEntities(text);
+            return `<strong class="font-bold text-text-primary">${decodedText}</strong>`;
+          })
           // Italic text
-          .replace(/\*([^*]+)\*/g, (_, text) => (
-            `<em class="text-primary-DEFAULT/90 font-medium not-italic">${text}</em>`
-          ))
+          .replace(/\*([^*]+)\*/g, (_, text) => {
+            // Decode HTML entities in the text
+            const decodedText = decodeHtmlEntities(text);
+            return `<em class="text-primary-DEFAULT/90 font-medium not-italic">${decodedText}</em>`;
+          })
           // Inline code
-          .replace(/`([^`]+)`/g, (_, text) => (
-            `<code class="px-1 py-0.5 bg-bg-tertiary rounded text-sm font-mono">${text}</code>`
-          ));
+          .replace(/`([^`]+)`/g, (_, text) => {
+            // Decode HTML entities in the text
+            const decodedText = decodeHtmlEntities(text);
+            return `<code class="px-1 py-0.5 bg-bg-tertiary rounded text-sm font-mono">${decodedText}</code>`;
+          });
 
         renderedElements.push(
           <div key={`numlist-${i}`} className="my-2 flex items-start">
@@ -620,10 +1694,13 @@ export function Typewriter({ typingSpeed = 50 }: TypewriterProps) {
       }
       // Process blockquotes
       else if (line.startsWith('> ')) {
+        // Decode HTML entities in the blockquote content
+        const decodedContent = decodeHtmlEntities(line.substring(2));
+
         renderedElements.push(
           <blockquote key={`quote-${i}`} className="border-l-4 border-warning-DEFAULT pl-4 py-3 my-5 bg-gradient-to-r from-warning-DEFAULT/15 to-warning-DEFAULT/5 rounded-r shadow-sm">
             <div className="text-warning-DEFAULT/90 font-medium mb-1 text-sm">Note:</div>
-            <div className="text-text-primary/90">{line.substring(2)}</div>
+            <div className="text-text-primary/90">{decodedContent}</div>
           </blockquote>
         );
       }
@@ -637,20 +1714,29 @@ export function Typewriter({ typingSpeed = 50 }: TypewriterProps) {
       }
       // Process regular paragraphs
       else if (line.trim() !== '') {
+        // First decode HTML entities in the entire line
+        const decodedLine = decodeHtmlEntities(line);
+
         // Process inline formatting (bold, italic, code)
-        const formattedLine = line
+        const formattedLine = decodedLine
           // Bold text
-          .replace(/\*\*([^*]+)\*\*/g, (_, text) => (
-            `<strong class="font-bold text-text-primary">${text}</strong>`
-          ))
+          .replace(/\*\*([^*]+)\*\*/g, (_, text) => {
+            // Decode HTML entities in the text
+            const decodedText = decodeHtmlEntities(text);
+            return `<strong class="font-bold text-text-primary">${decodedText}</strong>`;
+          })
           // Italic text
-          .replace(/\*([^*]+)\*/g, (_, text) => (
-            `<em class="text-primary-DEFAULT/90 font-medium not-italic">${text}</em>`
-          ))
+          .replace(/\*([^*]+)\*/g, (_, text) => {
+            // Decode HTML entities in the text
+            const decodedText = decodeHtmlEntities(text);
+            return `<em class="text-primary-DEFAULT/90 font-medium not-italic">${decodedText}</em>`;
+          })
           // Inline code
-          .replace(/`([^`]+)`/g, (_, text) => (
-            `<code class="px-1 py-0.5 bg-bg-tertiary rounded text-sm font-mono">${text}</code>`
-          ));
+          .replace(/`([^`]+)`/g, (_, text) => {
+            // Decode HTML entities in the text
+            const decodedText = decodeHtmlEntities(text);
+            return `<code class="px-1 py-0.5 bg-bg-tertiary rounded text-sm font-mono">${decodedText}</code>`;
+          });
 
         renderedElements.push(
           <p key={`para-${i}`} className="my-3 leading-relaxed" dangerouslySetInnerHTML={{ __html: formattedLine }} />
@@ -662,7 +1748,8 @@ export function Typewriter({ typingSpeed = 50 }: TypewriterProps) {
       }
     }
 
-    return <>{renderedElements}</>;
+    // Wrap the rendered elements in a div with a unique key
+    return <div key="regular-content-wrapper">{renderedElements}</div>;
   };
 
   // These hooks are now moved above
@@ -873,8 +1960,7 @@ Please focus specifically on this section and provide a clear, concise explanati
     sendTextMessage(message);
   };
 
-  // Get the current teaching mode from settings
-  const { settings } = useSettings();
+  // Get the current teaching mode
   const isTeacherMode = settings.teachingMode === 'teacher';
 
   return (
@@ -898,6 +1984,54 @@ Please focus specifically on this section and provide a clear, concise explanati
         {state !== ConnectionState.Disconnected && (
           <div className="h-full overflow-y-auto" ref={conversationContainerRef}>
             <div className="h-12" />
+
+            {/* Explanation Toggle Button (only shown when there are messages) */}
+            {messages.length > 0 && (
+              <div className="flex justify-end mb-4 px-4">
+                <button
+                  onClick={() => {
+                    // Get all explanation segments from the current messages
+                    const allSegments: string[] = [];
+                    messages
+                      .filter(item => item.conversation_id === currentConversationId)
+                      .forEach(item => {
+                        if (item.text) {
+                          // Extract all explanation blocks
+                          const explainBlockRegex = /\[\s*EXPLAIN\s*\]([\s\S]*?)\[\s*\/\s*EXPLAIN\s*\]/g;
+                          let match;
+                          let index = 0;
+                          while ((match = explainBlockRegex.exec(item.text)) !== null) {
+                            allSegments.push(`explain-${item.id}-${index++}`);
+                          }
+                        }
+                      });
+
+                    // Check if any explanations are currently visible
+                    const anyVisible = allSegments.some(id => visibleExplanations[id]);
+
+                    // Toggle all explanations based on current state
+                    const newState = !anyVisible;
+                    const newVisibleExplanations: Record<string, boolean> = {};
+                    allSegments.forEach(id => {
+                      newVisibleExplanations[id] = newState;
+                    });
+
+                    setVisibleExplanations(newVisibleExplanations);
+                  }}
+                  className={`text-xs px-3 py-1.5 rounded-full flex items-center gap-1 transition-colors ${
+                    Object.values(visibleExplanations).some(v => v)
+                      ? 'bg-primary-DEFAULT/20 text-primary-DEFAULT hover:bg-primary-DEFAULT/30 border border-primary-DEFAULT/20'
+                      : 'bg-bg-tertiary/50 text-text-tertiary hover:bg-bg-tertiary/70 border border-bg-tertiary/20'
+                  }`}
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path>
+                  </svg>
+                  <span>{Object.values(visibleExplanations).some(v => v) ? 'Hide All Explanations' : 'Show All Explanations'}</span>
+                </button>
+              </div>
+            )}
 
             {/* Mobile Course Navigation is now handled by the CourseUI component */}
             {/* Conversation History */}
@@ -981,7 +2115,8 @@ Please focus specifically on this section and provide a clear, concise explanati
                         {item.text.includes("```") || item.text.includes("#") ? (
                           renderEnhancedResponse(item.text)
                         ) : (
-                          item.text
+                          /* Decode HTML entities in user messages */
+                          decodeHtmlEntities(item.text)
                         )}
                       </div>
                     ) : (

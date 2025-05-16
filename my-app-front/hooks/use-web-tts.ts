@@ -377,14 +377,343 @@ export function useWebTTS() {
                              text.includes('## Chapter') ||
                              text.includes('### ');
 
+      // Check for special sections with [EXPLAIN] markers - more robust check
+      const hasSpecialSections = /\[\s*EXPLAIN\s*\]/.test(text) || /\[\s*CODE\s*\]/.test(text);
+
+      // Debug logging
+      console.log("TTS - Special sections detected:", hasSpecialSections);
+      if (hasSpecialSections) {
+        console.log("TTS - Text contains [EXPLAIN]:", /\[\s*EXPLAIN\s*\]/.test(text));
+        console.log("TTS - Text contains [CODE]:", /\[\s*CODE\s*\]/.test(text));
+
+        // Define regex patterns to detect incomplete markers
+        const openExplainRegex = /\[\s*EXPLAIN\s*\](?![\s\S]*?\[\s*\/\s*EXPLAIN\s*\])/g;
+        const closeExplainRegex = /\[\s*\/\s*EXPLAIN\s*\](?<!\[\s*EXPLAIN\s*\][\s\S]*?)/g;
+        const openCodeRegex = /\[\s*CODE\s*\](?![\s\S]*?\[\s*\/\s*CODE\s*\])/g;
+        const closeCodeRegex = /\[\s*\/\s*CODE\s*\](?<!\[\s*CODE\s*\][\s\S]*?)/g;
+
+        // Check for incomplete markers
+        const hasOpenExplain = openExplainRegex.test(text);
+        const hasCloseExplain = closeExplainRegex.test(text);
+        const hasOpenCode = openCodeRegex.test(text);
+        const hasCloseCode = closeCodeRegex.test(text);
+
+        // Reset regex lastIndex
+        openExplainRegex.lastIndex = 0;
+        closeExplainRegex.lastIndex = 0;
+        openCodeRegex.lastIndex = 0;
+        closeCodeRegex.lastIndex = 0;
+
+        if (hasOpenExplain || hasCloseExplain || hasOpenCode || hasCloseCode) {
+          console.log("TTS - Warning: Incomplete markers detected");
+
+          // Fix incomplete markers for TTS
+          let fixedText = text;
+
+          // Fix open [EXPLAIN] without close by adding a closing tag at the end
+          if (hasOpenExplain) {
+            fixedText = fixedText.replace(openExplainRegex, (match) => {
+              return match + "\n\nExplanation\n\n[/EXPLAIN]";
+            });
+          }
+
+          // Fix close [/EXPLAIN] without open by adding an opening tag before it
+          if (hasCloseExplain) {
+            fixedText = fixedText.replace(closeExplainRegex, (match) => {
+              return "[EXPLAIN]\n\nExplanation\n\n" + match;
+            });
+          }
+
+          // Fix open [CODE] without close by adding a closing tag at the end
+          if (hasOpenCode) {
+            fixedText = fixedText.replace(openCodeRegex, (match) => {
+              return match + "\n\n```\n\n```\n\n[/CODE]";
+            });
+          }
+
+          // Fix close [/CODE] without open by adding an opening tag before it
+          if (hasCloseCode) {
+            fixedText = fixedText.replace(closeCodeRegex, (match) => {
+              return "[CODE]\n\n```\n\n```\n\n" + match;
+            });
+          }
+
+          // Use the fixed text
+          text = fixedText;
+        }
+
+        // Test extraction
+        const explainRegex = /\[\s*EXPLAIN\s*\]([\s\S]*?)\[\s*\/\s*EXPLAIN\s*\]/g;
+        let match;
+        let count = 0;
+        while ((match = explainRegex.exec(text)) !== null && count < 3) {
+          console.log(`TTS - EXPLAIN block ${count + 1} found:`, match[1].substring(0, 50) + "...");
+          count++;
+        }
+      }
+
       // Process text differently based on content type
       let cleanedText;
-      if (isCourseContent) {
+
+      // If we have special sections and the setting is enabled, only speak the explanations
+      if (hasSpecialSections && settings.ttsVerbalsOnly) {
+        try {
+          // Extract only the verbal explanations with a more robust regex
+          const explainRegex = /\[\s*EXPLAIN\s*\]([\s\S]*?)\[\s*\/\s*EXPLAIN\s*\]/g;
+          const explanations = [];
+          let match;
+
+          while ((match = explainRegex.exec(text)) !== null) {
+            explanations.push(match[1].trim());
+          }
+
+          console.log("TTS - Found explanation blocks:", explanations.length);
+
+          if (explanations.length > 0) {
+            // Join all explanations with pauses between them
+            cleanedText = explanations.join('. \n\n');
+
+            // Log the first part of the extracted text for debugging
+            console.log("TTS - Speaking explanations:", cleanedText.substring(0, 100) + "...");
+
+            // Apply standard text cleaning to the explanations
+            cleanedText = cleanedText
+              // Remove any nested markers that might have been included
+              .replace(/\[\s*BOARD\s*\]([\s\S]*?)\[\s*\/\s*BOARD\s*\]/g, '')
+              .replace(/\[\s*EXPLAIN\s*\]([\s\S]*?)\[\s*\/\s*EXPLAIN\s*\]/g, '$1')
+
+              // Remove markdown formatting
+              .replace(/\*\*\*(.*?)\*\*\*/g, '$1')
+              .replace(/\*\*(.*?)\*\*/g, '$1')
+              .replace(/\*(.*?)\*/g, '$1')
+              .replace(/\*/g, ' ')
+              .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
+              .replace(/```[\s\S]*?```/g, 'Code block omitted.')
+              .replace(/`([^`]+)`/g, '$1')
+              .replace(/^#{1,6}\s+(.+)$/gm, '$1')
+              .replace(/^[\s]*[-*+]\s+/gm, '')
+              .replace(/^[\s]*\d+\.\s+/gm, '')
+              .replace(/&[a-z]+;/g, ' ')
+              .replace(/[_=+]/g, ' ')
+              // Handle special programming terms
+              .replace(/C\+\+/g, 'C plus plus')
+              .replace(/\.NET/g, 'dot net')
+              .replace(/\b0\.\d+/g, (match) => match.replace('.', ' point '))
+              .replace(/\b\d+\.\d+/g, (match) => match.replace('.', ' point '))
+
+              // Handle mathematical notation
+              .replace(/O\(n²\)/g, 'O of n squared')
+              .replace(/O\(n\^2\)/g, 'O of n squared')
+              .replace(/O\(log n\)/g, 'O of log n')
+              .replace(/x²/g, 'x squared')
+              .replace(/x\^2/g, 'x squared')
+              .replace(/f'\(x\)/g, 'f prime of x')
+              .replace(/f\(x\)/g, 'f of x')
+              .replace(/\s+/g, ' ')
+              .trim();
+
+            // Add natural pauses by using punctuation only
+            // Remove any SSML tags that might be read aloud
+            cleanedText = cleanedText
+              .replace(/<break[^>]*>/g, '')
+              .replace(/<[^>]*>/g, '')
+              .replace(/\bbreaktime\b/g, '')
+              .replace(/\.\s+/g, '. ')
+              .replace(/\!\s+/g, '! ')
+              .replace(/\?\s+/g, '? ');
+          } else {
+            console.log("TTS - No explanation blocks found, using fallback");
+            // If no explanations found, use the whole text but remove code sections
+            cleanedText = text
+              .replace(/\[\s*CODE\s*\]([\s\S]*?)\[\s*\/\s*CODE\s*\]/g, '')
+              .replace(/\[\s*EXPLAIN\s*\]([\s\S]*?)\[\s*\/\s*EXPLAIN\s*\]/g, '$1')
+              .replace(/\s+/g, ' ')
+              .trim();
+          }
+        } catch (error) {
+          console.error("TTS - Error processing content with special sections:", error);
+          // Fallback to simple text cleaning
+          cleanedText = text
+            .replace(/\[\s*CODE\s*\]([\s\S]*?)\[\s*\/\s*CODE\s*\]/g, '')
+            .replace(/\[\s*EXPLAIN\s*\]([\s\S]*?)\[\s*\/\s*EXPLAIN\s*\]/g, '$1')
+            .replace(/\s+/g, ' ')
+            .trim();
+        }
+      } else if (hasSpecialSections) {
+        // If special sections are detected but verbalsOnly is not enabled,
+        // read all content including explanations
+        try {
+          // Process the text to read regular content and explanations in the correct order
+          // First, extract all blocks in order
+          const explainBlockRegex = /\[\s*EXPLAIN\s*\]([\s\S]*?)\[\s*\/\s*EXPLAIN\s*\]/g;
+          const codeBlockRegex = /\[\s*CODE\s*\]([\s\S]*?)\[\s*\/\s*CODE\s*\]/g;
+
+          // Extract all blocks in order of appearance
+          const allBlocks = [];
+          let explainMatch;
+          let codeMatch;
+
+          // Reset regex lastIndex
+          explainBlockRegex.lastIndex = 0;
+          codeBlockRegex.lastIndex = 0;
+
+          // Find all explain blocks
+          while ((explainMatch = explainBlockRegex.exec(text)) !== null) {
+            allBlocks.push({
+              type: 'explain',
+              content: explainMatch[1].trim(),
+              startIndex: explainMatch.index,
+              endIndex: explainMatch.index + explainMatch[0].length
+            });
+          }
+
+          // Find all code blocks
+          while ((codeMatch = codeBlockRegex.exec(text)) !== null) {
+            allBlocks.push({
+              type: 'code',
+              content: codeMatch[1].trim(),
+              startIndex: codeMatch.index,
+              endIndex: codeMatch.index + codeMatch[0].length
+            });
+          }
+
+          // Sort blocks by their appearance in the text
+          allBlocks.sort((a, b) => a.startIndex - b.startIndex);
+
+          // Extract regular content that's not in any block
+          let lastEndIndex = 0;
+          const regularBlocks = [];
+
+          // Add regular content before the first block
+          if (allBlocks.length > 0 && allBlocks[0].startIndex > 0) {
+            regularBlocks.push({
+              type: 'regular',
+              content: text.substring(0, allBlocks[0].startIndex).trim(),
+              startIndex: 0,
+              endIndex: allBlocks[0].startIndex
+            });
+            lastEndIndex = allBlocks[0].endIndex;
+          }
+
+          // Add regular content between blocks
+          for (let i = 0; i < allBlocks.length - 1; i++) {
+            const currentBlock = allBlocks[i];
+            const nextBlock = allBlocks[i + 1];
+
+            if (nextBlock.startIndex > currentBlock.endIndex) {
+              regularBlocks.push({
+                type: 'regular',
+                content: text.substring(currentBlock.endIndex, nextBlock.startIndex).trim(),
+                startIndex: currentBlock.endIndex,
+                endIndex: nextBlock.startIndex
+              });
+            }
+
+            lastEndIndex = nextBlock.endIndex;
+          }
+
+          // Add regular content after the last block
+          if (allBlocks.length > 0 && lastEndIndex < text.length) {
+            regularBlocks.push({
+              type: 'regular',
+              content: text.substring(lastEndIndex).trim(),
+              startIndex: lastEndIndex,
+              endIndex: text.length
+            });
+          }
+
+          // If no blocks were found, treat the entire text as regular content
+          if (allBlocks.length === 0) {
+            regularBlocks.push({
+              type: 'regular',
+              content: text.trim(),
+              startIndex: 0,
+              endIndex: text.length
+            });
+          }
+
+          // Combine all blocks in order
+          const combinedBlocks = [...allBlocks, ...regularBlocks].sort((a, b) => a.startIndex - b.startIndex);
+
+          // Process blocks in order
+          const processedBlocks = [];
+
+          for (const block of combinedBlocks) {
+            if (block.type === 'regular' && block.content.trim()) {
+              // For regular content, include it as is
+              processedBlocks.push(block.content);
+            } else if (block.type === 'explain' && block.content.trim()) {
+              // For explain blocks, add a pause before reading
+              processedBlocks.push("Explanation: " + block.content);
+            } else if (block.type === 'code' && block.content.trim()) {
+              // For code blocks, just mention that there's code
+              processedBlocks.push("Code example (omitted for speech)");
+            }
+          }
+
+          // Join all blocks with pauses between them
+          const shortenedText = processedBlocks.join('. ');
+
+          // Clean the shortened text
+          cleanedText = shortenedText
+            .replace(/\[\s*EXPLAIN\s*\]/g, '')
+            .replace(/\[\s*\/\s*EXPLAIN\s*\]/g, '')
+            .replace(/\[\s*CODE\s*\]/g, '')
+            .replace(/\[\s*\/\s*CODE\s*\]/g, '')
+            .replace(/\*\*\*(.*?)\*\*\*/g, '$1')
+            .replace(/\*\*(.*?)\*\*/g, '$1')
+            .replace(/\*(.*?)\*/g, '$1')
+            .replace(/\*/g, ' ')
+            .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
+            .replace(/```[\s\S]*?```/g, 'Code block omitted.')
+            .replace(/`([^`]+)`/g, '$1')
+            .replace(/^#{1,6}\s+(.+)$/gm, '$1')
+            .replace(/^[\s]*[-*+]\s+/gm, '')
+            .replace(/^[\s]*\d+\.\s+/gm, '')
+            .replace(/&[a-z]+;/g, ' ')
+            .replace(/[_=+]/g, ' ')
+            // Handle special programming terms
+            .replace(/C\+\+/g, 'C plus plus')
+            .replace(/\.NET/g, 'dot net')
+            .replace(/\b0\.\d+/g, (match) => match.replace('.', ' point '))
+            .replace(/\b\d+\.\d+/g, (match) => match.replace('.', ' point '))
+
+            // Handle mathematical notation
+            .replace(/O\(n²\)/g, 'O of n squared')
+            .replace(/O\(n\^2\)/g, 'O of n squared')
+            .replace(/O\(log n\)/g, 'O of log n')
+            .replace(/x²/g, 'x squared')
+            .replace(/x\^2/g, 'x squared')
+            .replace(/f'\(x\)/g, 'f prime of x')
+            .replace(/f\(x\)/g, 'f of x')
+            .replace(/\s+/g, ' ')
+            .trim();
+
+          // Add natural pauses by using punctuation only
+          // Remove any SSML tags that might be read aloud
+          cleanedText = cleanedText
+            .replace(/<break[^>]*>/g, '')
+            .replace(/<[^>]*>/g, '')
+            .replace(/\bbreaktime\b/g, '')
+            .replace(/\.\s+/g, '. ')
+            .replace(/\!\s+/g, '! ')
+            .replace(/\?\s+/g, '? ');
+
+        } catch (error) {
+          console.error("TTS - Error processing content with special sections:", error);
+          // Fallback to simple text cleaning
+          cleanedText = processCourseContent(text);
+        }
+      } else if (isCourseContent) {
         // Use specialized course content processing
         cleanedText = processCourseContent(text);
       } else {
         // Simple text cleaning for regular content
         cleanedText = text
+          // Remove any special section markers if present (just in case)
+          .replace(/\[\s*CODE\s*\]([\s\S]*?)\[\s*\/\s*CODE\s*\]/g, '')
+          .replace(/\[\s*EXPLAIN\s*\]([\s\S]*?)\[\s*\/\s*EXPLAIN\s*\]/g, '$1')
+
           // Remove markdown formatting
           .replace(/\*\*\*(.*?)\*\*\*/g, '$1') // Triple asterisks (bold+italic)
           .replace(/\*\*(.*?)\*\*/g, '$1')     // Double asterisks (bold)
@@ -398,8 +727,8 @@ export function useWebTTS() {
           .replace(/```[\s\S]*?```/g, 'Code block omitted.') // Replace code blocks
           .replace(/`([^`]+)`/g, '$1')         // Replace inline code with just the code
 
-          // Handle markdown headers
-          .replace(/^#{1,6}\s+(.+)$/gm, '$1.') // Replace # Header with just Header
+          // Handle markdown headers - replace # with nothing
+          .replace(/^#{1,6}\s+(.+)$/gm, '$1') // Replace # Header with just Header
 
           // Handle markdown lists
           .replace(/^[\s]*[-*+]\s+/gm, '') // Replace bullet points
@@ -408,6 +737,21 @@ export function useWebTTS() {
           // Handle special characters
           .replace(/&[a-z]+;/g, ' ')       // Replace HTML entities like &nbsp; with space
           .replace(/[_=+]/g, ' ')          // Replace underscores, equals, plus with spaces
+
+          // Handle special programming terms
+          .replace(/C\+\+/g, 'C plus plus')
+          .replace(/\.NET/g, 'dot net')
+          .replace(/\b0\.\d+/g, (match) => match.replace('.', ' point ')) // Convert 0.5 to "0 point 5"
+          .replace(/\b\d+\.\d+/g, (match) => match.replace('.', ' point ')) // Convert 3.14 to "3 point 14"
+
+          // Handle mathematical notation
+          .replace(/O\(n²\)/g, 'O of n squared')
+          .replace(/O\(n\^2\)/g, 'O of n squared')
+          .replace(/O\(log n\)/g, 'O of log n')
+          .replace(/x²/g, 'x squared')
+          .replace(/x\^2/g, 'x squared')
+          .replace(/f'\(x\)/g, 'f prime of x')
+          .replace(/f\(x\)/g, 'f of x')
 
           // Clean up extra whitespace
           .replace(/\s+/g, ' ')            // Replace multiple spaces with a single space

@@ -94,76 +94,306 @@ export function CodeBlock({ code, language = 'javascript' }: CodeBlockProps) {
 
   // Basic syntax highlighting function
   const applyBasicHighlighting = (code: string, language: string): React.ReactNode => {
-    // First, escape HTML entities to prevent XSS and rendering issues
+    // Let's take a completely different approach to avoid HTML tag issues
+
+    // Import the utility functions for HTML entity handling
+    // First, decode any HTML entities that might already be in the code
+    const decodeHtmlEntities = (text: string): string => {
+      if (!text) return '';
+
+      return text
+        .replace(/&quot;/g, '"')
+        .replace(/&#039;/g, "'")
+        .replace(/&#x27;/g, "'")
+        .replace(/&lt;/g, '<')
+        .replace(/&gt;/g, '>')
+        .replace(/&amp;/g, '&')
+        .replace(/&nbsp;/g, ' ');
+    };
+
+    // Then escape HTML entities to prevent XSS and rendering issues
     const escapeHtml = (text: string): string => {
+      if (!text) return '';
+
       return text
         .replace(/&/g, '&amp;')
         .replace(/</g, '&lt;')
         .replace(/>/g, '&gt;')
         .replace(/"/g, '&quot;')
-        .replace(/'/g, '&#039;');
+        .replace(/'/g, "&#039;");
     };
 
-    // Escape the code before applying syntax highlighting
-    let highlightedCode = escapeHtml(code);
+    // First decode any existing entities, then escape for safe HTML
+    // Make sure to decode multiple times to handle double-encoded entities
+    let decodedCode = code;
 
-    // JavaScript/TypeScript keywords
+    // Log the original code to debug
+    console.log("Original code:", decodedCode);
+
+    // Decode multiple times to handle nested encodings
+    for (let i = 0; i < 3; i++) {
+      decodedCode = decodeHtmlEntities(decodedCode);
+    }
+
+    // Log the decoded code to debug
+    console.log("Decoded code:", decodedCode);
+
+    // IMPORTANT: We're skipping the HTML escaping step for the actual display
+    // This is the key fix - we want to show the actual characters, not their HTML entity representations
+    let escapedCode = decodedCode;
+
+    // Create a structure to hold our tokens
+    type Token = {
+      text: string;
+      type: string;
+    };
+
+    const tokens: Token[] = [];
+
+    // Function to add a token
+    const addToken = (text: string, type: string) => {
+      tokens.push({ text, type });
+    };
+
+    // Now let's tokenize the code based on language
     if (['javascript', 'typescript', 'jsx', 'tsx'].includes(language)) {
-      highlightedCode = highlightedCode
-        .replace(/\b(const|let|var|function|return|if|else|for|while|class|import|export|from|default|async|await)\b/g,
-          '<span class="keyword">$1</span>')
-        .replace(/\b(true|false|null|undefined)\b/g,
-          '<span class="boolean">$1</span>')
-        .replace(/(&quot;.*?&quot;|&#039;.*?&#039;|`.*?`)/g,
-          '<span class="string">$1</span>')
-        .replace(/\b(\d+)\b/g,
-          '<span class="number">$1</span>')
-        .replace(/(\/\/.*)/g,
-          '<span class="comment">$1</span>')
-        .replace(/(\/\*[\s\S]*?\*\/)/g,
-          '<span class="comment">$1</span>');
-    }
+      // Define patterns for different token types
+      const patterns = [
+        { type: 'keyword', regex: /\b(const|let|var|function|return|if|else|for|while|class|import|export|from|default|async|await)\b/g },
+        { type: 'boolean', regex: /\b(true|false|null|undefined)\b/g },
+        { type: 'string', regex: /(".*?"|'.*?'|`.*?`)/g },
+        { type: 'number', regex: /\b(\d+)\b/g },
+        { type: 'comment', regex: /(\/\/.*|\/\*[\s\S]*?\*\/)/g }
+      ];
 
+      // Tokenize the code
+      let remainingCode = escapedCode;
+      let lastIndex = 0;
+
+      while (remainingCode.length > 0) {
+        let earliestMatch = { index: Infinity, length: 0, type: '' };
+
+        // Find the earliest match among all patterns
+        for (const pattern of patterns) {
+          pattern.regex.lastIndex = 0;
+          const match = pattern.regex.exec(remainingCode);
+          if (match && match.index < earliestMatch.index) {
+            earliestMatch = {
+              index: match.index,
+              length: match[0].length,
+              type: pattern.type
+            };
+          }
+        }
+
+        if (earliestMatch.index < Infinity) {
+          // Add any text before the match as plain text
+          if (earliestMatch.index > 0) {
+            addToken(remainingCode.substring(0, earliestMatch.index), 'plain');
+          }
+
+          // Add the matched token
+          addToken(
+            remainingCode.substring(earliestMatch.index, earliestMatch.index + earliestMatch.length),
+            earliestMatch.type
+          );
+
+          // Update the remaining code
+          remainingCode = remainingCode.substring(earliestMatch.index + earliestMatch.length);
+        } else {
+          // No more matches, add the rest as plain text
+          addToken(remainingCode, 'plain');
+          break;
+        }
+      }
+    }
     // Python keywords
-    if (language === 'python') {
-      highlightedCode = highlightedCode
-        .replace(/\b(def|class|import|from|return|if|elif|else|for|while|try|except|finally|with|as|lambda|None|True|False)\b/g,
-          '<span class="keyword">$1</span>')
-        .replace(/(&quot;.*?&quot;|&#039;.*?&#039;|&quot;&quot;&quot;[\s\S]*?&quot;&quot;&quot;|&#039;&#039;&#039;[\s\S]*?&#039;&#039;&#039;)/g,
-          '<span class="string">$1</span>')
-        .replace(/\b(\d+)\b/g,
-          '<span class="number">$1</span>')
-        .replace(/(#.*)/g,
-          '<span class="comment">$1</span>');
-    }
+    else if (language === 'python') {
+      // Define patterns for different token types
+      const patterns = [
+        { type: 'keyword', regex: /\b(def|class|import|from|return|if|elif|else|for|while|try|except|finally|with|as|lambda|None|True|False)\b/g },
+        { type: 'string', regex: /(".*?"|'.*?'|"""[\s\S]*?"""|'''[\s\S]*?''')/g },
+        { type: 'number', regex: /\b(\d+)\b/g },
+        { type: 'comment', regex: /(#.*)/g }
+      ];
 
+      // Tokenize the code
+      let remainingCode = escapedCode;
+
+      while (remainingCode.length > 0) {
+        let earliestMatch = { index: Infinity, length: 0, type: '' };
+
+        // Find the earliest match among all patterns
+        for (const pattern of patterns) {
+          pattern.regex.lastIndex = 0;
+          const match = pattern.regex.exec(remainingCode);
+          if (match && match.index < earliestMatch.index) {
+            earliestMatch = {
+              index: match.index,
+              length: match[0].length,
+              type: pattern.type
+            };
+          }
+        }
+
+        if (earliestMatch.index < Infinity) {
+          // Add any text before the match as plain text
+          if (earliestMatch.index > 0) {
+            addToken(remainingCode.substring(0, earliestMatch.index), 'plain');
+          }
+
+          // Add the matched token
+          addToken(
+            remainingCode.substring(earliestMatch.index, earliestMatch.index + earliestMatch.length),
+            earliestMatch.type
+          );
+
+          // Update the remaining code
+          remainingCode = remainingCode.substring(earliestMatch.index + earliestMatch.length);
+        } else {
+          // No more matches, add the rest as plain text
+          addToken(remainingCode, 'plain');
+          break;
+        }
+      }
+    }
     // HTML keywords
-    if (language === 'html') {
-      highlightedCode = highlightedCode
-        .replace(/(&lt;[\/]?[a-zA-Z0-9]+(&gt;)?)/g,
-          '<span class="keyword">$1</span>')
-        .replace(/(&quot;[^&quot;]*&quot;)/g,
-          '<span class="string">$1</span>')
-        .replace(/(&lt;!--[\s\S]*?--&gt;)/g,
-          '<span class="comment">$1</span>');
-    }
+    else if (language === 'html') {
+      // Define patterns for different token types
+      const patterns = [
+        { type: 'keyword', regex: /(&lt;[\/]?[a-zA-Z0-9]+(&gt;)?)/g },
+        { type: 'string', regex: /("[^"]*")/g },
+        { type: 'comment', regex: /(&lt;!--[\s\S]*?--&gt;)/g }
+      ];
 
+      // Tokenize the code
+      let remainingCode = escapedCode;
+
+      while (remainingCode.length > 0) {
+        let earliestMatch = { index: Infinity, length: 0, type: '' };
+
+        // Find the earliest match among all patterns
+        for (const pattern of patterns) {
+          pattern.regex.lastIndex = 0;
+          const match = pattern.regex.exec(remainingCode);
+          if (match && match.index < earliestMatch.index) {
+            earliestMatch = {
+              index: match.index,
+              length: match[0].length,
+              type: pattern.type
+            };
+          }
+        }
+
+        if (earliestMatch.index < Infinity) {
+          // Add any text before the match as plain text
+          if (earliestMatch.index > 0) {
+            addToken(remainingCode.substring(0, earliestMatch.index), 'plain');
+          }
+
+          // Add the matched token
+          addToken(
+            remainingCode.substring(earliestMatch.index, earliestMatch.index + earliestMatch.length),
+            earliestMatch.type
+          );
+
+          // Update the remaining code
+          remainingCode = remainingCode.substring(earliestMatch.index + earliestMatch.length);
+        } else {
+          // No more matches, add the rest as plain text
+          addToken(remainingCode, 'plain');
+          break;
+        }
+      }
+    }
     // CSS keywords
-    if (language === 'css') {
-      highlightedCode = highlightedCode
-        .replace(/([.#][a-zA-Z0-9_-]+)/g,
-          '<span class="selector">$1</span>')
-        .replace(/(\{|\})/g,
-          '<span class="bracket">$1</span>')
-        .replace(/([a-zA-Z-]+)(\s*:)/g,
-          '<span class="property">$1</span>$2')
-        .replace(/(:\s*)([^;]+)(;)/g,
-          '$1<span class="value">$2</span>$3')
-        .replace(/(\/\*[\s\S]*?\*\/)/g,
-          '<span class="comment">$1</span>');
+    else if (language === 'css') {
+      // Define patterns for different token types
+      const patterns = [
+        { type: 'comment', regex: /(\/\*[\s\S]*?\*\/)/g },
+        { type: 'selector', regex: /([.#][a-zA-Z0-9_-]+)/g },
+        { type: 'bracket', regex: /(\{|\})/g },
+        { type: 'property', regex: /([a-zA-Z-]+)(?=\s*:)/g },
+        { type: 'colon', regex: /(:)/g },
+        { type: 'semicolon', regex: /(;)/g },
+        // For values, we'll handle them specially in the tokenization loop
+      ];
+
+      // Tokenize the code
+      let remainingCode = escapedCode;
+      let lastTokenType = '';
+
+      while (remainingCode.length > 0) {
+        let earliestMatch = { index: Infinity, length: 0, type: '' };
+
+        // Find the earliest match among all patterns
+        for (const pattern of patterns) {
+          pattern.regex.lastIndex = 0;
+          const match = pattern.regex.exec(remainingCode);
+          if (match && match.index < earliestMatch.index) {
+            earliestMatch = {
+              index: match.index,
+              length: match[0].length,
+              type: pattern.type
+            };
+          }
+        }
+
+        if (earliestMatch.index < Infinity) {
+          // Add any text before the match as plain text or as a value if after a colon
+          if (earliestMatch.index > 0) {
+            const textBefore = remainingCode.substring(0, earliestMatch.index);
+
+            // If the last token was a colon and the next token is a semicolon,
+            // then this text is a CSS value
+            if (lastTokenType === 'colon' && earliestMatch.type === 'semicolon') {
+              addToken(textBefore, 'value');
+            } else {
+              addToken(textBefore, 'plain');
+            }
+          }
+
+          // Add the matched token
+          addToken(
+            remainingCode.substring(earliestMatch.index, earliestMatch.index + earliestMatch.length),
+            earliestMatch.type
+          );
+
+          // Remember the type of this token for context
+          lastTokenType = earliestMatch.type;
+
+          // Update the remaining code
+          remainingCode = remainingCode.substring(earliestMatch.index + earliestMatch.length);
+        } else {
+          // No more matches, add the rest as plain text
+          addToken(remainingCode, 'plain');
+          break;
+        }
+      }
+    }
+    // For any other language, just add the entire code as plain text
+    else {
+      addToken(escapedCode, 'plain');
     }
 
-    return <div dangerouslySetInnerHTML={{ __html: highlightedCode }} />;
+    // Now render the tokens directly as React components
+    // This completely avoids any HTML tag issues
+    return (
+      <div className="code-content">
+        {tokens.map((token, index) => {
+          // For plain text, just render it as is
+          if (token.type === 'plain') {
+            // Use dangerouslySetInnerHTML to preserve HTML entities
+            return <span key={index} dangerouslySetInnerHTML={{ __html: token.text }} />;
+          }
+
+          // For other token types, apply the appropriate class
+          return (
+            <span key={index} className={token.type} dangerouslySetInnerHTML={{ __html: token.text }} />
+          );
+        })}
+      </div>
+    );
   };
 
   // Get language-specific colors

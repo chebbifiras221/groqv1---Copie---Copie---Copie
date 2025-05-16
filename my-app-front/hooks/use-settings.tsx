@@ -6,6 +6,8 @@ interface Settings {
   volume: number;
   autoSpeak: boolean;
   teachingMode: 'teacher' | 'qa'; // 'teacher' for structured teaching, 'qa' for direct Q&A
+  ttsVerbalsOnly: boolean; // When true, TTS will only read verbal explanations
+  showExplanations: boolean; // When true, show verbal explanations alongside board content
   // Add more settings as needed
 }
 
@@ -19,6 +21,8 @@ const defaultSettings: Settings = {
   volume: 0.5, // Default volume is 50%
   autoSpeak: true, // Auto-speak AI responses by default
   teachingMode: 'teacher', // Default to structured teaching mode
+  ttsVerbalsOnly: false, // Default to reading all content
+  showExplanations: false, // Hide explanations by default
 };
 
 const SettingsContext = createContext<SettingsContextType | undefined>(undefined);
