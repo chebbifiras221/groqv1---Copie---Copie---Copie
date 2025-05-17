@@ -1,5 +1,11 @@
+"""
+Web-based text-to-speech engine that delegates speech synthesis to the browser.
+This module provides a simple interface for web-based TTS functionality.
+"""
+
 import logging
 import json
+from typing import Optional, List
 
 logger = logging.getLogger("web-tts")
 
@@ -12,7 +18,7 @@ class WebTTS:
         self.use_fallback = False
         logger.info("Web TTS engine initialized")
 
-    def get_available_voices(self):
+    def get_available_voices(self) -> List[str]:
         """Get a list of available voices
 
         Returns:
@@ -20,12 +26,12 @@ class WebTTS:
         """
         return ["Web Voice"]
 
-    def synthesize(self, text, voice_name=None):
+    def synthesize(self, text: str, voice_name: Optional[str] = None) -> Optional[bytes]:
         """Synthesize speech from text
 
         Args:
-            text (str): The text to synthesize
-            voice_name (str, optional): The voice name to use. Defaults to None (uses default voice).
+            text: The text to synthesize
+            voice_name: The voice name to use. Defaults to None (uses default voice).
 
         Returns:
             bytes: The audio data as bytes (in this case, a JSON message for the frontend)
