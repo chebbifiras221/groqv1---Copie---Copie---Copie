@@ -3,7 +3,6 @@ import logging
 import json
 import os
 import requests
-from datetime import datetime
 from livekit import rtc
 from livekit.agents import JobContext, WorkerOptions, cli, stt, AutoSubscribe, transcription
 from livekit.plugins.openai import stt as plugin
@@ -60,31 +59,24 @@ def get_teaching_mode_from_db(conversation_id):
         return teaching_mode
 
     try:
-        conn = database.get_db_connection()
-        cursor = conn.cursor()
+        # Get the conversation from the database
+        conversation = database.get_conversation(conversation_id)
 
-        # Check if teaching_mode column exists
-        has_teaching_mode = database.check_column_exists(conn, "conversations", "teaching_mode")
-
-        if has_teaching_mode:
-            cursor.execute("SELECT teaching_mode FROM conversations WHERE id = ?", (conversation_id,))
-            result = cursor.fetchone()
-            if result and result["teaching_mode"]:
-                teaching_mode = result["teaching_mode"]
-                logger.info(f"Retrieved teaching mode from database: {teaching_mode}")
+        # If the conversation exists and has a teaching_mode, use it
+        if conversation and "teaching_mode" in conversation and conversation["teaching_mode"]:
+            teaching_mode = conversation["teaching_mode"]
+            logger.info(f"Retrieved teaching mode from database: {teaching_mode}")
         else:
-            logger.warning("teaching_mode column doesn't exist yet, using default mode")
-            # Try to run the migration to add the column
+            logger.warning(f"No teaching mode found for conversation {conversation_id}, using default mode")
+
+            # Try to run the migration to add the column if needed
             try:
-                database.release_connection(conn)
                 database.migrate_db()
                 logger.info("Ran migration in get_teaching_mode_from_db")
             except Exception as e:
                 logger.error(f"Failed to run migration in get_teaching_mode_from_db: {e}")
     except Exception as e:
         logger.error(f"Error getting teaching mode from database: {e}")
-    finally:
-        database.release_connection(conn)
 
     return teaching_mode
 
@@ -105,14 +97,11 @@ def find_or_create_empty_conversation(teaching_mode="teacher", check_current=Tru
     # First, verify if the current conversation exists (if requested)
     if check_current and current_conversation_id:
         try:
-            conn = database.get_db_connection()
-            cursor = conn.cursor()
-            cursor.execute("SELECT id FROM conversations WHERE id = ?", (current_conversation_id,))
-            result = cursor.fetchone()
-            current_exists = bool(result)
-            database.release_connection(conn)
+            # Get the conversation from the database
+            conversation = database.get_conversation(current_conversation_id)
 
-            if not current_exists:
+            # If the conversation doesn't exist, reset current_conversation_id
+            if not conversation:
                 logger.warning(f"Current conversation ID {current_conversation_id} does not exist, will create a new one")
                 current_conversation_id = None
         except Exception as e:
@@ -136,7 +125,7 @@ def find_or_create_empty_conversation(teaching_mode="teacher", check_current=Tru
 
         # Update the conversation with the new teaching mode
         try:
-            result = database.reuse_empty_conversation(
+            database.reuse_empty_conversation(
                 conversation_id=current_conversation_id,
                 teaching_mode=teaching_mode
             )

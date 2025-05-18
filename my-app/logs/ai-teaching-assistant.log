@@ -1,0 +1,27 @@
+2025-05-17 19:09:25,709 - root - INFO - Logging configured with level INFO
+2025-05-17 19:09:25,723 - root - INFO - Console logging enabled
+2025-05-17 19:09:25,724 - root - INFO - File logging enabled in directory logs
+2025-05-17 19:09:25,724 - root - INFO - Module database log level set to INFO
+2025-05-17 19:09:25,725 - root - INFO - Module ai-service log level set to INFO
+2025-05-17 19:09:25,726 - root - INFO - Module tts-service log level set to INFO
+2025-05-17 19:09:25,727 - root - INFO - Module conversation-service log level set to INFO
+2025-05-17 19:09:25,727 - root - INFO - Module error-handler log level set to INFO
+2025-05-17 19:09:25,730 - database - INFO - Database initialized
+2025-05-17 19:09:25,732 - database - INFO - teaching_mode column already exists, no migration needed
+2025-05-17 19:09:25,732 - main - INFO - Database initialized successfully
+2025-05-17 19:09:25,733 - database - INFO - teaching_mode column already exists, no migration needed
+2025-05-17 19:09:25,734 - main - INFO - Database migrations completed successfully
+2025-05-17 19:09:25,834 - livekit.agents - DEV - Watching C:\Users\Admin\Desktop\minePFE\groqv1---Copie---Copie---Copie\my-app
+2025-05-17 19:09:30,211 - root - INFO - Logging configured with level INFO
+2025-05-17 19:09:30,211 - root - INFO - Console logging enabled
+2025-05-17 19:09:30,212 - root - INFO - File logging enabled in directory logs
+2025-05-17 19:09:30,212 - root - INFO - Module database log level set to INFO
+2025-05-17 19:09:30,213 - root - INFO - Module ai-service log level set to INFO
+2025-05-17 19:09:30,213 - root - INFO - Module tts-service log level set to INFO
+2025-05-17 19:09:30,213 - root - INFO - Module conversation-service log level set to INFO
+2025-05-17 19:09:30,213 - root - INFO - Module error-handler log level set to INFO
+2025-05-17 19:09:30,215 - database - INFO - Database initialized
+2025-05-17 19:09:30,216 - database - INFO - teaching_mode column already exists, no migration needed
+2025-05-17 19:09:30,217 - main - INFO - Database initialized successfully
+2025-05-17 19:09:30,218 - database - INFO - teaching_mode column already exists, no migration needed
+2025-05-17 19:09:30,219 - main - INFO - Database migrations completed successfully

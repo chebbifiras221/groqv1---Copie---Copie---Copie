@@ -6,178 +6,39 @@ import { ConnectionState } from "livekit-client";
 import {
   MessageSquare,
   BookOpen,
-  Bookmark,
-  CheckCircle,
-  Target,
-  Code,
-  FileText,
-  PenTool,
-  Clock,
-  Award,
   BookMarked,
-  ListChecks,
-  ArrowRight,
-  ChevronRight,
-  ChevronDown
 } from "lucide-react";
 import { decodeHtmlEntities } from "@/utils/html-entities";
 import { useTranscriber } from "@/hooks/use-transcriber";
 import { useAIResponses } from "@/hooks/use-ai-responses";
 import { useConversation } from "@/hooks/use-conversation";
 import { CodeBlock } from "./code-block";
-import { CodeEditor } from "./code-editor";
 import { SimpleBotFace } from "./ui/simple-bot-face";
 import { CourseUI } from "./course-ui";
 import { useSettings } from "@/hooks/use-settings";
+import { ContentSegment } from "./content-segment";
+import {
+  processCodeTags,
+  processTextForSpecialSections,
+  findOutermostSections
+} from "@/utils/markdown-formatter";
+import {
+  extractCourseStructure,
+  ChapterData
+} from "@/utils/course-structure";
 
 export interface TypewriterProps {
   typingSpeed?: number;
 }
 
-const emptyText =
-  "Connect to begin your personalized learning experience";
+const emptyText = "Connect to begin your personalized learning experience";
 
 // Regular expression to detect code blocks in markdown format
 const codeBlockRegex = /```([\w-]*)?\n([\s\S]*?)\n```/g;
 
-// Regular expressions to detect chapter titles
-const chapterRegex = /^## Chapter (\d+): (.+)$/;
-// New regex to match the format in the image (numbered list with asterisks)
-// This captures the number before the dot as the chapter number
-const outlineChapterRegex = /^\s*(\d+)\.\s+\*\*([^*]+)\*\*$/;
-// Additional regex to match other common outline formats
-// This also captures the number before the dot as the chapter number
-const altOutlineRegex = /^\s*(\d+)\.\s+(.*?)$/;
-
 export function Typewriter({ typingSpeed = 50 }: TypewriterProps) {
   // State for tracking course structure
-  const [courseChapters, setCourseChapters] = useState<{
-    id: string;
-    number: number;
-    title: string;
-    isActive: boolean;
-    isExpanded: boolean;
-  }[]>([]);
-
-  // Function to extract course structure from text
-  const extractCourseStructure = (text: string) => {
-    // Reset regex lastIndex
-    chapterRegex.lastIndex = 0;
-
-    // Find all chapter headings
-    const chapters: {
-      id: string;
-      number: number;
-      title: string;
-      isActive: boolean;
-      isExpanded: boolean;
-    }[] = [];
-
-    const lines = text.split('\n');
-
-    // Keep track of chapters we've already processed to avoid duplicates
-    const processedChapters = new Set<string>();
-    // Keep track of chapter numbers we've seen to avoid duplicates
-    const usedChapterNumbers = new Set<number>();
-
-    // First pass: look for traditional chapter format (## Chapter X: Title)
-    let foundTraditionalFormat = false;
-
-    lines.forEach((line, index) => {
-      const match = line.match(chapterRegex);
-      if (match) {
-        foundTraditionalFormat = true;
-        const chapterNumber = parseInt(match[1]);
-        const chapterTitle = match[2];
-
-        // Create a unique key for this chapter
-        const chapterKey = `${chapterNumber}-${chapterTitle}`;
-
-        // Only add this chapter if we haven't seen it before
-        if (!processedChapters.has(chapterKey) && !usedChapterNumbers.has(chapterNumber)) {
-          processedChapters.add(chapterKey);
-          usedChapterNumbers.add(chapterNumber);
-
-          // Add to chapters array with a unique ID that includes the index
-          chapters.push({
-            id: `chapter-${chapterNumber}-${index}`,
-            number: chapterNumber,
-            title: chapterTitle,
-            isActive: chapters.length === 0, // First chapter is active by default
-            isExpanded: chapters.length === 0 // First chapter is expanded by default
-          });
-        }
-      }
-    });
-
-    // If no traditional format found, look for outline format
-    if (!foundTraditionalFormat) {
-      // Reset used chapter numbers for the outline format
-      usedChapterNumbers.clear();
-
-      // First try the primary outline regex (with asterisks)
-      lines.forEach((line, index) => {
-        const match = line.match(outlineChapterRegex);
-        if (match) {
-          const chapterNumber = parseInt(match[1]);
-          const chapterTitle = match[2];
-
-          // Create a unique key for this chapter
-          const chapterKey = `${chapterNumber}-${chapterTitle}`;
-
-          // Only add this chapter if we haven't seen it before and the number is unique
-          if (!processedChapters.has(chapterKey) && !usedChapterNumbers.has(chapterNumber)) {
-            processedChapters.add(chapterKey);
-            usedChapterNumbers.add(chapterNumber);
-
-            // Add to chapters array with a unique ID that includes the index
-            chapters.push({
-              id: `chapter-${chapterNumber}-${index}`,
-              number: chapterNumber,
-              title: chapterTitle,
-              isActive: chapters.length === 0, // First chapter is active by default
-              isExpanded: chapters.length === 0 // First chapter is expanded by default
-            });
-          }
-        }
-      });
-
-      // If still no chapters found, try the alternative outline regex
-      if (chapters.length === 0) {
-        // Reset used chapter numbers again
-        usedChapterNumbers.clear();
-
-        lines.forEach((line, index) => {
-          const match = line.match(altOutlineRegex);
-          if (match) {
-            const chapterNumber = parseInt(match[1]);
-            const chapterTitle = match[2];
-
-            // Create a unique key for this chapter
-            const chapterKey = `${chapterNumber}-${chapterTitle}`;
-
-            // Only add this chapter if we haven't seen it before and the number is unique
-            if (!processedChapters.has(chapterKey) && !usedChapterNumbers.has(chapterNumber)) {
-              processedChapters.add(chapterKey);
-              usedChapterNumbers.add(chapterNumber);
-
-              // Add to chapters array with a unique ID that includes the index
-              chapters.push({
-                id: `chapter-${chapterNumber}-${index}`,
-                number: chapterNumber,
-                title: chapterTitle,
-                isActive: chapters.length === 0, // First chapter is active by default
-                isExpanded: chapters.length === 0 // First chapter is expanded by default
-              });
-            }
-          }
-        });
-      }
-    }
-
-    // Sort chapters by number before returning
-    return chapters.sort((a, b) => a.number - b.number);
-  };
+  const [courseChapters, setCourseChapters] = useState<ChapterData[]>([]);
 
   const { state } = useTranscriber();
   const { isTtsSpeaking, isProcessingTTS, stopSpeaking, speakLastResponse } = useAIResponses();
@@ -259,34 +120,7 @@ export function Typewriter({ typingSpeed = 50 }: TypewriterProps) {
     }
   }, [messages, currentConversationId, processMessageForCourseStructure]);
 
-  // Helper function to process [CODE] tags and ensure HTML entities are properly decoded
-  const processCodeTags = (text: string) => {
-    if (!text) return text;
-
-    // Find all [CODE]...[/CODE] sections and decode HTML entities inside them
-    const codeTagRegex = /\[\s*CODE\s*\]([\s\S]*?)\[\s*\/\s*CODE\s*\]/g;
-
-    // Log the original text to debug
-    console.log("Processing [CODE] tags in text:", text.substring(0, 100) + "...");
-
-    const processedText = text.replace(codeTagRegex, (match, codeContent) => {
-      // Log the original code content
-      console.log("Original [CODE] content:", codeContent.substring(0, 100) + "...");
-
-      // Decode HTML entities in the code content multiple times to handle nested encodings
-      let decodedContent = codeContent;
-      for (let i = 0; i < 3; i++) {
-        decodedContent = decodeHtmlEntities(decodedContent);
-      }
-
-      // Log the decoded content
-      console.log("Decoded [CODE] content:", decodedContent.substring(0, 100) + "...");
-
-      return `[CODE]${decodedContent}[/CODE]`;
-    });
-
-    return processedText;
-  };
+  // Helper function to process [CODE] tags is now imported from utils/markdown-formatter
 
   // Function to render AI responses with enhanced formatting
   const renderEnhancedResponse = (text: string) => {
@@ -298,42 +132,8 @@ export function Typewriter({ typingSpeed = 50 }: TypewriterProps) {
     // Reset regex lastIndex to ensure we start from the beginning
     codeBlockRegex.lastIndex = 0;
 
-    // Process the text to enhance formatting
-    const processedText = text
-      // Add special styling for learning objectives sections
-      .replace(/####\s+Learning Objectives/g, '#### 🎯 Learning Objectives')
-      // Add special styling for practice exercises sections
-      .replace(/####\s+Practice Exercises/g, '#### 💻 Practice Exercises')
-      // Add special styling for quiz sections
-      .replace(/####\s+Quiz/g, '#### 📝 Quiz')
-      // Add special styling for summary sections
-      .replace(/####\s+Summary/g, '#### 📌 Summary')
-      // Add special styling for key takeaways
-      .replace(/####\s+Key Takeaways/g, '#### 🔑 Key Takeaways')
-      // Add special styling for further reading
-      .replace(/####\s+Further Reading/g, '#### 📚 Further Reading')
-      // Add special styling for practical application
-      .replace(/####\s+Practical Application/g, '#### 🛠️ Practical Application')
-      // Add special styling for course progress
-      .replace(/####\s+Course Progress/g, '#### 📊 Course Progress')
-      // Add special handling for code snippets between board and explain sections
-      .replace(/\[\s*\/\s*BOARD\s*\]\s*(```[\s\S]*?```)\s*\[\s*EXPLAIN\s*\]/g, '[/BOARD]\n\n$1\n\n[EXPLAIN]')
-      // Ensure there's a title in the board section before code snippets
-      .replace(/\[\s*BOARD\s*\]\s*(?!\s*##)([^\n]*?)\s*\[\s*\/\s*BOARD\s*\]\s*(```[\s\S]*?```)/g, (match, content, code) => {
-        // If there's content but no title, add a title format
-        if (content.trim()) {
-          return `[BOARD]\n## ${content.trim()}\n[/BOARD]\n\n${code}`;
-        }
-        // If there's no content, add a generic title based on the code language
-        const langMatch = code.match(/```(\w+)/);
-        const lang = langMatch ? langMatch[1] : 'code';
-        return `[BOARD]\n## Code Example in ${lang.charAt(0).toUpperCase() + lang.slice(1)}\n[/BOARD]\n\n${code}`;
-      })
-      // Remove any remaining markers that might be visible in the final output
-      .replace(/\[\s*BOARD\s*\]\s*$/g, '')  // Remove [BOARD] at the end of the text
-      .replace(/\[\s*EXPLAIN\s*\]\s*$/g, '') // Remove [EXPLAIN] at the end of the text
-      .replace(/^\s*\[\s*\/BOARD\s*\]/g, '') // Remove [/BOARD] at the beginning of the text
-      .replace(/^\s*\[\s*\/EXPLAIN\s*\]/g, ''); // Remove [/EXPLAIN] at the beginning of the text
+    // Process the text to enhance formatting using our utility function
+    const processedText = processTextForSpecialSections(text);
 
     // Split the text into segments (code blocks and regular text)
     const segments = [];
@@ -411,120 +211,7 @@ export function Typewriter({ typingSpeed = 50 }: TypewriterProps) {
     );
   };
 
-  // HTML entity handling is imported at the top of the file
-
-  // Helper function to detect and parse markdown tables
-  const parseMarkdownTable = (lines: string[], startIndex: number) => {
-    const tableLines = [];
-    let currentIndex = startIndex;
-
-    // Collect all lines that are part of the table
-    while (currentIndex < lines.length && lines[currentIndex].trim().startsWith('|')) {
-      tableLines.push(lines[currentIndex]);
-      currentIndex++;
-    }
-
-    if (tableLines.length < 2) return { table: null, endIndex: startIndex }; // Not a valid table
-
-    // Process the table
-    const headerRow = tableLines[0];
-    const separatorRow = tableLines[1];
-    const dataRows = tableLines.slice(2);
-
-    // Check if the second row is a separator row (contains only |, -, :)
-    if (!separatorRow.replace(/[\|\-\:\s]/g, '').trim()) {
-      // Parse header cells
-      const headerCells = headerRow
-        .trim()
-        .split('|')
-        .filter(cell => cell.trim() !== '')
-        .map(cell => {
-          // Decode HTML entities in each cell
-          const decodedCell = decodeHtmlEntities(cell.trim());
-          return decodedCell;
-        });
-
-      // Parse data rows
-      const rows = dataRows.map(row => {
-        return row
-          .trim()
-          .split('|')
-          .filter(cell => cell !== '')
-          .map(cell => {
-            // Decode HTML entities in each cell
-            const decodedCell = decodeHtmlEntities(cell.trim());
-            return decodedCell;
-          });
-      });
-
-      // Create the table HTML
-      const tableHtml = `
-        <div class="overflow-x-auto my-4">
-          <table class="min-w-full border-collapse border border-border-DEFAULT rounded-md">
-            <thead class="bg-bg-tertiary">
-              <tr>
-                ${headerCells.map(cell => `<th class="px-4 py-2 text-left text-text-primary font-semibold border border-border-DEFAULT">${cell}</th>`).join('')}
-              </tr>
-            </thead>
-            <tbody>
-              ${rows.map(row => `
-                <tr class="hover:bg-bg-tertiary/30">
-                  ${row.map(cell => `<td class="px-4 py-2 border border-border-DEFAULT">${cell}</td>`).join('')}
-                </tr>
-              `).join('')}
-            </tbody>
-          </table>
-        </div>
-      `;
-
-      return {
-        table: tableHtml,
-        endIndex: currentIndex - 1
-      };
-    }
-
-    return { table: null, endIndex: startIndex }; // Not a valid table
-  };
-
-  // Test function to check if dual-mode markers are being processed correctly
-  const testDualModeProcessing = () => {
-    const testText = `
-[BOARD]
-# Test Topic
-- Point 1
-- Point 2
-[/BOARD]
-
-[EXPLAIN]
-This is an explanation of the test topic.
-[/EXPLAIN]
-    `;
-
-    console.log("TEST: Running dual-mode test");
-    console.log("TEST: Text contains [BOARD]:", /\[\s*BOARD\s*\]/.test(testText));
-    console.log("TEST: Text contains [EXPLAIN]:", /\[\s*EXPLAIN\s*\]/.test(testText));
-
-    // Test regex extraction
-    const boardBlockRegex = /\[\s*BOARD\s*\]([\s\S]*?)\[\s*\/\s*BOARD\s*\]/g;
-    const explainBlockRegex = /\[\s*EXPLAIN\s*\]([\s\S]*?)\[\s*\/\s*EXPLAIN\s*\]/g;
-
-    let boardMatch = boardBlockRegex.exec(testText);
-    console.log("TEST: Board match:", boardMatch ? "Found" : "Not found");
-    if (boardMatch) {
-      console.log("TEST: Board content:", boardMatch[1].trim());
-    }
-
-    let explainMatch = explainBlockRegex.exec(testText);
-    console.log("TEST: Explain match:", explainMatch ? "Found" : "Not found");
-    if (explainMatch) {
-      console.log("TEST: Explain content:", explainMatch[1].trim());
-    }
-  };
-
-  // Run the test once when component loads
-  useEffect(() => {
-    testDualModeProcessing();
-  }, []);
+  // HTML entity handling and parseMarkdownTable are imported at the top of the file
 
   // Get settings at the component level, not inside the helper function
   const { settings, updateSettings } = useSettings();
@@ -567,62 +254,7 @@ This is an explanation of the test topic.
     // Using balanced matching to ensure we don't capture nested sections
     // We'll process the content in multiple passes to handle nested sections
 
-    // Improved function to find the outermost sections of each type
-    // This version is more strict about matching exact section types
-    const findOutermostSections = (text, sectionType) => {
-      const sections = [];
-      const openTagPattern = new RegExp(`\\[\\s*${sectionType}\\s*\\]`, 'g');
-      const closeTagPattern = new RegExp(`\\[\\s*\\/\\s*${sectionType}\\s*\\]`, 'g');
-
-      // Reset regex patterns
-      openTagPattern.lastIndex = 0;
-      closeTagPattern.lastIndex = 0;
-
-      // Find all opening tags
-      const openings = [];
-      let openMatch;
-      while ((openMatch = openTagPattern.exec(text)) !== null) {
-        openings.push({
-          index: openMatch.index,
-          end: openMatch.index + openMatch[0].length
-        });
-      }
-
-      // Find all closing tags
-      const closings = [];
-      let closeMatch;
-      while ((closeMatch = closeTagPattern.exec(text)) !== null) {
-        closings.push({
-          index: closeMatch.index,
-          end: closeMatch.index + closeMatch[0].length
-        });
-      }
-
-      // Match opening and closing tags
-      for (const opening of openings) {
-        // Find the next closing tag that comes after this opening tag
-        const matchingClosing = closings.find(closing =>
-          closing.index > opening.end &&
-          // Make sure there's no other opening tag of the same type between them
-          !openings.some(o => o.index > opening.end && o.index < closing.index)
-        );
-
-        if (matchingClosing) {
-          // Found a complete section
-          sections.push({
-            type: sectionType.toLowerCase(),
-            content: text.substring(opening.end, matchingClosing.index),
-            startIndex: opening.index,
-            endIndex: matchingClosing.end
-          });
-
-          // Remove this closing tag so it's not matched again
-          closings.splice(closings.indexOf(matchingClosing), 1);
-        }
-      }
-
-      return sections;
-    };
+    // Function to find the outermost sections is now imported from utils/markdown-formatter
 
     // These regex patterns are used for detecting if sections exist, not for extracting content
     const boardBlockRegex = /\[\s*BOARD\s*\]([\s\S]*?)\[\s*\/\s*BOARD\s*\]/g;
@@ -1264,493 +896,34 @@ This is an explanation of the test topic.
 
         console.log("Processed segments:", segments.length);
 
-        // Render the segments
+        // Render the segments using our ContentSegment component
         return (
           <>
-            {segments.map(segment => {
-              if (segment.type === 'regular') {
-                return (
-                  <div key={segment.id}>
-                    {formatRegularContent(segment.content)}
-                  </div>
-                );
-              } else if (segment.type === 'explain') {
-                // Check if this specific explanation is visible using the ref for stability
-                const isVisible = visibleExplanationsRef.current[segment.id];
-
-                // If explanation is hidden, render a button to show just this explanation
-                if (!isVisible) {
-                  return (
-                    <div key={segment.id} className="my-2">
-                      <button
-                        onClick={() => toggleExplanation(segment.id)}
-                        className="text-xs bg-primary-DEFAULT/10 text-primary-DEFAULT px-3 py-1.5 rounded-full hover:bg-primary-DEFAULT/20 border border-primary-DEFAULT/20 shadow-none flex items-center gap-1"
-                      >
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z"></path>
-                        </svg>
-                        <span>Show Explanation</span>
-                      </button>
-                    </div>
-                  );
-                }
-
-                // If this explanation is visible, render the explanation block
-                return (
-                  <div key={segment.id} className="verbal-content p-4 my-4 bg-bg-secondary border border-dashed border-text-tertiary/30 rounded-md shadow-sm">
-                    <div className="flex items-center justify-end mb-2">
-                      <button
-                        onClick={() => toggleExplanation(segment.id)}
-                        className="text-xs text-text-tertiary hover:text-text-secondary"
-                        title="Hide this explanation"
-                      >
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12"></path>
-                        </svg>
-                      </button>
-                    </div>
-                    {/* Check if the explanation contains code blocks */}
-                    {segment.content.includes('```') ? (
-                      <>
-                        {/* Split the content by code blocks and render each part */}
-                        {segment.content.split(/(```[\s\S]*?```)/g).map((part, idx) => {
-                          if (part.startsWith('```') && part.endsWith('```')) {
-                            // This is a code block, extract language and code
-                            const match = part.match(/```([\w-]*)\n([\s\S]*?)```/);
-                            if (match) {
-                              const language = match[1] || 'text';
-
-                              // Log the original code content
-                              console.log("Original explanation code block content:", match[2].substring(0, 100) + "...");
-
-                              // Use our utility function for more comprehensive decoding
-                              // Decode multiple times to handle nested encodings
-                              let code = match[2];
-                              for (let i = 0; i < 3; i++) {
-                                code = decodeHtmlEntities(code);
-                              }
-
-                              // Log the decoded content
-                              console.log("Decoded explanation code block content:", code.substring(0, 100) + "...");
-
-                              // Render the code block
-                              return (
-                                <div key={`explain-code-${segment.id}-${idx}`} className="my-3">
-                                  <CodeBlock
-                                    code={code}
-                                    language={language}
-                                  />
-                                </div>
-                              );
-                            }
-                            return null;
-                          } else if (part.trim()) {
-                            // This is regular text, render it normally
-                            return (
-                              <div key={`explain-text-${segment.id}-${idx}`}>
-                                {formatRegularContent(part)}
-                              </div>
-                            );
-                          }
-                          return null;
-                        })}
-                      </>
-                    ) : (
-                      // If no code blocks, render normally
-                      formatRegularContent(segment.content)
-                    )}
-                  </div>
-                );
-              } else if (segment.type === 'code-section') {
-                // Extract code blocks from the content
-                const codeBlockMatches = segment.content.match(/```([\w-]*)\n([\s\S]*?)```/g);
-
-                if (codeBlockMatches && codeBlockMatches.length > 0) {
-                  // Process each code block
-                  return (
-                    <div key={segment.id} className="my-4">
-                      {codeBlockMatches.map((codeBlock, index) => {
-                        // Extract language and code content
-                        const match = codeBlock.match(/```([\w-]*)\n([\s\S]*?)```/);
-                        if (match) {
-                          const language = match[1] || 'text';
-
-                          // Log the original code content
-                          console.log("Original code block content:", match[2].substring(0, 100) + "...");
-
-                          // Use our utility function for more comprehensive decoding
-                          // Decode multiple times to handle nested encodings
-                          let code = match[2];
-                          for (let i = 0; i < 3; i++) {
-                            code = decodeHtmlEntities(code);
-                          }
-
-                          // Log the decoded content
-                          console.log("Decoded code block content:", code.substring(0, 100) + "...");
-
-                          // Only render the code block if it has content
-                          if (code && code.trim() !== '') {
-                            return (
-                              <CodeBlock
-                                key={`${segment.id}-code-${index}`}
-                                code={code}
-                                language={language}
-                              />
-                            );
-                          }
-                        }
-                        return null;
-                      })}
-
-                      {/* Render any text that's not a code block */}
-                      {segment.content.replace(/```([\w-]*)\n([\s\S]*?)```/g, '').trim() && (
-                        <div className="mt-2">
-                          {formatRegularContent(segment.content.replace(/```([\w-]*)\n([\s\S]*?)```/g, '').trim())}
-                        </div>
-                      )}
-                    </div>
-                  );
-                } else {
-                  // If no code blocks found or all are empty, check if there's any content to render
-                  const cleanContent = segment.content.replace(/```([\w-]*)\n([\s\S]*?)```/g, '').trim();
-                  if (cleanContent) {
-                    return (
-                      <div key={segment.id} className="my-4">
-                        {formatRegularContent(cleanContent)}
-                      </div>
-                    );
-                  }
-                  // If there's no content at all, don't render anything
-                  return null;
-                }
-
-              } else if (segment.type === 'code') {
-                // Log the original code content
-                console.log("Original segment code content:", segment.content.substring(0, 100) + "...");
-
-                // Use our utility function for more comprehensive decoding
-                // Decode multiple times to handle nested encodings
-                let decodedCode = segment.content;
-                for (let i = 0; i < 3; i++) {
-                  decodedCode = decodeHtmlEntities(decodedCode);
-                }
-
-                // Log the decoded content
-                console.log("Decoded segment code content:", decodedCode.substring(0, 100) + "...");
-
-                // Render code blocks using the CodeBlock component
-                return (
-                  <CodeBlock
-                    key={segment.id}
-                    code={decodedCode}
-                    language={segment.language}
-                  />
-                );
-              } else {
-                // Wrap the regular content in a div with a key to avoid React key warnings
-                return <div key={segment.id}>{formatRegularContent(segment.content)}</div>;
-              }
-            })}
+            {segments.map(segment => (
+              <ContentSegment
+                key={segment.id}
+                type={segment.type as any}
+                content={segment.content}
+                id={segment.id}
+                language={segment.language}
+                isVisible={visibleExplanationsRef.current[segment.id]}
+                onToggleVisibility={toggleExplanation}
+              />
+            ))}
           </>
         );
       } catch (error) {
         console.error("Error processing content with special sections:", error);
         // Fallback to regular content processing if there's an error
-        return formatRegularContent(text);
+        return <ContentSegment type="regular" content={text} id="fallback" />;
       }
     }
 
     // If no special sections are detected, process as regular content
-    return formatRegularContent(text);
+    return <ContentSegment type="regular" content={text} id="regular" />;
   };
 
-  // Helper function to format regular content
-  const formatRegularContent = (text: string) => {
-    if (!text) return null;
-
-    // Split the text by lines to process headers and lists
-    const lines = text.split('\n');
-
-    // Process the lines with special handling for tables
-    const renderedElements = [];
-
-    for (let i = 0; i < lines.length; i++) {
-      const line = lines[i];
-
-      // Check for tables
-      if (line.trim().startsWith('|')) {
-        const { table, endIndex } = parseMarkdownTable(lines, i);
-        if (table) {
-          renderedElements.push(
-            <div key={`table-${i}`} dangerouslySetInnerHTML={{ __html: table }} />
-          );
-          i = endIndex; // Skip the lines that were part of the table
-          continue;
-        }
-      }
-
-      // Process the line based on its content
-      if (line.startsWith('# ')) {
-        // Process course title
-        const courseTitle = decodeHtmlEntities(line.substring(2));
-        renderedElements.push(
-          <div key={`heading-${i}`} className="mt-8 mb-6">
-            <h1 className="text-2xl md:text-3xl font-bold text-primary-DEFAULT flex items-center gap-2 pb-2 border-b border-primary-DEFAULT/20">
-              <BookOpen className="w-6 h-6" />
-              {courseTitle}
-            </h1>
-            <div className="mt-2 text-sm text-text-secondary flex items-center gap-2">
-              <BookMarked className="w-4 h-4" />
-              <span>Professional Learning Experience</span>
-            </div>
-            <div className="mt-3 flex items-center gap-2">
-              <div className="px-2 py-1 bg-primary-DEFAULT/10 text-primary-DEFAULT text-xs rounded-md flex items-center gap-1">
-                <BookOpen className="w-3 h-3" />
-                <span>Interactive Course</span>
-              </div>
-              <div className="px-2 py-1 bg-success-DEFAULT/10 text-success-DEFAULT text-xs rounded-md flex items-center gap-1">
-                <Target className="w-3 h-3" />
-                <span>Hands-on Learning</span>
-              </div>
-            </div>
-          </div>
-        );
-      }
-      // Process chapter headings
-      else if (line.startsWith('## ')) {
-        const isChapter = line.toLowerCase().includes('chapter');
-        const chapterMatch = isChapter ? line.match(chapterRegex) : null;
-
-        if (chapterMatch) {
-          const chapterNumber = parseInt(chapterMatch[1]);
-          const chapterTitle = decodeHtmlEntities(chapterMatch[2]);
-
-          renderedElements.push(
-            <div key={`chapter-${i}`} className="mt-8 mb-6 bg-gradient-to-r from-bg-tertiary/40 to-bg-tertiary/20 rounded-lg p-5 border-l-4 border-success-DEFAULT shadow-sm">
-              <h2 className="text-xl md:text-2xl font-bold flex items-center gap-2 text-success-DEFAULT">
-                <Bookmark className="w-5 h-5" />
-                Chapter {chapterNumber}: {chapterTitle}
-              </h2>
-              <div className="flex flex-wrap items-center gap-3 mt-3 text-sm text-text-secondary">
-                <div className="flex items-center gap-1 px-2 py-1 bg-bg-tertiary/30 rounded-md">
-                  <Clock className="w-3.5 h-3.5" />
-                  <span>Est. time: 20-30 min</span>
-                </div>
-                <div className="flex items-center gap-1 px-2 py-1 bg-bg-tertiary/30 rounded-md">
-                  <ListChecks className="w-3.5 h-3.5" />
-                  <span>Chapter {chapterNumber} of {courseChapters.length || '?'}</span>
-                </div>
-                <div className="flex items-center gap-1 px-2 py-1 bg-success-DEFAULT/10 text-success-DEFAULT rounded-md">
-                  <Award className="w-3.5 h-3.5" />
-                  <span>Core Content</span>
-                </div>
-              </div>
-            </div>
-          );
-        } else {
-          // Decode HTML entities in the heading
-          const heading = decodeHtmlEntities(line.substring(3));
-          renderedElements.push(
-            <div key={`heading2-${i}`} className="mt-6 mb-4">
-              <h2 className="text-xl md:text-2xl font-bold flex items-center gap-2 text-text-primary">
-                {heading}
-              </h2>
-              <div className="h-1 w-16 bg-primary-DEFAULT/50 rounded mt-2"></div>
-            </div>
-          );
-        }
-      }
-      // Process subtopics (section headings)
-      else if (line.startsWith('### ')) {
-        // Decode HTML entities in the section title
-        const sectionTitle = decodeHtmlEntities(line.substring(4));
-        const isNumberedSection = /^\d+\.\d+:/.test(sectionTitle);
-
-        renderedElements.push(
-          <div key={`section-${i}`} className="mt-6 mb-4 group">
-            <h3 className="text-lg md:text-xl font-semibold text-text-primary flex items-center gap-2 bg-bg-tertiary/20 px-3 py-2 rounded-md border-l-2 border-primary-DEFAULT/50 group-hover:border-primary-DEFAULT transition-colors duration-200">
-              {isNumberedSection && <ChevronRight className="w-5 h-5 text-primary-DEFAULT" />}
-              {sectionTitle}
-            </h3>
-            <div className="h-0.5 w-16 bg-primary-DEFAULT/40 rounded mt-2 ml-3 group-hover:w-24 transition-all duration-300"></div>
-          </div>
-        );
-      }
-      // Process subsection headings with special icons
-      else if (line.startsWith('#### ')) {
-        // Decode HTML entities in the heading
-        const heading = decodeHtmlEntities(line.substring(5));
-        let icon = null;
-        let colorClass = "text-text-primary/90";
-
-        // Determine icon and color based on heading content
-        if (heading.includes('🎯 Learning Objectives')) {
-          icon = <Target className="w-5 h-5 text-primary-DEFAULT" />;
-          colorClass = "text-primary-DEFAULT";
-        } else if (heading.includes('💻 Practice Exercises')) {
-          icon = <Code className="w-5 h-5 text-success-DEFAULT" />;
-          colorClass = "text-success-DEFAULT";
-        } else if (heading.includes('📝 Quiz')) {
-          icon = <FileText className="w-5 h-5 text-warning-DEFAULT" />;
-          colorClass = "text-warning-DEFAULT";
-        } else if (heading.includes('📌 Summary')) {
-          icon = <CheckCircle className="w-5 h-5 text-info-DEFAULT" />;
-          colorClass = "text-info-DEFAULT";
-        } else if (heading.includes('🔑 Key Takeaways')) {
-          icon = <Award className="w-5 h-5 text-warning-DEFAULT" />;
-          colorClass = "text-warning-DEFAULT";
-        } else if (heading.includes('📚 Further Reading')) {
-          icon = <BookOpen className="w-5 h-5 text-primary-DEFAULT" />;
-          colorClass = "text-primary-DEFAULT";
-        } else if (heading.includes('🛠️ Practical Application')) {
-          icon = <PenTool className="w-5 h-5 text-success-DEFAULT" />;
-          colorClass = "text-success-DEFAULT";
-        } else if (heading.includes('📊 Course Progress')) {
-          icon = <ArrowRight className="w-5 h-5 text-info-DEFAULT" />;
-          colorClass = "text-info-DEFAULT";
-        }
-
-        renderedElements.push(
-          <div key={`subsection-${i}`} className="mt-5 mb-4 bg-gradient-to-r from-bg-tertiary/30 to-bg-tertiary/10 p-3 rounded-md shadow-sm border border-bg-tertiary/20">
-            <h4 className={`text-md md:text-lg font-medium ${colorClass} flex items-center gap-2`}>
-              {icon}
-              {heading}
-            </h4>
-            <div className={`h-0.5 w-12 ${colorClass.replace('text-', 'bg-')}/30 rounded mt-2`}></div>
-          </div>
-        );
-      }
-      // Process lists
-      else if (line.match(/^\s*[\-\*]\s/)) {
-        // First decode HTML entities in the entire line
-        const decodedLine = decodeHtmlEntities(line);
-        const content = decodedLine.replace(/^\s*[\-\*]\s/, '');
-
-        // Process any inline formatting in the content
-        const formattedContent = content
-          // Bold text
-          .replace(/\*\*([^*]+)\*\*/g, (_, text) => {
-            // Decode HTML entities in the text
-            const decodedText = decodeHtmlEntities(text);
-            return `<strong class="font-bold text-text-primary">${decodedText}</strong>`;
-          })
-          // Italic text
-          .replace(/\*([^*]+)\*/g, (_, text) => {
-            // Decode HTML entities in the text
-            const decodedText = decodeHtmlEntities(text);
-            return `<em class="text-primary-DEFAULT/90 font-medium not-italic">${decodedText}</em>`;
-          })
-          // Inline code
-          .replace(/`([^`]+)`/g, (_, text) => {
-            // Decode HTML entities in the text
-            const decodedText = decodeHtmlEntities(text);
-            return `<code class="px-1 py-0.5 bg-bg-tertiary rounded text-sm font-mono">${decodedText}</code>`;
-          });
-
-        renderedElements.push(
-          <div key={`list-${i}`} className="my-2 flex items-start">
-            <span className="text-primary-DEFAULT mr-2">•</span>
-            <div className="flex-1" dangerouslySetInnerHTML={{ __html: formattedContent }} />
-          </div>
-        );
-      }
-      // Process numbered lists
-      else if (line.match(/^\s*\d+\.\s/)) {
-        // First decode HTML entities in the entire line
-        const decodedLine = decodeHtmlEntities(line);
-
-        // Extract the number to preserve it in the rendered output
-        const match = decodedLine.match(/^\s*(\d+)\.\s/);
-        const number = match ? match[1] : "1";
-        const content = decodedLine.replace(/^\s*\d+\.\s/, '');
-
-        // Process any inline formatting in the content
-        const formattedContent = content
-          // Bold text
-          .replace(/\*\*([^*]+)\*\*/g, (_, text) => {
-            // Decode HTML entities in the text
-            const decodedText = decodeHtmlEntities(text);
-            return `<strong class="font-bold text-text-primary">${decodedText}</strong>`;
-          })
-          // Italic text
-          .replace(/\*([^*]+)\*/g, (_, text) => {
-            // Decode HTML entities in the text
-            const decodedText = decodeHtmlEntities(text);
-            return `<em class="text-primary-DEFAULT/90 font-medium not-italic">${decodedText}</em>`;
-          })
-          // Inline code
-          .replace(/`([^`]+)`/g, (_, text) => {
-            // Decode HTML entities in the text
-            const decodedText = decodeHtmlEntities(text);
-            return `<code class="px-1 py-0.5 bg-bg-tertiary rounded text-sm font-mono">${decodedText}</code>`;
-          });
-
-        renderedElements.push(
-          <div key={`numlist-${i}`} className="my-2 flex items-start">
-            <span className="font-medium text-primary-DEFAULT mr-2 min-w-[1.5rem] text-right">{number}.</span>
-            <div className="flex-1" dangerouslySetInnerHTML={{ __html: formattedContent }} />
-          </div>
-        );
-      }
-      // Process blockquotes
-      else if (line.startsWith('> ')) {
-        // Decode HTML entities in the blockquote content
-        const decodedContent = decodeHtmlEntities(line.substring(2));
-
-        renderedElements.push(
-          <blockquote key={`quote-${i}`} className="border-l-4 border-warning-DEFAULT pl-4 py-3 my-5 bg-gradient-to-r from-warning-DEFAULT/15 to-warning-DEFAULT/5 rounded-r shadow-sm">
-            <div className="text-warning-DEFAULT/90 font-medium mb-1 text-sm">Note:</div>
-            <div className="text-text-primary/90">{decodedContent}</div>
-          </blockquote>
-        );
-      }
-      // Process horizontal rules
-      else if (line.match(/^[\-\*\_]{3,}$/)) {
-        renderedElements.push(
-          <div key={`hr-${i}`} className="my-8 flex items-center justify-center">
-            <div className="w-full max-w-md h-px bg-gradient-to-r from-transparent via-bg-tertiary/70 to-transparent"></div>
-          </div>
-        );
-      }
-      // Process regular paragraphs
-      else if (line.trim() !== '') {
-        // First decode HTML entities in the entire line
-        const decodedLine = decodeHtmlEntities(line);
-
-        // Process inline formatting (bold, italic, code)
-        const formattedLine = decodedLine
-          // Bold text
-          .replace(/\*\*([^*]+)\*\*/g, (_, text) => {
-            // Decode HTML entities in the text
-            const decodedText = decodeHtmlEntities(text);
-            return `<strong class="font-bold text-text-primary">${decodedText}</strong>`;
-          })
-          // Italic text
-          .replace(/\*([^*]+)\*/g, (_, text) => {
-            // Decode HTML entities in the text
-            const decodedText = decodeHtmlEntities(text);
-            return `<em class="text-primary-DEFAULT/90 font-medium not-italic">${decodedText}</em>`;
-          })
-          // Inline code
-          .replace(/`([^`]+)`/g, (_, text) => {
-            // Decode HTML entities in the text
-            const decodedText = decodeHtmlEntities(text);
-            return `<code class="px-1 py-0.5 bg-bg-tertiary rounded text-sm font-mono">${decodedText}</code>`;
-          });
-
-        renderedElements.push(
-          <p key={`para-${i}`} className="my-3 leading-relaxed" dangerouslySetInnerHTML={{ __html: formattedLine }} />
-        );
-      }
-      // Empty lines
-      else {
-        renderedElements.push(<div key={`empty-${i}`} className="h-2"></div>);
-      }
-    }
-
-    // Wrap the rendered elements in a div with a unique key
-    return <div key="regular-content-wrapper">{renderedElements}</div>;
-  };
+  // Helper function to format regular content is now in the ContentSegment component
 
   // These hooks are now moved above
 
@@ -2116,7 +1289,11 @@ Please focus specifically on this section and provide a clear, concise explanati
                           renderEnhancedResponse(item.text)
                         ) : (
                           /* Decode HTML entities in user messages */
-                          decodeHtmlEntities(item.text)
+                          <ContentSegment
+                            type="regular"
+                            content={decodeHtmlEntities(item.text)}
+                            id={`user-${item.id}`}
+                          />
                         )}
                       </div>
                     ) : (
