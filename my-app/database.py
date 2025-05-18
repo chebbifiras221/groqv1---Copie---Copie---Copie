@@ -9,7 +9,10 @@ from db_utils import (
     release_connection,
     check_column_exists,
     execute_query,
-    execute_transaction
+    execute_transaction,
+    get_record_by_id,
+    count_records,
+    batch_update
 )
 
 logger = logging.getLogger("database")
@@ -133,12 +136,8 @@ def create_conversation(title: str = "New Conversation", teaching_mode: str = "t
 def get_conversation(conversation_id: str) -> Optional[Dict[str, Any]]:
     """Get a conversation by ID"""
     try:
-        # Get the conversation
-        conversation = execute_query(
-            "SELECT * FROM conversations WHERE id = ?",
-            (conversation_id,),
-            fetch_one=True
-        )
+        # Get the conversation using the utility function
+        conversation = get_record_by_id("conversations", conversation_id)
 
         if not conversation:
             return None
@@ -160,7 +159,6 @@ def get_conversation(conversation_id: str) -> Optional[Dict[str, Any]]:
 
 def list_conversations(limit: int = 10, offset: int = 0, include_messages: bool = True) -> List[Dict[str, Any]]:
     """List conversations with pagination"""
-    conn = get_db_connection()
     try:
         # Get conversations with pagination
         conversations = execute_query(
@@ -171,13 +169,8 @@ def list_conversations(limit: int = 10, offset: int = 0, include_messages: bool 
 
         # Get message counts and last message for each conversation
         for conv in conversations:
-            # Get message count
-            count_result = execute_query(
-                "SELECT COUNT(*) as count FROM messages WHERE conversation_id = ?",
-                (conv["id"],),
-                fetch_one=True
-            )
-            conv["message_count"] = count_result["count"] if count_result else 0
+            # Get message count using the utility function
+            conv["message_count"] = count_records("messages", "conversation_id = ?", (conv["id"],))
 
             # Get last message
             last_message = execute_query(
@@ -204,8 +197,6 @@ def list_conversations(limit: int = 10, offset: int = 0, include_messages: bool 
     except Exception as e:
         logger.error(f"Error listing conversations: {e}")
         raise
-    finally:
-        release_connection(conn)
 
 def add_message(conversation_id: str, message_type: str, content: str) -> str:
     """Add a message to a conversation"""
@@ -288,15 +279,21 @@ def update_conversation_title(conversation_id: str, title: str) -> bool:
     try:
         now = datetime.now().isoformat()
 
-        # Execute the update query
-        result = execute_query(
-            "UPDATE conversations SET title = ?, updated_at = ? WHERE id = ?",
-            (title, now, conversation_id),
-            commit=True
+        # Use batch_update utility function to update the title and timestamp
+        field_updates = {
+            "title": title,
+            "updated_at": now
+        }
+
+        success = batch_update(
+            "conversations",
+            field_updates,
+            "id = ?",
+            (conversation_id,)
         )
 
-        # Check if the conversation was found and updated
-        if result is not None:
+        # Log the result
+        if success:
             logger.info(f"Updated title for conversation {conversation_id}")
             return True
         else:
@@ -372,48 +369,52 @@ def reuse_empty_conversation(conversation_id: str, teaching_mode: str = None, li
     Returns:
         A dictionary with the updated conversation list and the reused conversation ID
     """
-    conn = get_db_connection()
     try:
         now = datetime.now().isoformat()
+        conn = get_db_connection()
+
+        # Check if conversation exists
+        conversation = get_record_by_id("conversations", conversation_id)
+        if not conversation:
+            logger.warning(f"Conversation {conversation_id} not found")
+            return {
+                "conversation_id": None,
+                "conversations": list_conversations(limit=limit, include_messages=False)
+            }
 
         # Check if teaching_mode column exists
         has_teaching_mode = check_column_exists(conn, "conversations", "teaching_mode")
 
-        # Prepare the update query based on whether teaching_mode is provided and column exists
-        if has_teaching_mode and teaching_mode:
-            # If the column exists and teaching_mode is provided, update both
-            update_query = {
-                "query": "UPDATE conversations SET updated_at = ?, teaching_mode = ? WHERE id = ?",
-                "params": (now, teaching_mode, conversation_id)
-            }
+        # Prepare field updates
+        field_updates = {"updated_at": now}
+
+        # Add teaching_mode if provided and column exists
+        if teaching_mode and has_teaching_mode:
+            field_updates["teaching_mode"] = teaching_mode
             logger.info(f"Updating conversation {conversation_id} with teaching mode: {teaching_mode}")
-        else:
-            # Otherwise just update the timestamp
-            update_query = {
-                "query": "UPDATE conversations SET updated_at = ? WHERE id = ?",
-                "params": (now, conversation_id)
-            }
-
+        elif teaching_mode and not has_teaching_mode:
             # If teaching_mode was provided but column doesn't exist, try to run migration
-            if teaching_mode and not has_teaching_mode:
-                logger.warning(f"teaching_mode column doesn't exist yet, couldn't update teaching mode")
-                try:
-                    migrate_db()
-                    logger.info("Ran migration after updating conversation")
+            logger.warning(f"teaching_mode column doesn't exist yet, running migration")
+            try:
+                release_connection(conn)  # Release connection before migration
+                migrate_db()
+                logger.info("Ran migration after updating conversation")
 
-                    # Check again if the column exists after migration
-                    has_teaching_mode = check_column_exists(conn, "conversations", "teaching_mode")
-                    if has_teaching_mode:
-                        # If the column now exists, update with teaching_mode
-                        update_query = {
-                            "query": "UPDATE conversations SET updated_at = ?, teaching_mode = ? WHERE id = ?",
-                            "params": (now, teaching_mode, conversation_id)
-                        }
-                except Exception as e:
-                    logger.error(f"Failed to run migration after updating conversation: {e}")
+                # Get a new connection and check if column exists now
+                conn = get_db_connection()
+                if check_column_exists(conn, "conversations", "teaching_mode"):
+                    field_updates["teaching_mode"] = teaching_mode
+            except Exception as e:
+                logger.error(f"Failed to run migration: {e}")
+            finally:
+                release_connection(conn)
+                conn = get_db_connection()  # Get a fresh connection
 
-        # Execute the update query
-        execute_query(update_query["query"], update_query["params"], commit=True)
+        # Update the conversation
+        success = batch_update("conversations", field_updates, "id = ?", (conversation_id,))
+
+        if not success:
+            logger.warning(f"Failed to update conversation {conversation_id}")
 
         # Get the updated conversation list
         conversations = list_conversations(limit=limit, include_messages=False)
@@ -426,4 +427,5 @@ def reuse_empty_conversation(conversation_id: str, teaching_mode: str = None, li
         logger.error(f"Error reusing empty conversation {conversation_id}: {e}")
         raise
     finally:
-        release_connection(conn)
+        if 'conn' in locals():
+            release_connection(conn)
