@@ -8,6 +8,7 @@ import { Button } from "./ui/button";
 import { Trash2, MessageSquare, BookOpen, HelpCircle } from "lucide-react";
 import { useErrorHandler } from "@/hooks/use-error-handler";
 import { useSettings } from "@/hooks/use-settings";
+import { useAuth } from "@/hooks/use-auth";
 import { ProgressBar } from "./ui/progress-bar";
 import { ConversationItem } from "./conversation-item";
 import {
@@ -66,6 +67,7 @@ export function ConversationManager() {
   const isConnected = connectionState === ConnectionState.Connected;
   const { handleError } = useErrorHandler();
   const { settings } = useSettings(); // Get current settings including teaching mode
+  const { user } = useAuth(); // Get current user information
 
   /**
    * Function to fetch the list of conversations from the server
@@ -78,8 +80,10 @@ export function ConversationManager() {
     setIsLoadingHistory(true); // Set history loading state for progress bar
 
     try {
+      // Always include user ID for data isolation
       const message = {
-        type: "list_conversations"
+        type: "list_conversations",
+        user_id: user?.id
       };
 
       // Use our utility to publish data with retry logic
@@ -152,7 +156,8 @@ export function ConversationManager() {
       // Prepare to load the conversation
       const message = {
         type: "get_conversation",
-        conversation_id: conversationId
+        conversation_id: conversationId,
+        user_id: user?.id
       };
 
       // Use our utility to publish data with retry logic
@@ -237,10 +242,12 @@ export function ConversationManager() {
       setCurrentConversation(null);
 
       // Create a message to request a new conversation with the current teaching mode
+      // Always include user ID for data isolation
       const message = {
         type: "new_conversation",
         title: "New Conversation",
-        teaching_mode: settings.teachingMode
+        teaching_mode: settings.teachingMode,
+        user_id: user?.id
       };
 
       console.log("Creating new conversation...");
@@ -279,8 +286,10 @@ export function ConversationManager() {
 
       // IMMEDIATELY request the conversation list from the server
       // This will populate the sidebar without waiting
+      // Always include user ID for data isolation
       const message = {
-        type: "list_conversations"
+        type: "list_conversations",
+        user_id: user?.id
       };
 
       // Send the request directly
@@ -394,10 +403,12 @@ export function ConversationManager() {
       );
 
       // Create a message to request a new conversation with the specified teaching mode
+      // Always include user ID for data isolation
       const message = {
         type: "new_conversation",
         title: "New Conversation",
-        teaching_mode: teachingMode
+        teaching_mode: teachingMode,
+        user_id: user?.id
       };
 
       // Set the creating flag to prevent duplicate creations
@@ -683,7 +694,8 @@ export function ConversationManager() {
     try {
       const message = {
         type: "delete_conversation",
-        conversation_id: conversationId
+        conversation_id: conversationId,
+        user_id: user?.id
       };
       await publishDataWithRetry(room, message);
     } catch (error) {

@@ -39,8 +39,24 @@ def migrate_db():
                 logger.info("Migration completed: Added teaching_mode column")
             else:
                 logger.error("Failed to execute migration transaction")
+
+        # Check if user_id column exists in conversations table
+        if not check_column_exists(conn, "conversations", "user_id"):
+            logger.info("Adding user_id column to conversations table")
+
+            # Execute migration queries in a transaction
+            queries = [
+                {
+                    "query": "ALTER TABLE conversations ADD COLUMN user_id TEXT"
+                }
+            ]
+
+            if execute_transaction(queries):
+                logger.info("Migration completed: Added user_id column")
+            else:
+                logger.error("Failed to execute migration transaction")
         else:
-            logger.info("teaching_mode column already exists, no migration needed")
+            logger.info("user_id column already exists, no migration needed")
     except Exception as e:
         logger.error(f"Error migrating database: {e}")
         raise
@@ -53,6 +69,18 @@ def init_db():
     try:
         cursor = conn.cursor()
 
+        # Create users table
+        cursor.execute('''
+        CREATE TABLE IF NOT EXISTS users (
+            id TEXT PRIMARY KEY,
+            username TEXT UNIQUE NOT NULL,
+            password_hash TEXT NOT NULL,
+            email TEXT UNIQUE,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            last_login TIMESTAMP
+        )
+        ''')
+
         # Create conversations table
         cursor.execute('''
         CREATE TABLE IF NOT EXISTS conversations (
@@ -60,7 +88,9 @@ def init_db():
             title TEXT,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            teaching_mode TEXT DEFAULT 'teacher'
+            teaching_mode TEXT DEFAULT 'teacher',
+            user_id TEXT,
+            FOREIGN KEY (user_id) REFERENCES users(id)
         )
         ''')
 
@@ -68,6 +98,12 @@ def init_db():
         cursor.execute('''
         CREATE INDEX IF NOT EXISTS idx_conversations_updated_at
         ON conversations(updated_at DESC)
+        ''')
+
+        # Create index on user_id for faster user-specific queries
+        cursor.execute('''
+        CREATE INDEX IF NOT EXISTS idx_conversations_user_id
+        ON conversations(user_id)
         ''')
 
         # Create messages table
@@ -94,7 +130,7 @@ def init_db():
     finally:
         release_connection(conn)
 
-def create_conversation(title: str = "New Conversation", teaching_mode: str = "teacher") -> str:
+def create_conversation(title: str = "New Conversation", teaching_mode: str = "teacher", user_id: str = None) -> str:
     """Create a new conversation and return its ID"""
     conn = get_db_connection()
     try:
@@ -103,29 +139,42 @@ def create_conversation(title: str = "New Conversation", teaching_mode: str = "t
 
         # Check if teaching_mode column exists
         has_teaching_mode = check_column_exists(conn, "conversations", "teaching_mode")
+        # Check if user_id column exists
+        has_user_id = check_column_exists(conn, "conversations", "user_id")
 
-        if has_teaching_mode:
-            # If the column exists, include it in the INSERT
+        # Prepare query and parameters based on available columns
+        if has_teaching_mode and has_user_id:
+            # If both columns exist, include them in the INSERT
+            query = "INSERT INTO conversations (id, title, created_at, updated_at, teaching_mode, user_id) VALUES (?, ?, ?, ?, ?, ?)"
+            params = (conversation_id, title, now, now, teaching_mode, user_id)
+        elif has_teaching_mode:
+            # If only teaching_mode exists
             query = "INSERT INTO conversations (id, title, created_at, updated_at, teaching_mode) VALUES (?, ?, ?, ?, ?)"
             params = (conversation_id, title, now, now, teaching_mode)
+            logger.warning(f"user_id column doesn't exist yet, created conversation without it")
+        elif has_user_id:
+            # If only user_id exists
+            query = "INSERT INTO conversations (id, title, created_at, updated_at, user_id) VALUES (?, ?, ?, ?, ?)"
+            params = (conversation_id, title, now, now, user_id)
+            logger.warning(f"teaching_mode column doesn't exist yet, created conversation without it")
         else:
-            # If the column doesn't exist yet, use the old schema
+            # If neither column exists yet, use the old schema
             query = "INSERT INTO conversations (id, title, created_at, updated_at) VALUES (?, ?, ?, ?)"
             params = (conversation_id, title, now, now)
-            logger.warning(f"teaching_mode column doesn't exist yet, created conversation without it")
+            logger.warning(f"teaching_mode and user_id columns don't exist yet, created conversation without them")
 
         # Execute the query
         execute_query(query, params, commit=True)
 
-        # If teaching_mode column doesn't exist, try to run the migration
-        if not has_teaching_mode:
+        # If columns don't exist, try to run the migration
+        if not has_teaching_mode or not has_user_id:
             try:
                 migrate_db()
                 logger.info("Ran migration after creating conversation")
             except Exception as e:
                 logger.error(f"Failed to run migration after creating conversation: {e}")
 
-        logger.info(f"Created new conversation: {conversation_id} with teaching mode: {teaching_mode}")
+        logger.info(f"Created new conversation: {conversation_id} with teaching mode: {teaching_mode} for user: {user_id}")
         return conversation_id
     except Exception as e:
         logger.error(f"Error creating conversation: {e}")
@@ -133,14 +182,29 @@ def create_conversation(title: str = "New Conversation", teaching_mode: str = "t
     finally:
         release_connection(conn)
 
-def get_conversation(conversation_id: str) -> Optional[Dict[str, Any]]:
-    """Get a conversation by ID"""
+def get_conversation(conversation_id: str, user_id: str = None) -> Optional[Dict[str, Any]]:
+    """
+    Get a conversation by ID with optional user_id check for data isolation
+
+    Args:
+        conversation_id: The ID of the conversation to retrieve
+        user_id: Optional user ID to verify ownership (for data isolation)
+
+    Returns:
+        The conversation data if found and accessible, None otherwise
+    """
     try:
         # Get the conversation using the utility function
         conversation = get_record_by_id("conversations", conversation_id)
 
         if not conversation:
+            logger.warning(f"Conversation {conversation_id} not found")
             return None
+
+        # Check user_id for data isolation if provided
+        if user_id and conversation.get("user_id") and conversation.get("user_id") != user_id:
+            logger.warning(f"User {user_id} attempted to access conversation {conversation_id} belonging to another user")
+            return None  # Don't allow access to another user's conversation
 
         # Get messages for this conversation
         messages = execute_query(
@@ -157,15 +221,24 @@ def get_conversation(conversation_id: str) -> Optional[Dict[str, Any]]:
         logger.error(f"Error getting conversation {conversation_id}: {e}")
         raise
 
-def list_conversations(limit: int = 10, offset: int = 0, include_messages: bool = True) -> List[Dict[str, Any]]:
-    """List conversations with pagination"""
+def list_conversations(limit: int = 10, offset: int = 0, include_messages: bool = True, user_id: str = None) -> List[Dict[str, Any]]:
+    """List conversations with pagination and optional user filtering"""
     try:
+        # Always filter by user_id if provided for data isolation
+        if user_id:
+            query = "SELECT * FROM conversations WHERE user_id = ? ORDER BY updated_at DESC LIMIT ? OFFSET ?"
+            params = (user_id, limit, offset)
+            logger.info(f"Listing conversations for user: {user_id}")
+        else:
+            # Only return conversations without a user_id if no user_id is provided
+            # This maintains backward compatibility with existing data
+            query = "SELECT * FROM conversations WHERE user_id IS NULL ORDER BY updated_at DESC LIMIT ? OFFSET ?"
+            params = (limit, offset)
+            logger.info("Listing conversations with no user_id")
+
         # Get conversations with pagination
-        conversations = execute_query(
-            "SELECT * FROM conversations ORDER BY updated_at DESC LIMIT ? OFFSET ?",
-            (limit, offset),
-            fetch_all=True
-        ) or []
+        conversations = execute_query(query, params, fetch_all=True) or []
+        logger.info(f"Found {len(conversations)} conversations")
 
         # Get message counts and last message for each conversation
         for conv in conversations:
@@ -247,9 +320,35 @@ def get_messages(conversation_id: str) -> List[Dict[str, Any]]:
         logger.error(f"Error getting messages for conversation {conversation_id}: {e}")
         raise
 
-def delete_conversation(conversation_id: str) -> bool:
-    """Delete a conversation and all its messages"""
+def delete_conversation(conversation_id: str, user_id: str = None) -> bool:
+    """
+    Delete a conversation and all its messages with optional user_id check
+
+    Args:
+        conversation_id: The ID of the conversation to delete
+        user_id: Optional user ID to verify ownership (for data isolation)
+
+    Returns:
+        True if the conversation was deleted, False otherwise
+    """
     try:
+        # Check if the conversation exists and belongs to the user (if user_id provided)
+        if user_id:
+            conversation = execute_query(
+                "SELECT id, user_id FROM conversations WHERE id = ?",
+                (conversation_id,),
+                fetch_one=True
+            )
+
+            # If conversation doesn't exist or belongs to another user, don't delete it
+            if not conversation:
+                logger.warning(f"Conversation {conversation_id} not found")
+                return False
+
+            if conversation.get("user_id") and conversation.get("user_id") != user_id:
+                logger.warning(f"User {user_id} attempted to delete conversation {conversation_id} belonging to another user")
+                return False
+
         # Execute both operations in a transaction
         queries = [
             {

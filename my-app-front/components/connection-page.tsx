@@ -4,11 +4,13 @@ import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { useConnection } from "@/hooks/use-connection";
-import { Code, MessageSquare, Github, Mic } from "lucide-react";
+import { useAuth } from "@/hooks/use-auth";
+import { Code, MessageSquare, Github, Mic, LogOut } from "lucide-react";
 import { SimpleBotFace } from "@/components/ui/simple-bot-face";
 
 export function ConnectionPage() {
   const { connect } = useConnection();
+  const { user, logout } = useAuth();
   const [isLoading, setIsLoading] = useState(false);
   const [connectionStep, setConnectionStep] = useState(0);
   const [showFeatures, setShowFeatures] = useState(false);
@@ -52,6 +54,26 @@ export function ConnectionPage() {
       console.error('Connection error:', error);
       setIsLoading(false);
       setConnectionStep(0);
+    }
+  };
+
+  const handleLogout = () => {
+    if (confirm('Are you sure you want to log out? You will need to log in again to access your conversations.')) {
+      // First disconnect from any active connections
+      try {
+        // Disconnect if connected
+        disconnect();
+      } catch (error) {
+        console.error("Error disconnecting:", error);
+      }
+
+      // Then log out the user
+      logout();
+
+      // Reload the page to ensure a clean state
+      setTimeout(() => {
+        window.location.reload();
+      }, 300);
     }
   };
 
@@ -111,6 +133,29 @@ export function ConnectionPage() {
           >
             Connect to start a conversation with your programming teacher. Your voice will be transcribed in real-time.
           </motion.p>
+
+          {user && (
+            <motion.div
+              className="flex items-center gap-2 bg-bg-tertiary/30 px-4 py-2 rounded-full text-text-secondary"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ delay: 0.3, duration: 0.2 }}
+            >
+              <div className="w-8 h-8 rounded-full bg-primary-DEFAULT/20 flex items-center justify-center text-primary-DEFAULT font-medium">
+                {user.username.charAt(0).toUpperCase()}
+              </div>
+              <span>Logged in as <span className="font-medium text-text-primary">{user.username}</span></span>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="ml-2 text-danger-DEFAULT hover:text-danger-DEFAULT/80"
+                onClick={handleLogout}
+                title="Log out"
+              >
+                <LogOut className="w-4 h-4" />
+              </Button>
+            </motion.div>
+          )}
         </div>
 
         <motion.div

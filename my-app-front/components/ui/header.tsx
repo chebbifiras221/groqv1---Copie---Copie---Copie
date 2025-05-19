@@ -7,6 +7,7 @@ import { SimpleBotFace } from './simple-bot-face';
 import { Button } from './button';
 import { StatusIndicator } from './status-indicator';
 import { useConnection } from '@/hooks/use-connection';
+import { useAuth } from '@/hooks/use-auth';
 import { ConversationManager } from '../conversation-manager';
 import { useTheme } from '@/hooks/use-theme';
 import { useSettings } from '@/hooks/use-settings';
@@ -19,6 +20,7 @@ interface HeaderProps {
 
 export function Header({ title = "Programming Teacher" }: HeaderProps) {
   const { disconnect } = useConnection();
+  const { logout } = useAuth();
   const { theme, toggleTheme } = useTheme();
   const { settings, updateSettings } = useSettings();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
@@ -57,8 +59,23 @@ export function Header({ title = "Programming Teacher" }: HeaderProps) {
   };
 
   const handleDisconnect = () => {
-    if (confirm('Are you sure you want to disconnect?')) {
-      disconnect();
+    if (confirm('Are you sure you want to disconnect? You will be logged out.')) {
+      try {
+        // First disconnect from the room
+        disconnect();
+
+        // Then log out the user to clear authentication state
+        logout();
+
+        // Reload the page to ensure a clean state
+        setTimeout(() => {
+          window.location.reload();
+        }, 300);
+      } catch (error) {
+        console.error("Error during disconnect:", error);
+        // If there's an error, still try to reload the page
+        window.location.reload();
+      }
     }
   };
 

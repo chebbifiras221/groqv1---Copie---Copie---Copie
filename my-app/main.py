@@ -9,6 +9,7 @@ from livekit.plugins.openai import stt as plugin
 from dotenv import load_dotenv
 import database
 import database_updates
+import auth
 from tts_web import WebTTS
 
 # Import silero conditionally to avoid unused import
@@ -81,13 +82,14 @@ def get_teaching_mode_from_db(conversation_id):
     return teaching_mode
 
 
-def find_or_create_empty_conversation(teaching_mode="teacher", check_current=True):
+def find_or_create_empty_conversation(teaching_mode="teacher", check_current=True, user_id=None):
     """
     Find an existing empty conversation or create a new one.
 
     Args:
         teaching_mode: The teaching mode to use ('teacher' or 'qa')
         check_current: Whether to check if the current conversation exists
+        user_id: The user ID to associate with the conversation
 
     Returns:
         str: The ID of the empty or newly created conversation
@@ -107,15 +109,15 @@ def find_or_create_empty_conversation(teaching_mode="teacher", check_current=Tru
         except Exception as e:
             logger.error(f"Error checking if conversation exists: {e}")
 
-    # Look for empty conversations
+    # Look for empty conversations for this user
     empty_conversation_id = None
-    conversations = database.list_conversations(limit=10)
+    conversations = database.list_conversations(limit=10, user_id=user_id)
 
     for conv in conversations:
         # Check if this conversation has any messages
         if not conv.get("message_count") or conv.get("message_count") == 0:
             empty_conversation_id = conv["id"]
-            logger.info(f"Found existing empty conversation: {empty_conversation_id}")
+            logger.info(f"Found existing empty conversation: {empty_conversation_id} for user: {user_id}")
             break
 
     # If we found an empty conversation, use it
@@ -141,9 +143,10 @@ def find_or_create_empty_conversation(teaching_mode="teacher", check_current=Tru
 
     current_conversation_id = database.create_conversation(
         title="New Conversation",
-        teaching_mode=teaching_mode
+        teaching_mode=teaching_mode,
+        user_id=user_id
     )
-    logger.info(f"Created new conversation with ID: {current_conversation_id} and teaching mode: {teaching_mode}")
+    logger.info(f"Created new conversation with ID: {current_conversation_id} and teaching mode: {teaching_mode} for user: {user_id}")
 
     return current_conversation_id
 
@@ -999,9 +1002,11 @@ async def entrypoint(ctx: JobContext):
             elif message.get('type') == 'delete_conversation':
                 # Delete a conversation
                 conversation_id = message.get('conversation_id')
+                user_id = message.get('user_id')
 
                 if conversation_id:
-                    success = database.delete_conversation(conversation_id)
+                    # Pass user_id for data isolation
+                    success = database.delete_conversation(conversation_id, user_id)
 
                     if success:
                         # If we deleted the current conversation, find another one to use
@@ -1056,18 +1061,113 @@ async def entrypoint(ctx: JobContext):
                         }
                         await safe_publish_data(ctx.room.local_participant, json.dumps(response_message).encode())
             elif message.get('type') == 'list_conversations':
-                # Return the list of conversations
-                conversations = database.list_conversations(limit=20)
+                # Return the list of conversations for a specific user
+                user_id = message.get('user_id')
+                conversations = database.list_conversations(limit=20, user_id=user_id)
                 response_message = {
                     "type": "conversations_list",
                     "conversations": conversations
                 }
                 await safe_publish_data(ctx.room.local_participant, json.dumps(response_message).encode())
+            elif message.get('type') == 'register_user':
+                # Register a new user
+                username = message.get('username')
+                password = message.get('password')
+                email = message.get('email')
+
+                if username and password:
+                    success, msg, user_data = auth.register_user(username, password, email)
+
+                    response_message = {
+                        "type": "register_response",
+                        "success": success,
+                        "message": msg
+                    }
+
+                    if success and user_data:
+                        # Don't include sensitive data in the response
+                        response_message["user"] = {
+                            "id": user_data["id"],
+                            "username": user_data["username"],
+                            "email": user_data.get("email")
+                        }
+
+                    await safe_publish_data(ctx.room.local_participant, json.dumps(response_message).encode())
+                else:
+                    error_message = {
+                        "type": "register_response",
+                        "success": False,
+                        "message": "Username and password are required"
+                    }
+                    await safe_publish_data(ctx.room.local_participant, json.dumps(error_message).encode())
+            elif message.get('type') == 'login_user':
+                # Login a user
+                username = message.get('username')
+                password = message.get('password')
+
+                if username and password:
+                    success, token, user_data = auth.login_user(username, password)
+
+                    response_message = {
+                        "type": "login_response",
+                        "success": success,
+                        "message": token if success else token  # Token or error message
+                    }
+
+                    if success and user_data:
+                        # Don't include sensitive data in the response
+                        response_message["user"] = {
+                            "id": user_data["id"],
+                            "username": user_data["username"],
+                            "email": user_data.get("email")
+                        }
+                        response_message["token"] = token
+
+                    await safe_publish_data(ctx.room.local_participant, json.dumps(response_message).encode())
+                else:
+                    error_message = {
+                        "type": "login_response",
+                        "success": False,
+                        "message": "Username and password are required"
+                    }
+                    await safe_publish_data(ctx.room.local_participant, json.dumps(error_message).encode())
+            elif message.get('type') == 'verify_token':
+                # Verify a token
+                token = message.get('token')
+
+                if token:
+                    success, user_data = auth.verify_token(token)
+
+                    response_message = {
+                        "type": "token_verification",
+                        "success": success
+                    }
+
+                    if success and user_data:
+                        # Don't include sensitive data in the response
+                        response_message["user"] = {
+                            "id": user_data["id"],
+                            "username": user_data["username"],
+                            "email": user_data.get("email")
+                        }
+
+                    await safe_publish_data(ctx.room.local_participant, json.dumps(response_message).encode())
+                else:
+                    error_message = {
+                        "type": "token_verification",
+                        "success": False,
+                        "message": "Token is required"
+                    }
+                    await safe_publish_data(ctx.room.local_participant, json.dumps(error_message).encode())
             elif message.get('type') == 'get_conversation':
                 # Return a specific conversation
                 conversation_id = message.get('conversation_id')
+                user_id = message.get('user_id')
+
                 if conversation_id:
-                    conversation = database.get_conversation(conversation_id)
+                    # Get the conversation with user_id check for data isolation
+                    conversation = database.get_conversation(conversation_id, user_id)
+
                     if conversation:
                         # Set this as the current conversation
                         current_conversation_id = conversation_id
@@ -1077,16 +1177,25 @@ async def entrypoint(ctx: JobContext):
                             "conversation": conversation
                         }
                         await safe_publish_data(ctx.room.local_participant, json.dumps(response_message).encode())
+                    else:
+                        # Send error response if conversation not found or not accessible
+                        error_message = {
+                            "type": "error",
+                            "error": "conversation_not_found",
+                            "message": "Conversation not found or you don't have access to it"
+                        }
+                        await safe_publish_data(ctx.room.local_participant, json.dumps(error_message).encode())
             elif message.get('type') == 'new_conversation':
                 # Get the teaching mode from the message
                 teaching_mode = message.get('teaching_mode', 'teacher')
+                user_id = message.get('user_id')
 
                 # Find or create an empty conversation
-                current_conversation_id = find_or_create_empty_conversation(teaching_mode)
+                current_conversation_id = find_or_create_empty_conversation(teaching_mode, user_id=user_id)
 
                 # Get the updated conversation list
                 try:
-                    conversations = database.list_conversations(limit=20)
+                    conversations = database.list_conversations(limit=20, user_id=user_id)
                     list_response = {
                         "type": "conversations_list",
                         "conversations": conversations
@@ -1099,7 +1208,8 @@ async def entrypoint(ctx: JobContext):
                 response_message = {
                     "type": "new_conversation_created",
                     "conversation_id": current_conversation_id,
-                    "teaching_mode": teaching_mode
+                    "teaching_mode": teaching_mode,
+                    "user_id": user_id
                 }
                 await safe_publish_data(ctx.room.local_participant, json.dumps(response_message).encode())
             elif message.get('type') == 'text_input':
@@ -1110,13 +1220,18 @@ async def entrypoint(ctx: JobContext):
                 if message.get('new_conversation'):
                     # Get the teaching mode from the message
                     teaching_mode = message.get('teaching_mode', 'teacher')
+                    user_id = message.get('user_id')
+
+                    # Log the user ID for debugging
+                    logger.info(f"Creating new conversation for user: {user_id}")
 
                     # Find or create an empty conversation
-                    current_conversation_id = find_or_create_empty_conversation(teaching_mode, check_current=True)
+                    current_conversation_id = find_or_create_empty_conversation(teaching_mode, check_current=True, user_id=user_id)
 
                     # Get the updated conversation list
                     try:
-                        conversations = database.list_conversations(limit=20)
+                        # Always filter by user_id for data isolation
+                        conversations = database.list_conversations(limit=20, user_id=user_id)
                         list_response = {
                             "type": "conversations_list",
                             "conversations": conversations

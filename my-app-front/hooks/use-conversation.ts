@@ -5,6 +5,7 @@ import { useMaybeRoomContext } from '@livekit/components-react';
 import { ConnectionState, Room } from 'livekit-client';
 import { useAIResponses } from './use-ai-responses';
 import { useTranscriber } from './use-transcriber';
+import { useAuth } from './use-auth';
 
 // Helper function to check if a room is connected
 // This avoids TypeScript errors with ConnectionState comparison
@@ -33,6 +34,8 @@ export interface Message {
 // and rely on the backend for conversation storage
 
 export function useConversation() {
+  // Get the current user
+  const { user } = useAuth();
   /**
    * Clear localStorage on component mount
    * We don't store messages in localStorage anymore as we rely on the backend
@@ -40,6 +43,19 @@ export function useConversation() {
   useEffect(() => {
     if (typeof window !== 'undefined') {
       localStorage.removeItem('conversation-messages');
+
+      // Listen for user logout events
+      const handleUserLogout = () => {
+        // Clear messages when the user logs out
+        setMessages([]);
+        setCurrentConversationId(null);
+      };
+
+      window.addEventListener('user-logged-out', handleUserLogout);
+
+      return () => {
+        window.removeEventListener('user-logged-out', handleUserLogout);
+      };
     }
   }, []);
 
@@ -409,7 +425,8 @@ export function useConversation() {
           type: "text_input",
           text: text.trim(),
           teaching_mode: teachingMode,
-          new_conversation: needsNewConversation
+          new_conversation: needsNewConversation,
+          user_id: user?.id // Include user ID for data isolation
         };
 
         // Check if the room is connected before attempting to publish
@@ -482,7 +499,7 @@ export function useConversation() {
     }
 
     return undefined;
-  }, [room, currentConversationId, getCurrentConversationMode]);
+  }, [room, currentConversationId, getCurrentConversationMode, user]);
 
   // Clear all messages and create a new conversation
   const clearMessages = useCallback(() => {
@@ -601,7 +618,8 @@ export function useConversation() {
         text: text.trim(),
         teaching_mode: teachingMode,
         hidden: true, // This flag tells the backend not to echo the message back
-        new_conversation: needsNewConversation
+        new_conversation: needsNewConversation,
+        user_id: user?.id // Include user ID for data isolation
       };
 
       // Send the message to the backend
@@ -613,7 +631,7 @@ export function useConversation() {
     } catch (error) {
       console.error("Error sending hidden instruction:", error);
     }
-  }, [room, currentConversationId, getCurrentConversationMode]);
+  }, [room, currentConversationId, getCurrentConversationMode, user]);
 
   return {
     messages,
