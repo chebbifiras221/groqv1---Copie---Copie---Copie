@@ -207,10 +207,14 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     }
   };
 
-  const logout = () => {
-    // Clear auth state
+  const logout = async () => {
+    // Get the current token
+    const currentToken = token;
+
+    // Clear auth state immediately to prevent UI issues
     setUser(null);
     setToken(null);
+    setErrorType(undefined);
 
     // Clear localStorage auth data
     localStorage.removeItem("auth_token");
@@ -229,6 +233,27 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
     // Dispatch an event to notify other components that the user has logged out
     window.dispatchEvent(new Event('user-logged-out'));
+
+    // If we have a token, notify the backend about the logout
+    if (currentToken) {
+      try {
+        // Call the backend to invalidate the token
+        await fetch("/api/auth", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            type: "logout",
+            token: currentToken,
+          }),
+        });
+
+        console.log("Backend notified about logout");
+      } catch (err) {
+        console.error("Error notifying backend about logout:", err);
+      }
+    }
 
     console.log("User logged out successfully");
   };

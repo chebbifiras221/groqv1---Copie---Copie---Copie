@@ -10,8 +10,9 @@ from typing import Any, Dict, List, Optional, Tuple, Union
 
 logger = logging.getLogger("db-utils")
 
-# Database file path
-DB_FILE = "conversations.db"
+# Database file path - use absolute path for better reliability
+import os
+DB_FILE = os.path.abspath(os.path.join(os.path.dirname(__file__), "conversations.db"))
 
 # Simple connection pool for SQLite
 class ConnectionPool:
@@ -48,6 +49,15 @@ class ConnectionPool:
             # Create a new connection
             conn = sqlite3.connect(DB_FILE, check_same_thread=False)
             conn.row_factory = sqlite3.Row  # Return rows as dictionaries
+
+            # Enable WAL mode for better crash recovery
+            try:
+                conn.execute("PRAGMA journal_mode=WAL")
+                conn.execute("PRAGMA synchronous=NORMAL")
+                logger.debug("WAL mode enabled for new database connection")
+            except sqlite3.Error as e:
+                logger.warning(f"Failed to enable WAL mode: {e}")
+
             self.in_use.add(conn)
             return conn
 
@@ -60,6 +70,39 @@ class ConnectionPool:
                     self.pool.append(conn)
                 else:
                     conn.close()
+
+    def shutdown(self):
+        """Properly close all connections during shutdown"""
+        with self._lock:
+            # First checkpoint the database
+            try:
+                conn = self.get_connection()
+                conn.execute("PRAGMA wal_checkpoint(FULL)")
+                self.release_connection(conn)
+                logger.info("Database checkpoint completed during shutdown")
+            except Exception as e:
+                logger.error(f"Error during shutdown checkpoint: {e}")
+
+            # Close all connections in the pool
+            for conn in self.pool:
+                try:
+                    conn.close()
+                    logger.debug("Closed pooled connection during shutdown")
+                except Exception as e:
+                    logger.error(f"Error closing pooled connection: {e}")
+
+            # Close all in-use connections
+            for conn in self.in_use:
+                try:
+                    conn.close()
+                    logger.debug("Closed in-use connection during shutdown")
+                except Exception as e:
+                    logger.error(f"Error closing in-use connection: {e}")
+
+            # Clear the pools
+            self.pool = []
+            self.in_use = set()
+            logger.info("All database connections closed during shutdown")
 
 # Initialize the connection pool
 _pool = ConnectionPool()
@@ -207,3 +250,69 @@ def batch_update(table: str, field_updates: Dict[str, Any], where_clause: str, p
     all_params = update_values + params
 
     return execute_query(query, all_params, commit=True) is not None
+
+def checkpoint_database():
+    """
+    Force a checkpoint of the database to ensure all changes are written to disk.
+    This is especially important for WAL mode.
+    """
+    conn = get_db_connection()
+    try:
+        conn.execute("PRAGMA wal_checkpoint(FULL)")
+        logger.info("Database checkpoint completed successfully")
+    except Exception as e:
+        logger.error(f"Error during database checkpoint: {e}")
+    finally:
+        release_connection(conn)
+
+def enable_wal_mode():
+    """
+    Enable Write-Ahead Logging mode for better crash recovery.
+    Should be called during application startup.
+    """
+    conn = get_db_connection()
+    try:
+        conn.execute("PRAGMA journal_mode=WAL")
+        conn.execute("PRAGMA synchronous=NORMAL")
+        logger.info("WAL mode enabled for database")
+    except Exception as e:
+        logger.error(f"Error enabling WAL mode: {e}")
+    finally:
+        release_connection(conn)
+
+def close_all_connections():
+    """
+    Close all database connections in the pool.
+    This should be called during application shutdown.
+    """
+    _pool.shutdown()
+
+def ensure_db_file_exists():
+    """
+    Check if the database file exists and create it if it doesn't.
+    This should be called during application startup.
+    """
+    db_dir = os.path.dirname(DB_FILE)
+
+    # Create the directory if it doesn't exist
+    if not os.path.exists(db_dir):
+        try:
+            os.makedirs(db_dir)
+            logger.info(f"Created database directory: {db_dir}")
+        except Exception as e:
+            logger.error(f"Error creating database directory: {e}")
+
+    # Check if the database file exists
+    if not os.path.exists(DB_FILE):
+        try:
+            # Create an empty database file
+            conn = sqlite3.connect(DB_FILE)
+            conn.close()
+            logger.info(f"Created empty database file: {DB_FILE}")
+        except Exception as e:
+            logger.error(f"Error creating database file: {e}")
+    else:
+        logger.info(f"Database file exists: {DB_FILE}")
+
+    # Log the absolute path to the database file
+    logger.info(f"Using database file: {os.path.abspath(DB_FILE)}")

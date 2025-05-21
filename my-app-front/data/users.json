@@ -1,0 +1,13 @@
+{
+  "test": {
+    "id": "user-test-123",
+    "username": "test",
+    "password": "password",
+    "email": "test@example.com"
+  },
+  "moomenmsaadi": {
+    "id": "user-1747816565416",
+    "username": "moomenmsaadi",
+    "password": "moomenmsaadi"
+  }
+}

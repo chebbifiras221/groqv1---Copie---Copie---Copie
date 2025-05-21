@@ -5,3 +5,6 @@ livekit-plugins-groq==0.1.2
 python-dotenv~=1.0
 #livekit-plugin-deepgram>=0.6.16
 requests>=2.31.0
+PyJWT>=2.8.0
+# msvcrt is part of the standard library on Windows
+# For non-Windows platforms, we'll need to handle keyboard input differently

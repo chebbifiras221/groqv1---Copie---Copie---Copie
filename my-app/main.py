@@ -9,13 +9,22 @@ from livekit.plugins.openai import stt as plugin
 from dotenv import load_dotenv
 import database
 import database_updates
-import auth
+import auth_db
+import auth_api
+import shutdown
 from tts_web import WebTTS
 
 # Import silero conditionally to avoid unused import
 from livekit.plugins import silero
 
 load_dotenv(dotenv_path=".env.local")
+
+# Configure detailed logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s [%(levelname)s] %(name)s: %(message)s',
+    datefmt='%Y-%m-%d %H:%M:%S'
+)
 
 logger = logging.getLogger("groq-whisper-stt-transcriber")
 
@@ -33,6 +42,30 @@ try:
     logger.info("Database migrations completed successfully")
 except Exception as e:
     logger.error(f"Error running database migrations: {e}")
+
+# Initialize the authentication database
+try:
+    auth_db.init_auth_db()
+    logger.info("Authentication database initialized successfully")
+except Exception as e:
+    logger.error(f"Error initializing authentication database: {e}")
+
+# Initialize shutdown handling with the '9' key
+shutdown.initialize_shutdown_handling()
+print("\n=== Press the '9' key to gracefully shutdown the application ===\n")
+
+# Initialize database
+# Import db_utils functions
+from db_utils import enable_wal_mode, ensure_db_file_exists
+
+# Ensure the database file exists
+ensure_db_file_exists()
+
+# Enable WAL mode for better crash recovery
+enable_wal_mode()
+
+# Log the database initialization
+logger.info("Database initialized successfully")
 
 # Current conversation ID
 current_conversation_id = None
@@ -1069,96 +1102,124 @@ async def entrypoint(ctx: JobContext):
                     "conversations": conversations
                 }
                 await safe_publish_data(ctx.room.local_participant, json.dumps(response_message).encode())
+            elif message.get('type') == 'auth_request':
+                # Handle authentication requests (register, login, verify, logout)
+                auth_data = message.get('data', {})
+
+                # Process the authentication request using the new auth_api module
+                response_data, status_code = auth_api.handle_auth_request(json.dumps(auth_data).encode())
+
+                # Create a response message with the authentication result
+                response_message = {
+                    "type": "auth_response",
+                    "data": response_data,
+                    "status": status_code
+                }
+
+                # Send the response back to the client
+                await safe_publish_data(ctx.room.local_participant, json.dumps(response_message).encode())
+
+                # Log the authentication request (without sensitive data)
+                auth_type = auth_data.get('type', 'unknown')
+                username = auth_data.get('username', 'unknown')
+                logger.info(f"Processed {auth_type} request for user: {username}, status: {status_code}")
+
+                # If this was a successful login, update the current user context
+                if auth_type == 'login' and response_data.get('success'):
+                    user_id = response_data.get('user', {}).get('id')
+                    if user_id:
+                        logger.info(f"User {username} (ID: {user_id}) logged in successfully")
+
+                        # Get or create a conversation for this user
+                        teaching_mode = 'teacher'  # Default mode
+                        current_conversation_id = find_or_create_empty_conversation(
+                            teaching_mode=teaching_mode,
+                            check_current=True,
+                            user_id=user_id
+                        )
+
+                        # Send the conversation list for this user
+                        try:
+                            conversations = database.list_conversations(limit=20, user_id=user_id)
+                            list_response = {
+                                "type": "conversations_list",
+                                "conversations": conversations
+                            }
+                            await safe_publish_data(ctx.room.local_participant, json.dumps(list_response).encode())
+                        except Exception as e:
+                            logger.error(f"Error getting conversation list after login: {e}")
+
+            # Keep the old authentication endpoints for backward compatibility
             elif message.get('type') == 'register_user':
-                # Register a new user
-                username = message.get('username')
-                password = message.get('password')
-                email = message.get('email')
+                # Convert to new format and forward to auth_request handler
+                auth_data = {
+                    "type": "register",
+                    "username": message.get('username'),
+                    "password": message.get('password'),
+                    "email": message.get('email')
+                }
 
-                if username and password:
-                    success, msg, user_data = auth.register_user(username, password, email)
+                # Process using the new auth API
+                response_data, status_code = auth_api.handle_auth_request(json.dumps(auth_data).encode())
 
-                    response_message = {
-                        "type": "register_response",
-                        "success": success,
-                        "message": msg
-                    }
+                # Format response to match old format
+                response_message = {
+                    "type": "register_response",
+                    "success": response_data.get('success', False),
+                    "message": response_data.get('message', "Registration failed")
+                }
 
-                    if success and user_data:
-                        # Don't include sensitive data in the response
-                        response_message["user"] = {
-                            "id": user_data["id"],
-                            "username": user_data["username"],
-                            "email": user_data.get("email")
-                        }
+                if response_data.get('success') and response_data.get('user'):
+                    response_message["user"] = response_data.get('user')
 
-                    await safe_publish_data(ctx.room.local_participant, json.dumps(response_message).encode())
-                else:
-                    error_message = {
-                        "type": "register_response",
-                        "success": False,
-                        "message": "Username and password are required"
-                    }
-                    await safe_publish_data(ctx.room.local_participant, json.dumps(error_message).encode())
+                await safe_publish_data(ctx.room.local_participant, json.dumps(response_message).encode())
+
             elif message.get('type') == 'login_user':
-                # Login a user
-                username = message.get('username')
-                password = message.get('password')
+                # Convert to new format and forward to auth_request handler
+                auth_data = {
+                    "type": "login",
+                    "username": message.get('username'),
+                    "password": message.get('password')
+                }
 
-                if username and password:
-                    success, token, user_data = auth.login_user(username, password)
+                # Process using the new auth API
+                response_data, status_code = auth_api.handle_auth_request(json.dumps(auth_data).encode())
 
-                    response_message = {
-                        "type": "login_response",
-                        "success": success,
-                        "message": token if success else token  # Token or error message
-                    }
+                # Format response to match old format
+                response_message = {
+                    "type": "login_response",
+                    "success": response_data.get('success', False),
+                    "message": response_data.get('message', "Login failed")
+                }
 
-                    if success and user_data:
-                        # Don't include sensitive data in the response
-                        response_message["user"] = {
-                            "id": user_data["id"],
-                            "username": user_data["username"],
-                            "email": user_data.get("email")
-                        }
-                        response_message["token"] = token
+                if response_data.get('success'):
+                    if response_data.get('user'):
+                        response_message["user"] = response_data.get('user')
+                    if response_data.get('token'):
+                        response_message["token"] = response_data.get('token')
 
-                    await safe_publish_data(ctx.room.local_participant, json.dumps(response_message).encode())
-                else:
-                    error_message = {
-                        "type": "login_response",
-                        "success": False,
-                        "message": "Username and password are required"
-                    }
-                    await safe_publish_data(ctx.room.local_participant, json.dumps(error_message).encode())
+                await safe_publish_data(ctx.room.local_participant, json.dumps(response_message).encode())
+
             elif message.get('type') == 'verify_token':
-                # Verify a token
-                token = message.get('token')
+                # Convert to new format and forward to auth_request handler
+                auth_data = {
+                    "type": "verify",
+                    "token": message.get('token')
+                }
 
-                if token:
-                    success, user_data = auth.verify_token(token)
+                # Process using the new auth API
+                response_data, status_code = auth_api.handle_auth_request(json.dumps(auth_data).encode())
 
-                    response_message = {
-                        "type": "token_verification",
-                        "success": success
-                    }
+                # Format response to match old format
+                response_message = {
+                    "type": "token_verification",
+                    "success": response_data.get('success', False)
+                }
 
-                    if success and user_data:
-                        # Don't include sensitive data in the response
-                        response_message["user"] = {
-                            "id": user_data["id"],
-                            "username": user_data["username"],
-                            "email": user_data.get("email")
-                        }
+                if response_data.get('success') and response_data.get('user'):
+                    response_message["user"] = response_data.get('user')
 
-                    await safe_publish_data(ctx.room.local_participant, json.dumps(response_message).encode())
-                else:
-                    error_message = {
-                        "type": "token_verification",
-                        "success": False,
-                        "message": "Token is required"
-                    }
-                    await safe_publish_data(ctx.room.local_participant, json.dumps(error_message).encode())
+                await safe_publish_data(ctx.room.local_participant, json.dumps(response_message).encode())
             elif message.get('type') == 'get_conversation':
                 # Return a specific conversation
                 conversation_id = message.get('conversation_id')

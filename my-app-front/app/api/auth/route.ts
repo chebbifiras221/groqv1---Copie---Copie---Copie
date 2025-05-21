@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 
 export type AuthRequest = {
-  type: 'register' | 'login' | 'verify';
+  type: 'register' | 'login' | 'verify' | 'logout';
   username?: string;
   password?: string;
   email?: string;
@@ -11,7 +11,7 @@ export type AuthRequest = {
 export type AuthResponse = {
   success: boolean;
   message: string;
-  errorType?: 'username' | 'password' | string;
+  errorType?: 'username' | 'password' | 'username_exists' | 'token' | 'validation' | 'server_error' | string;
   user?: {
     id: string;
     username: string;
@@ -20,172 +20,278 @@ export type AuthResponse = {
   token?: string;
 };
 
-// Simple in-memory user store for demo purposes
-// In a real app, this would be a database
-// NOTE: This is reset on every request because API routes are serverless functions
-const users: Record<string, any> = {
-  // Add a test user for demonstration
-  "test": {
-    id: "user-test-123",
-    username: "test",
-    password: "password", // In a real app, this would be hashed
-    email: "test@example.com"
-  }
-};
-
 export async function POST(request: Request) {
   try {
     const body: AuthRequest = await request.json();
+
+    // Get the WebSocket URL from environment variables
+    const wsUrl = process.env.NEXT_PUBLIC_LIVEKIT_URL;
+    if (!wsUrl) {
+      throw new Error("LIVEKIT_URL is not defined");
+    }
 
     // Basic validation
     if (body.type === 'register' && (!body.username || !body.password)) {
       return NextResponse.json({
         success: false,
-        message: "Username and password are required"
+        message: "Username and password are required",
+        errorType: "validation"
       }, { status: 400 });
     }
     else if (body.type === 'login' && (!body.username || !body.password)) {
       return NextResponse.json({
         success: false,
-        message: "Username and password are required"
+        message: "Username and password are required",
+        errorType: "validation"
       }, { status: 400 });
     }
     else if (body.type === 'verify' && !body.token) {
       return NextResponse.json({
         success: false,
-        message: "Token is required"
+        message: "Token is required",
+        errorType: "validation"
       }, { status: 400 });
     }
-    else if (!['register', 'login', 'verify'].includes(body.type)) {
+    else if (body.type === 'logout' && !body.token) {
       return NextResponse.json({
         success: false,
-        message: "Invalid request type"
+        message: "Token is required",
+        errorType: "validation"
+      }, { status: 400 });
+    }
+    else if (!['register', 'login', 'verify', 'logout'].includes(body.type)) {
+      return NextResponse.json({
+        success: false,
+        message: "Invalid request type",
+        errorType: "validation"
       }, { status: 400 });
     }
 
-    // Handle registration
-    if (body.type === 'register') {
-      const username = body.username!;
+    // Use a simple in-memory storage approach with file persistence
+    try {
+      // Import the fs and path modules for file operations
+      // Use dynamic import to avoid issues with Next.js
+      const { promises: fs, existsSync, mkdirSync, readFileSync, writeFileSync } = await import('fs');
+      const { join } = await import('path');
 
-      // Check if username already exists
-      if (users[username]) {
-        return NextResponse.json({
-          success: false,
-          message: "Username already exists",
-          errorType: "username_exists"
-        }, { status: 400 });
+      // Define the path to the users file
+      const usersFilePath = join(process.cwd(), 'data', 'users.json');
+      const dataDir = join(process.cwd(), 'data');
+
+      // Create the data directory if it doesn't exist
+      if (!existsSync(dataDir)) {
+        try {
+          mkdirSync(dataDir, { recursive: true });
+          console.log(`Created data directory: ${dataDir}`);
+        } catch (error) {
+          console.error(`Error creating data directory: ${error}`);
+        }
       }
 
-      // Create a new user
-      const userId = `user-${Date.now()}`;
-      users[username] = {
-        id: userId,
-        username: username,
-        password: body.password, // In a real app, this would be hashed
-        email: body.email
+      // Load users from file or create an empty object
+      let users: Record<string, any> = {};
+      try {
+        if (existsSync(usersFilePath)) {
+          const usersData = readFileSync(usersFilePath, 'utf8');
+          users = JSON.parse(usersData);
+          console.log(`Loaded users from file: ${usersFilePath}`);
+        } else {
+          // Create a default test user
+          users = {
+            "test": {
+              id: "user-test-123",
+              username: "test",
+              password: "password",
+              email: "test@example.com"
+            }
+          };
+
+          // Save the initial users file
+          fs.writeFileSync(usersFilePath, JSON.stringify(users, null, 2));
+        }
+      } catch (error) {
+        console.error("Error loading users file:", error);
+        // Create a default test user if there was an error
+        users = {
+          "test": {
+            id: "user-test-123",
+            username: "test",
+            password: "password",
+            email: "test@example.com"
+          }
+        };
+      }
+
+      // Function to save users to file
+      const saveUsers = async () => {
+        try {
+          // Use async writeFile for better performance
+          await fs.writeFile(usersFilePath, JSON.stringify(users, null, 2));
+          console.log(`Saved users to file: ${usersFilePath}`);
+        } catch (error) {
+          console.error("Error saving users file:", error);
+          // Fallback to sync method if async fails
+          try {
+            writeFileSync(usersFilePath, JSON.stringify(users, null, 2));
+            console.log(`Saved users to file (sync): ${usersFilePath}`);
+          } catch (syncError) {
+            console.error("Error saving users file (sync):", syncError);
+          }
+        }
       };
 
-      return NextResponse.json({
-        success: true,
-        message: "User registered successfully",
-        user: {
+      // Handle registration
+      if (body.type === 'register') {
+        const username = body.username!;
+
+        // Check if username already exists
+        if (users[username]) {
+          return NextResponse.json({
+            success: false,
+            message: "Username already exists",
+            errorType: "username_exists"
+          }, { status: 400 });
+        }
+
+        // Create a new user
+        const userId = `user-${Date.now()}`;
+        users[username] = {
           id: userId,
           username: username,
+          password: body.password,
           email: body.email
+        };
+
+        // Save users to file
+        await saveUsers();
+
+        return NextResponse.json({
+          success: true,
+          message: "User registered successfully",
+          user: {
+            id: userId,
+            username: username,
+            email: body.email
+          }
+        });
+      }
+      // Handle login
+      else if (body.type === 'login') {
+        const username = body.username!;
+        const password = body.password!;
+
+        // Check if user exists
+        const user = users[username];
+        if (!user) {
+          return NextResponse.json({
+            success: false,
+            message: "User does not exist",
+            errorType: "username"
+          }, { status: 401 });
         }
-      });
-    }
-    // Handle login
-    else if (body.type === 'login') {
-      const username = body.username!;
-      const password = body.password!;
 
-      console.log(`Login attempt for user: ${username}`);
-      console.log(`Available users:`, Object.keys(users));
+        // Check if password matches
+        if (user.password !== password) {
+          return NextResponse.json({
+            success: false,
+            message: "Password is incorrect",
+            errorType: "password"
+          }, { status: 401 });
+        }
 
-      // Check if user exists
-      const user = users[username];
-      if (!user) {
-        console.log(`User ${username} does not exist`);
+        // Generate a token
+        const token = `token-${Date.now()}-${Math.random().toString(36).substring(2, 15)}`;
+
+        // Store the token with the user
+        user.token = token;
+
+        // Save users to file
+        await saveUsers();
+
         return NextResponse.json({
-          success: false,
-          message: "User does not exist",
-          errorType: "username"
-        }, { status: 401 });
+          success: true,
+          message: "Login successful",
+          user: {
+            id: user.id,
+            username: user.username,
+            email: user.email
+          },
+          token
+        });
+      }
+      // Handle token verification
+      else if (body.type === 'verify') {
+        const token = body.token!;
+
+        // Find user with this token
+        let foundUser = null;
+        for (const username in users) {
+          if (users[username].token === token) {
+            foundUser = users[username];
+            break;
+          }
+        }
+
+        if (!foundUser) {
+          return NextResponse.json({
+            success: false,
+            message: "Invalid token",
+            errorType: "token"
+          }, { status: 401 });
+        }
+
+        return NextResponse.json({
+          success: true,
+          message: "Token verified",
+          user: {
+            id: foundUser.id,
+            username: foundUser.username,
+            email: foundUser.email
+          }
+        });
+      }
+      // Handle logout
+      else if (body.type === 'logout') {
+        const token = body.token!;
+
+        // Find user with this token and remove the token
+        for (const username in users) {
+          if (users[username].token === token) {
+            delete users[username].token;
+            break;
+          }
+        }
+
+        // Save users to file
+        await saveUsers();
+
+        return NextResponse.json({
+          success: true,
+          message: "Logout successful"
+        });
       }
 
-      // Check if password matches
-      console.log(`User found, checking password. Expected: ${user.password}, Provided: ${password}`);
-      if (user.password !== password) {
-        console.log(`Password incorrect for user ${username}`);
-        return NextResponse.json({
-          success: false,
-          message: "Password is incorrect",
-          errorType: "password"
-        }, { status: 401 });
-      }
-
-      console.log(`Login successful for user ${username}`);
-
-      // Generate a token
-      const token = `token-${Date.now()}-${Math.random().toString(36).substring(2, 15)}`;
-
-      // Store the token with the user
-      user.token = token;
-
+      // This should never happen due to validation above
       return NextResponse.json({
-        success: true,
-        message: "Login successful",
-        user: {
-          id: user.id,
-          username: user.username,
-          email: user.email
-        },
-        token
-      });
-    }
-    // Handle token verification
-    else if (body.type === 'verify') {
-      const token = body.token!;
-
-      // Find user with this token
-      let foundUser = null;
-      for (const username in users) {
-        if (users[username].token === token) {
-          foundUser = users[username];
-          break;
-        }
-      }
-
-      if (!foundUser) {
-        return NextResponse.json({
-          success: false,
-          message: "Invalid token"
-        }, { status: 401 });
-      }
-
+        success: false,
+        message: "Invalid request type",
+        errorType: "validation"
+      }, { status: 400 });
+    } catch (error) {
+      console.error("Auth processing error:", error);
       return NextResponse.json({
-        success: true,
-        message: "Token verified",
-        user: {
-          id: foundUser.id,
-          username: foundUser.username,
-          email: foundUser.email
-        }
-      });
+        success: false,
+        message: error instanceof Error ? error.message : "Server error",
+        errorType: "server_error"
+      }, { status: 500 });
     }
-
-    // This should never happen due to validation above
-    return NextResponse.json({
-      success: false,
-      message: "Invalid request type"
-    }, { status: 400 });
 
   } catch (error) {
     console.error("Auth API error:", error);
     return NextResponse.json({
       success: false,
-      message: error instanceof Error ? error.message : "Unknown error"
+      message: error instanceof Error ? error.message : "Unknown error",
+      errorType: "server_error"
     }, { status: 500 });
   }
 }
