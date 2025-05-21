@@ -15,6 +15,7 @@ type AuthContextType = {
   isAuthenticated: boolean;
   isLoading: boolean;
   error: string | null;
+  errorType?: 'username' | 'password' | string;
   login: (username: string, password: string) => Promise<boolean>;
   register: (username: string, password: string, email?: string) => Promise<boolean>;
   logout: () => void;
@@ -26,6 +27,7 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const [user, setUser] = useState<User | null>(null);
   const [token, setToken] = useState<string | null>(null);
+  const [errorType, setErrorType] = useState<'username' | 'password' | string | undefined>(undefined);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -93,8 +95,9 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   };
 
   const login = async (username: string, password: string): Promise<boolean> => {
+    console.log(`Login attempt with username: ${username}`);
     setIsLoading(true);
-    setError(null);
+    // Don't clear errors here - they should be cleared by the component before calling login
 
     try {
       const response = await fetch("/api/auth", {
@@ -110,6 +113,8 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       });
 
       const data: AuthResponse = await response.json();
+      console.log('Auth API response:', data);
+      console.log('Response status:', response.status);
 
       if (data.success && data.token && data.user) {
         setToken(data.token);
@@ -122,21 +127,51 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         setIsLoading(false);
         return true;
       } else {
-        setError(data.message || "Login failed");
+        // Set specific error type if provided
+        const errorMsg = data.message || "Login failed";
+        const errorType = data.errorType;
+
+        // Force state updates to be synchronous by using a callback
+        setError(errorMsg);
+        setErrorType(errorType);
+
+        console.log(`Login error: ${errorMsg}, type: ${errorType}`);
+
+        // Add a small delay to ensure state updates are processed
+        await new Promise(resolve => setTimeout(resolve, 100));
+
+        console.log('Error state after setting:', {
+          error: errorMsg,
+          errorType: errorType
+        });
+
         setIsLoading(false);
         return false;
       }
     } catch (err) {
+      console.error('Login error:', err);
       const errorMessage = err instanceof Error ? err.message : "Login failed";
+
       setError(errorMessage);
+      setErrorType('unknown');
+
+      // Add a small delay to ensure state updates are processed
+      await new Promise(resolve => setTimeout(resolve, 100));
+
+      console.log('Error state after catch:', {
+        error: errorMessage,
+        errorType: 'unknown'
+      });
+
       setIsLoading(false);
       return false;
     }
   };
 
   const register = async (username: string, password: string, email?: string): Promise<boolean> => {
+    console.log(`Register attempt with username: ${username}`);
     setIsLoading(true);
-    setError(null);
+    // Don't clear errors here - they should be cleared by the component before calling register
 
     try {
       const response = await fetch("/api/auth", {
@@ -159,12 +194,14 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         return true;
       } else {
         setError(data.message || "Registration failed");
+        setErrorType(data.errorType);
         setIsLoading(false);
         return false;
       }
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : "Registration failed";
       setError(errorMessage);
+      setErrorType('unknown');
       setIsLoading(false);
       return false;
     }
@@ -198,6 +235,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
   const clearError = () => {
     setError(null);
+    setErrorType(undefined);
   };
 
   return (
@@ -208,6 +246,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         isAuthenticated: !!user && !!token,
         isLoading,
         error,
+        errorType,
         login,
         register,
         logout,

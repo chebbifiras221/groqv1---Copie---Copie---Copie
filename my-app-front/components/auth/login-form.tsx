@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/hooks/use-auth";
@@ -12,19 +12,46 @@ interface LoginFormProps {
 }
 
 export function LoginForm({ onSuccess, onRegisterClick }: LoginFormProps) {
-  const { login, isLoading, error, clearError } = useAuth();
+  const { login, isLoading, error, errorType, clearError } = useAuth();
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
 
+  // Create a local error state to ensure errors persist
+  const [localError, setLocalError] = useState<string | null>(null);
+  const [localErrorType, setLocalErrorType] = useState<string | undefined>(undefined);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    // Clear previous errors only when submitting the form
+    setLocalError(null);
+    setLocalErrorType(undefined);
+    clearError();
+
     if (username.trim() && password) {
+      console.log(`Submitting login form with username: ${username}`);
       const success = await login(username, password);
+      console.log(`Login result: ${success}, Error: ${error}, ErrorType: ${errorType}`);
       if (success && onSuccess) {
         onSuccess();
       }
     }
   };
+
+  // Log current state for debugging
+  console.log('Current auth state:', { error, errorType, isLoading });
+
+  // Sync local error state with auth error state
+  useEffect(() => {
+    console.log('Auth state changed:', { error, errorType, isLoading });
+
+    // Update local error state when auth error state changes
+    if (error) {
+      console.log('Error state set to:', { error, errorType });
+      setLocalError(error);
+      setLocalErrorType(errorType);
+    }
+  }, [error, errorType, isLoading]);
 
   return (
     <motion.div
@@ -39,12 +66,28 @@ export function LoginForm({ onSuccess, onRegisterClick }: LoginFormProps) {
       </div>
 
       <form onSubmit={handleSubmit}>
-        {error && (
-          <div className="mb-4 p-3 bg-danger-DEFAULT/10 border border-danger-DEFAULT/30 rounded-md flex items-center text-danger-DEFAULT">
-            <AlertCircle className="w-5 h-5 mr-2 flex-shrink-0" />
-            <span className="text-sm">{error}</span>
-          </div>
-        )}
+        {/* Always show a message box - either instructions or error */}
+        <div
+          className={`mb-4 p-3 ${localError ? 'bg-danger-DEFAULT/10 border-danger-DEFAULT/30 text-danger-DEFAULT' : 'bg-bg-tertiary/10 border-bg-tertiary/30 text-text-secondary'} border rounded-md flex items-center`}
+        >
+          {localError && <AlertCircle className="w-5 h-5 mr-2 flex-shrink-0" />}
+          <span className="text-sm">
+            {localError ? (
+              <strong>
+                {localErrorType === 'username' ? 'User does not exist' :
+                localErrorType === 'password' ? 'Password is incorrect' :
+                localError}
+              </strong>
+            ) : (
+              'Enter your credentials to login'
+            )}
+          </span>
+        </div>
+
+        {/* Add debug info */}
+        <div className="mb-4 p-2 bg-bg-tertiary/10 text-xs text-text-tertiary rounded">
+          <p>Debug info - try username: "test", password: "password"</p>
+        </div>
 
         <div className="mb-4">
           <label htmlFor="username" className="block text-sm font-medium text-text-secondary mb-1">
@@ -56,12 +99,13 @@ export function LoginForm({ onSuccess, onRegisterClick }: LoginFormProps) {
             value={username}
             onChange={(e) => {
               setUsername(e.target.value);
-              clearError();
+              // Don't clear error on typing
             }}
-            className="w-full p-2.5 bg-bg-primary border border-bg-tertiary/30 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-DEFAULT/50"
+            className={`w-full p-2.5 bg-bg-primary border ${localErrorType === 'username' ? 'border-danger-DEFAULT' : 'border-bg-tertiary/30'} rounded-md focus:outline-none focus:ring-2 focus:ring-primary-DEFAULT/50`}
             placeholder="Enter your username"
             required
           />
+          {/* Field-specific error is now shown in the general error message */}
         </div>
 
         <div className="mb-6">
@@ -74,12 +118,13 @@ export function LoginForm({ onSuccess, onRegisterClick }: LoginFormProps) {
             value={password}
             onChange={(e) => {
               setPassword(e.target.value);
-              clearError();
+              // Don't clear error on typing
             }}
-            className="w-full p-2.5 bg-bg-primary border border-bg-tertiary/30 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-DEFAULT/50"
+            className={`w-full p-2.5 bg-bg-primary border ${localErrorType === 'password' ? 'border-danger-DEFAULT' : 'border-bg-tertiary/30'} rounded-md focus:outline-none focus:ring-2 focus:ring-primary-DEFAULT/50`}
             placeholder="Enter your password"
             required
           />
+          {/* Field-specific error is now shown in the general error message */}
         </div>
 
         <Button

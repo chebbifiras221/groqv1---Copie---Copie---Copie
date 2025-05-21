@@ -11,6 +11,7 @@ export type AuthRequest = {
 export type AuthResponse = {
   success: boolean;
   message: string;
+  errorType?: 'username' | 'password' | string;
   user?: {
     id: string;
     username: string;
@@ -21,7 +22,16 @@ export type AuthResponse = {
 
 // Simple in-memory user store for demo purposes
 // In a real app, this would be a database
-const users: Record<string, any> = {};
+// NOTE: This is reset on every request because API routes are serverless functions
+const users: Record<string, any> = {
+  // Add a test user for demonstration
+  "test": {
+    id: "user-test-123",
+    username: "test",
+    password: "password", // In a real app, this would be hashed
+    email: "test@example.com"
+  }
+};
 
 export async function POST(request: Request) {
   try {
@@ -61,7 +71,8 @@ export async function POST(request: Request) {
       if (users[username]) {
         return NextResponse.json({
           success: false,
-          message: "Username already exists"
+          message: "Username already exists",
+          errorType: "username_exists"
         }, { status: 400 });
       }
 
@@ -89,14 +100,32 @@ export async function POST(request: Request) {
       const username = body.username!;
       const password = body.password!;
 
-      // Check if user exists and password matches
+      console.log(`Login attempt for user: ${username}`);
+      console.log(`Available users:`, Object.keys(users));
+
+      // Check if user exists
       const user = users[username];
-      if (!user || user.password !== password) {
+      if (!user) {
+        console.log(`User ${username} does not exist`);
         return NextResponse.json({
           success: false,
-          message: "Invalid username or password"
+          message: "User does not exist",
+          errorType: "username"
         }, { status: 401 });
       }
+
+      // Check if password matches
+      console.log(`User found, checking password. Expected: ${user.password}, Provided: ${password}`);
+      if (user.password !== password) {
+        console.log(`Password incorrect for user ${username}`);
+        return NextResponse.json({
+          success: false,
+          message: "Password is incorrect",
+          errorType: "password"
+        }, { status: 401 });
+      }
+
+      console.log(`Login successful for user ${username}`);
 
       // Generate a token
       const token = `token-${Date.now()}-${Math.random().toString(36).substring(2, 15)}`;

@@ -12,7 +12,7 @@ interface RegisterFormProps {
 }
 
 export function RegisterForm({ onSuccess, onLoginClick }: RegisterFormProps) {
-  const { register, isLoading, error, clearError } = useAuth();
+  const { register, isLoading, error, errorType, clearError } = useAuth();
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -20,29 +20,36 @@ export function RegisterForm({ onSuccess, onLoginClick }: RegisterFormProps) {
   const [validationError, setValidationError] = useState<string | null>(null);
 
   const validateForm = () => {
+    // Only set validation errors, don't clear them
     if (password !== confirmPassword) {
       setValidationError("Passwords do not match");
       return false;
     }
-    
+
     if (password.length < 6) {
       setValidationError("Password must be at least 6 characters");
       return false;
     }
-    
-    setValidationError(null);
+
+    // If we get here, validation passed
     return true;
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
+    // Clear previous errors only when submitting the form
+    clearError();
+    setValidationError(null);
+
     if (!validateForm()) {
       return;
     }
-    
+
     if (username.trim() && password) {
+      console.log(`Submitting registration form with username: ${username}`);
       const success = await register(username, password, email || undefined);
+      console.log(`Registration result: ${success}, Error: ${error}, ErrorType: ${errorType}`);
       if (success && onSuccess) {
         onSuccess();
       }
@@ -65,9 +72,18 @@ export function RegisterForm({ onSuccess, onLoginClick }: RegisterFormProps) {
         {(error || validationError) && (
           <div className="mb-4 p-3 bg-danger-DEFAULT/10 border border-danger-DEFAULT/30 rounded-md flex items-center text-danger-DEFAULT">
             <AlertCircle className="w-5 h-5 mr-2 flex-shrink-0" />
-            <span className="text-sm">{validationError || error}</span>
+            <span className="text-sm">
+              {validationError ? validationError :
+               errorType === 'username_exists' ? 'This username is already taken. Please choose another one.' :
+               error}
+            </span>
           </div>
         )}
+
+        {/* Add debug info */}
+        <div className="mb-4 p-2 bg-bg-tertiary/10 text-xs text-text-tertiary rounded">
+          <p>Debug info - try username: "test", password: "password"</p>
+        </div>
 
         <div className="mb-4">
           <label htmlFor="username" className="block text-sm font-medium text-text-secondary mb-1">
@@ -79,10 +95,9 @@ export function RegisterForm({ onSuccess, onLoginClick }: RegisterFormProps) {
             value={username}
             onChange={(e) => {
               setUsername(e.target.value);
-              clearError();
-              setValidationError(null);
+              // Don't clear errors on typing
             }}
-            className="w-full p-2.5 bg-bg-primary border border-bg-tertiary/30 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-DEFAULT/50"
+            className={`w-full p-2.5 bg-bg-primary border ${errorType === 'username_exists' ? 'border-danger-DEFAULT' : 'border-bg-tertiary/30'} rounded-md focus:outline-none focus:ring-2 focus:ring-primary-DEFAULT/50`}
             placeholder="Choose a username"
             required
           />
@@ -98,8 +113,7 @@ export function RegisterForm({ onSuccess, onLoginClick }: RegisterFormProps) {
             value={email}
             onChange={(e) => {
               setEmail(e.target.value);
-              clearError();
-              setValidationError(null);
+              // Don't clear errors on typing
             }}
             className="w-full p-2.5 bg-bg-primary border border-bg-tertiary/30 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-DEFAULT/50"
             placeholder="Enter your email"
@@ -116,8 +130,7 @@ export function RegisterForm({ onSuccess, onLoginClick }: RegisterFormProps) {
             value={password}
             onChange={(e) => {
               setPassword(e.target.value);
-              clearError();
-              setValidationError(null);
+              // Don't clear errors on typing
             }}
             className="w-full p-2.5 bg-bg-primary border border-bg-tertiary/30 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-DEFAULT/50"
             placeholder="Create a password"
@@ -135,8 +148,7 @@ export function RegisterForm({ onSuccess, onLoginClick }: RegisterFormProps) {
             value={confirmPassword}
             onChange={(e) => {
               setConfirmPassword(e.target.value);
-              clearError();
-              setValidationError(null);
+              // Don't clear errors on typing
             }}
             className="w-full p-2.5 bg-bg-primary border border-bg-tertiary/30 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-DEFAULT/50"
             placeholder="Confirm your password"
