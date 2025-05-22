@@ -3,7 +3,8 @@
     "id": "user-test-123",
     "username": "test",
     "password": "password",
-    "email": "test@example.com"
+    "email": "test@example.com",
+    "token": "token-1747872531641-rvr56o02cx7"
   },
   "moomenmsaadi": {
     "id": "user-1747816565416",

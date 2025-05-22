@@ -211,76 +211,19 @@ async def process_multi_part_messages(ai_response, conversation_id, participant)
     """
     Process long AI responses by splitting them into multiple parts and sending them.
 
+    This function has been disabled to prevent multi-part messages which can cause issues
+    with TTS and UI rendering.
+
     Args:
         ai_response: The full AI response text
         conversation_id: The ID of the current conversation
         participant: The participant to send the messages to
 
     Returns:
-        bool: True if multi-part messages were processed, False otherwise
+        bool: Always returns False to indicate no multi-part processing occurred
     """
-    # Initialize multi_part_messages to an empty list by default
-    multi_part_messages = []
-
-    # Check if the response is long enough to need splitting and we have a valid conversation ID
-    if len(ai_response) <= MAX_MESSAGE_LENGTH or not conversation_id:
-        return False
-
-    try:
-        # Get the most recent messages from the database
-        recent_messages = database.get_messages(conversation_id)
-        recent_ai_messages = [msg for msg in recent_messages if msg["type"] == "ai"]
-
-        # Estimate how many parts this response was split into
-        estimated_parts = (len(ai_response) // MAX_MESSAGE_LENGTH) + 1
-
-        # Take the most recent N messages where N is our estimated number of parts
-        chunk_messages = recent_ai_messages[-estimated_parts:] if estimated_parts <= len(recent_ai_messages) else []
-
-        # Create metadata for each chunk
-        total_chunks = len(chunk_messages)
-        for i, msg in enumerate(chunk_messages):
-            part_number = i + 1
-            is_final = (i == total_chunks - 1)
-
-            multi_part_messages.append({
-                "content": msg["content"],
-                "part": part_number,
-                "total_parts": total_chunks,
-                "is_final": is_final
-            })
-
-        logger.info(f"Created {len(multi_part_messages)} multi-part messages")
-    except Exception as e:
-        # Log any errors but continue with empty multi_part_messages
-        logger.error(f"Error processing multi-part messages: {e}")
-        multi_part_messages = []
-
-    # If we found multi-part messages, send them individually
-    if multi_part_messages:
-        # Sort by part number to ensure correct order
-        multi_part_messages.sort(key=lambda x: x["part"])
-
-        for part in multi_part_messages:
-            # Send each part as a separate message
-            message = {
-                "type": "ai_response",
-                "text": part["content"],
-                "conversation_id": conversation_id,
-                "is_part": True,
-                "part_number": part["part"],
-                "total_parts": part["total_parts"],
-                "is_final": part["is_final"]
-            }
-
-            # Use our safe publish method with retry logic
-            await safe_publish_data(participant, json.dumps(message).encode())
-
-            # Add a small delay between parts to ensure they're received in order
-            await asyncio.sleep(0.1)
-
-        return True
-
+    # Disabled multi-part messages to prevent issues with TTS and UI rendering
+    logger.info("Multi-part message processing is disabled to prevent TTS and UI issues")
     return False
 
 
@@ -778,55 +721,13 @@ def generate_ai_response(text, conversation_id=None):
             # Use the global MAX_MESSAGE_LENGTH constant
 
             if len(ai_response_with_model) > MAX_MESSAGE_LENGTH:
-                logger.info(f"Response is long ({len(ai_response_with_model)} chars), splitting into multiple messages")
+                logger.info(f"Response is long ({len(ai_response_with_model)} chars), but not splitting to avoid TTS and UI issues")
 
-                # Split the response into chunks of approximately MAX_MESSAGE_LENGTH
-                # Try to split at paragraph boundaries for more natural breaks
-                chunks = []
-                remaining = ai_response_with_model
+                # Store the entire response as a single message, even if it's longer than MAX_MESSAGE_LENGTH
+                # This prevents multi-part message issues with TTS and UI rendering
+                database.add_message(actual_conversation_id, "ai", ai_response_with_model)
 
-                while remaining:
-                    # If remaining text is shorter than max length, use it all
-                    if len(remaining) <= MAX_MESSAGE_LENGTH:
-                        chunks.append(remaining)
-                        break
-
-                    # Try to find a paragraph break near the max length
-                    split_point = remaining[:MAX_MESSAGE_LENGTH].rfind('\n\n')
-
-                    # If no paragraph break found, try a single newline
-                    if split_point == -1:
-                        split_point = remaining[:MAX_MESSAGE_LENGTH].rfind('\n')
-
-                    # If still no newline found, try a sentence end
-                    if split_point == -1:
-                        for end_char in ['. ', '! ', '? ']:
-                            potential_split = remaining[:MAX_MESSAGE_LENGTH].rfind(end_char)
-                            if potential_split != -1:
-                                split_point = potential_split + 1  # Include the period and space
-                                break
-
-                    # If all else fails, just split at the max length
-                    if split_point == -1:
-                        split_point = MAX_MESSAGE_LENGTH
-
-                    # Add the chunk and continue with the remaining text
-                    chunks.append(remaining[:split_point])
-                    remaining = remaining[split_point:].lstrip()
-
-                # Add each chunk as a separate message to the database
-                # We'll store them as regular messages, not as JSON
-                total_chunks = len(chunks)
-
-                for i, chunk in enumerate(chunks):
-                    # Store each chunk as a regular message
-                    # We'll add the metadata when sending to the client
-                    database.add_message(actual_conversation_id, "ai", chunk)
-
-                    # Log the chunk storage
-                    logger.info(f"Stored chunk {i+1}/{total_chunks} of length {len(chunk)}")
-
-                logger.info(f"Successfully split and stored response in {total_chunks} parts")
+                logger.info(f"Stored long response as a single message")
 
                 # Return the full response for TTS purposes
                 return ai_response_with_model

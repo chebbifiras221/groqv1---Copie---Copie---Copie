@@ -115,8 +115,8 @@ These are common time complexities in computer science.
   const processForTTS = (text: string) => {
     // Simplified version of the TTS processing logic
     let cleanedText = text
-      // Remove special section markers
-      .replace(/\[\s*CODE\s*\]([\s\S]*?)\[\s*\/\s*CODE\s*\]/g, 'Code block omitted.')
+      // Remove special section markers without adding any text
+      .replace(/\[\s*CODE\s*\]([\s\S]*?)\[\s*\/\s*CODE\s*\]/g, '')
       .replace(/\[\s*EXPLAIN\s*\]([\s\S]*?)\[\s*\/\s*EXPLAIN\s*\]/g, '$1')
 
       // Remove markdown formatting
@@ -125,13 +125,22 @@ These are common time complexities in computer science.
       .replace(/\*(.*?)\*/g, '$1')
       .replace(/\*/g, ' ')
       .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
-      .replace(/```[\s\S]*?```/g, 'Code block omitted.')
+      .replace(/```[\s\S]*?```/g, '')
       .replace(/`([^`]+)`/g, '$1')
       .replace(/^#{1,6}\s+(.+)$/gm, '$1') // Remove # but keep the header text
+      .replace(/#{1,6}\s+/g, '') // Remove any remaining # symbols at the beginning of lines
       .replace(/^[\s]*[-*+]\s+/gm, '')
       .replace(/^[\s]*\d+\.\s+/gm, '')
       .replace(/&[a-z]+;/g, ' ')
       .replace(/[_=+]/g, ' ')
+
+      // Remove any remaining markdown symbols that might be read aloud
+      .replace(/\[BOARD\]/gi, '')
+      .replace(/\[\/BOARD\]/gi, '')
+      .replace(/\[EXPLAIN\]/gi, '')
+      .replace(/\[\/EXPLAIN\]/gi, '')
+      .replace(/\[CODE\]/gi, '')
+      .replace(/\[\/CODE\]/gi, '')
 
       // Handle special programming terms
       .replace(/C\+\+/g, 'C plus plus')

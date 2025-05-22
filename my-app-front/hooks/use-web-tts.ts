@@ -284,60 +284,41 @@ export function useWebTTS() {
       // Check for code block markers
       if (line.startsWith('```')) {
         inCodeBlock = !inCodeBlock;
-        if (inCodeBlock) {
-          processedLines.push('Code example:');
-        } else {
-          processedLines.push('End of code example.');
-        }
+        // Skip code block markers without adding any text to be read
         continue;
       }
 
       // Skip content inside code blocks
       if (inCodeBlock) continue;
 
-      // Process headings with appropriate pauses and emphasis
+      // Process headings without adding prefixes, just the content
       if (line.startsWith('# ')) {
-        // Course title - add emphasis
-        processedLines.push(`Course Title: ${line.substring(2)}.`);
+        // Course title - just add the title text
+        processedLines.push(`${line.substring(2)}`);
         processedLines.push('');  // Add pause
       } else if (line.match(/^## Chapter \d+:/)) {
-        // Chapter heading - add emphasis and pause
-        processedLines.push(`${line.substring(3)}.`);
+        // Chapter heading - just add the heading text
+        processedLines.push(`${line.substring(3)}`);
         processedLines.push('');  // Add pause
       } else if (line.startsWith('### ')) {
-        // Section heading - add emphasis
-        processedLines.push(`Section: ${line.substring(4)}.`);
+        // Section heading - just add the heading text
+        processedLines.push(`${line.substring(4)}`);
         processedLines.push('');  // Add pause
       } else if (line.startsWith('#### ')) {
-        // Subsection heading - add emphasis
+        // Subsection heading - just add the heading text without prefix
         const heading = line.substring(5);
-
-        // Special handling for specific section types
-        if (heading.includes('Learning Objectives')) {
-          processedLines.push('Learning Objectives:');
-        } else if (heading.includes('Practice Exercises')) {
-          processedLines.push('Practice Exercises:');
-        } else if (heading.includes('Quiz')) {
-          processedLines.push('Quiz Section:');
-        } else if (heading.includes('Summary')) {
-          processedLines.push('Summary:');
-        } else if (heading.includes('Key Takeaways')) {
-          processedLines.push('Key Takeaways:');
-        } else {
-          processedLines.push(`${heading}:`);
-        }
+        processedLines.push(`${heading}`);
         processedLines.push('');  // Add pause
       } else if (line.match(/^\s*[\-\*]\s/)) {
-        // Bullet point - add slight pause
-        processedLines.push(`• ${line.replace(/^\s*[\-\*]\s/, '')}`);
+        // Bullet point - just add the content without bullet marker
+        processedLines.push(`${line.replace(/^\s*[\-\*]\s/, '')}`);
       } else if (line.match(/^\s*\d+\.\s/)) {
-        // Numbered list - add slight pause
-        const number = line.match(/^\s*(\d+)\.\s/)?.[1] || '';
+        // Numbered list - just add the content without number
         const content = line.replace(/^\s*\d+\.\s/, '');
-        processedLines.push(`Step ${number}: ${content}`);
+        processedLines.push(`${content}`);
       } else if (line.startsWith('> ')) {
-        // Blockquote - add emphasis
-        processedLines.push(`Note: ${line.substring(2)}`);
+        // Blockquote - just add the content without the marker
+        processedLines.push(`${line.substring(2)}`);
       } else {
         // Regular paragraph
         processedLines.push(line);
@@ -488,13 +469,21 @@ export function useWebTTS() {
               .replace(/\*(.*?)\*/g, '$1')
               .replace(/\*/g, ' ')
               .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
-              .replace(/```[\s\S]*?```/g, 'Code block omitted.')
+              .replace(/```[\s\S]*?```/g, '')
               .replace(/`([^`]+)`/g, '$1')
               .replace(/^#{1,6}\s+(.+)$/gm, '$1')
+              .replace(/#{1,6}\s+/g, '') // Remove any remaining # symbols at the beginning of lines
               .replace(/^[\s]*[-*+]\s+/gm, '')
               .replace(/^[\s]*\d+\.\s+/gm, '')
               .replace(/&[a-z]+;/g, ' ')
               .replace(/[_=+]/g, ' ')
+              // Remove any remaining markdown symbols that might be read aloud
+              .replace(/\[BOARD\]/gi, '')
+              .replace(/\[\/BOARD\]/gi, '')
+              .replace(/\[EXPLAIN\]/gi, '')
+              .replace(/\[\/EXPLAIN\]/gi, '')
+              .replace(/\[CODE\]/gi, '')
+              .replace(/\[\/CODE\]/gi, '')
               // Handle special programming terms
               .replace(/C\+\+/g, 'C plus plus')
               .replace(/\.NET/g, 'dot net')
@@ -643,11 +632,11 @@ export function useWebTTS() {
               // For regular content, include it as is
               processedBlocks.push(block.content);
             } else if (block.type === 'explain' && block.content.trim()) {
-              // For explain blocks, add a pause before reading
-              processedBlocks.push("Explanation: " + block.content);
+              // For explain blocks, include content without prefix
+              processedBlocks.push(block.content);
             } else if (block.type === 'code' && block.content.trim()) {
-              // For code blocks, just mention that there's code
-              processedBlocks.push("Code example (omitted for speech)");
+              // For code blocks, don't add anything to be read
+              // processedBlocks.push(""); // Empty string would add nothing
             }
           }
 
@@ -665,13 +654,21 @@ export function useWebTTS() {
             .replace(/\*(.*?)\*/g, '$1')
             .replace(/\*/g, ' ')
             .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
-            .replace(/```[\s\S]*?```/g, 'Code block omitted.')
+            .replace(/```[\s\S]*?```/g, '')
             .replace(/`([^`]+)`/g, '$1')
             .replace(/^#{1,6}\s+(.+)$/gm, '$1')
+            .replace(/#{1,6}\s+/g, '') // Remove any remaining # symbols at the beginning of lines
             .replace(/^[\s]*[-*+]\s+/gm, '')
             .replace(/^[\s]*\d+\.\s+/gm, '')
             .replace(/&[a-z]+;/g, ' ')
             .replace(/[_=+]/g, ' ')
+            // Remove any remaining markdown symbols that might be read aloud
+            .replace(/\[BOARD\]/gi, '')
+            .replace(/\[\/BOARD\]/gi, '')
+            .replace(/\[EXPLAIN\]/gi, '')
+            .replace(/\[\/EXPLAIN\]/gi, '')
+            .replace(/\[CODE\]/gi, '')
+            .replace(/\[\/CODE\]/gi, '')
             // Handle special programming terms
             .replace(/C\+\+/g, 'C plus plus')
             .replace(/\.NET/g, 'dot net')
@@ -724,11 +721,12 @@ export function useWebTTS() {
           .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1') // Replace [text](url) with just text
 
           // Handle code blocks and inline code
-          .replace(/```[\s\S]*?```/g, 'Code block omitted.') // Replace code blocks
+          .replace(/```[\s\S]*?```/g, '') // Remove code blocks entirely
           .replace(/`([^`]+)`/g, '$1')         // Replace inline code with just the code
 
           // Handle markdown headers - replace # with nothing
           .replace(/^#{1,6}\s+(.+)$/gm, '$1') // Replace # Header with just Header
+          .replace(/#{1,6}\s+/g, '') // Remove any remaining # symbols at the beginning of lines
 
           // Handle markdown lists
           .replace(/^[\s]*[-*+]\s+/gm, '') // Replace bullet points
@@ -737,6 +735,14 @@ export function useWebTTS() {
           // Handle special characters
           .replace(/&[a-z]+;/g, ' ')       // Replace HTML entities like &nbsp; with space
           .replace(/[_=+]/g, ' ')          // Replace underscores, equals, plus with spaces
+
+          // Remove any remaining markdown symbols that might be read aloud
+          .replace(/\[BOARD\]/gi, '')
+          .replace(/\[\/BOARD\]/gi, '')
+          .replace(/\[EXPLAIN\]/gi, '')
+          .replace(/\[\/EXPLAIN\]/gi, '')
+          .replace(/\[CODE\]/gi, '')
+          .replace(/\[\/CODE\]/gi, '')
 
           // Handle special programming terms
           .replace(/C\+\+/g, 'C plus plus')
