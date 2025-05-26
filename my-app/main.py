@@ -8,11 +8,15 @@ from livekit.agents import JobContext, WorkerOptions, cli, stt, AutoSubscribe, t
 from livekit.plugins.openai import stt as plugin
 from dotenv import load_dotenv
 import database
-import database_updates
 import auth_db
-import auth_api
 import shutdown
 from tts_web import WebTTS
+from ai_prompts import get_system_prompt
+from message_handlers import (
+    handle_clear_conversations, handle_rename_conversation, handle_delete_conversation,
+    handle_list_conversations, handle_auth_request, handle_get_conversation, handle_new_conversation
+)
+from text_processor import handle_text_input, generate_fallback_message
 
 # Import silero conditionally to avoid unused import
 from livekit.plugins import silero
@@ -30,42 +34,30 @@ logger = logging.getLogger("groq-whisper-stt-transcriber")
 
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions"
-# TTS provider will be configured later
-
-# Initialize the database and run migrations
-database.init_db()
-
-# Run database migrations separately to ensure they're applied
-# This is a safeguard in case the migrations in init_db didn't run
-try:
-    database.migrate_db()
-    logger.info("Database migrations completed successfully")
-except Exception as e:
-    logger.error(f"Error running database migrations: {e}")
-
-# Initialize the authentication database
-try:
-    auth_db.init_auth_db()
-    logger.info("Authentication database initialized successfully")
-except Exception as e:
-    logger.error(f"Error initializing authentication database: {e}")
-
 # Initialize shutdown handling with the '9' key
 shutdown.initialize_shutdown_handling()
 print("\n=== Press the '9' key to gracefully shutdown the application ===\n")
 
-# Initialize database
-# Import db_utils functions
+# Initialize database - consolidated initialization
 from db_utils import enable_wal_mode, ensure_db_file_exists
 
-# Ensure the database file exists
-ensure_db_file_exists()
+try:
+    # Ensure the database file exists
+    ensure_db_file_exists()
 
-# Enable WAL mode for better crash recovery
-enable_wal_mode()
+    # Enable WAL mode for better crash recovery
+    enable_wal_mode()
 
-# Log the database initialization
-logger.info("Database initialized successfully")
+    # Initialize the database and run migrations
+    database.init_db()
+
+    # Initialize the authentication database
+    auth_db.init_auth_db()
+
+    logger.info("Database and authentication systems initialized successfully")
+except Exception as e:
+    logger.error(f"Error during database initialization: {e}")
+    raise
 
 # Current conversation ID
 current_conversation_id = None
@@ -184,47 +176,10 @@ def find_or_create_empty_conversation(teaching_mode="teacher", check_current=Tru
     return current_conversation_id
 
 
-def generate_fallback_message(input_text):
-    """
-    Generate a fallback message when the AI response is empty.
-
-    Args:
-        input_text: The user's input text
-
-    Returns:
-        str: A fallback message based on the input
-    """
-    # Check if this is a course outline section request
-    if "learning objectives" in input_text.lower():
-        return "Here are the Learning Objectives for this chapter:\n\n• Understand the key concepts covered in this chapter\n• Learn how to apply these concepts in practical situations\n• Develop skills to solve problems related to this topic\n• Build a foundation for more advanced topics in future chapters"
-    elif "practice exercises" in input_text.lower():
-        return "Here are some Practice Exercises for this chapter:\n\n**Exercise 1: Basic Application**\n• Try implementing the concepts from this chapter in a simple program\n• Start with the examples provided and modify them to solve a similar problem\n\n**Exercise 2: Problem Solving**\n• Apply what you've learned to solve a more complex problem\n• Break down the problem into smaller steps and tackle each one using the techniques from this chapter"
-    elif "quiz" in input_text.lower():
-        return "Let's test your knowledge with a quiz on this chapter:\n\n1. What is the main purpose of the concepts covered in this chapter?\n   a) To improve code efficiency\n   b) To enhance code readability\n   c) To organize code better\n   d) All of the above\n\n2. When would you typically use these techniques?\n   a) For small projects only\n   b) For large projects only\n   c) For any project where they provide value\n   d) Only when required by specifications\n\nAnswers: 1-d, 2-c"
-    elif "summary" in input_text.lower():
-        return "**Summary of this chapter:**\n\n• We covered the fundamental concepts and their importance in programming\n• We explored practical applications and common use cases\n• We examined best practices and how to avoid common pitfalls\n• We connected these ideas to the broader context of software development"
-    else:
-        return "I apologize, but I couldn't generate a proper response. Please try again with a different question or instruction."
+# Fallback message generation moved to text_processor module
 
 
-async def process_multi_part_messages(ai_response, conversation_id, participant):
-    """
-    Process long AI responses by splitting them into multiple parts and sending them.
-
-    This function has been disabled to prevent multi-part messages which can cause issues
-    with TTS and UI rendering.
-
-    Args:
-        ai_response: The full AI response text
-        conversation_id: The ID of the current conversation
-        participant: The participant to send the messages to
-
-    Returns:
-        bool: Always returns False to indicate no multi-part processing occurred
-    """
-    # Disabled multi-part messages to prevent issues with TTS and UI rendering
-    logger.info("Multi-part message processing is disabled to prevent TTS and UI issues")
-    return False
+# Multi-part message processing has been removed to prevent TTS and UI issues
 
 
 async def send_conversation_data(conversation_id, participant):
@@ -444,144 +399,8 @@ def prepare_conversation_history(messages, teaching_mode):
     Returns:
         List of message objects formatted for the Groq API
     """
-    # System prompt for structured teaching mode
-    teacher_mode_prompt = {
-        "role": "system",
-        "content": """
-        You are a world-class educator with extensive expertise in computer science and programming. Combine academic rigor with engaging delivery to make complex subjects accessible. Embody a tenured professor with decades of industry and academic experience.
-
-        IMPORTANT: DO NOT name yourself or introduce yourself with a name. Never refer to yourself as Professor Alex or any other specific name.
-        DO NOT use greetings like "Hi there!" or "Hello!" at the beginning of your responses.
-        Never use phrases like "I am Professor [Name]" or "My name is [Name]".
-
-        In TEACHER MODE:
-        1. Adapt your pedagogical approach to each question or topic
-        2. Use scholarly language that conveys expertise without excessive formality
-        3. Assess learner needs precisely, providing structured learning paths, direct answers, or Socratic questioning
-        4. Include relevant examples with proper context and well-formatted code
-        5. When a learner expresses interest in a subject, create a comprehensive course with:
-           - Title formatted as "# Course: [Subject Name]"
-           - Introduction establishing significance, relevance, and applications
-           - A meticulously structured outline with 7-12 clearly numbered chapters
-           - Chapter titles formatted as "## Chapter X: [Chapter Title]"
-           - 3-5 specific subtopics per chapter formatted as "### X.Y: [Subtopic Title]"
-           - Clearly defined learning objectives at the beginning of each chapter
-           - Clear learning objectives that outline specific skills and knowledge students will gain
-
-        When teaching programming concepts, always follow each new piece of information with a brief explanation. After introducing any concept, fact, or code example (even if just one line), immediately add a concise explanation using the [EXPLAIN][/EXPLAIN] format. These explanations should be shorter than the information they clarify and should provide context, reasoning, or practical insights.
-
-        For example:
-        1. Present information: "Variables in Python are dynamically typed."
-        2. Follow with: "[EXPLAIN]This means you don't need to declare variable types explicitly, allowing for more flexible code writing but requiring careful attention to avoid type-related bugs.[/EXPLAIN]"
-
-        This pattern of information followed by explanation creates a rhythm that reinforces learning and ensures students understand not just what something is, but why it matters.
-
-        Use these professorial language patterns:
-        - "Let's consider this from first principles..." or "A critical insight here is..."
-        - "When we examine this algorithm, we notice..."
-        - "What might happen if we altered this parameter?"
-        - "In my years of teaching this concept, students often..."
-        - "While the theoretical foundation is important, the practical implementation reveals..."
-
-        Structure explanations with:
-        1. Conceptual overview establishing the "big picture"
-        2. Detailed explanation with appropriate technical depth
-        3. Concrete examples, suitable metaphors, and code demonstrations
-        4. Connections to broader contexts and applications
-
-        For programming topics:
-        - Explain jargon when introduced
-        - Emphasize both how and why code works
-        - Highlight design patterns and architectural considerations
-        - Discuss performance implications and optimization opportunities
-        - Address common misconceptions and debugging strategies
-        - Connect concepts to industry best practices
-
-        When creating educational content, employ sophisticated, consistent formatting throughout your responses:
-        - Use markdown formatting to create a clear visual hierarchy
-        - Format the course title as "# Course: [Subject Name]"
-        - Format chapter titles as "## Chapter X: [Chapter Title]"
-        - Format subtopics as "### X.Y: [Subtopic Title]"
-        - Format section headings as "#### [Section Heading]"
-        - Use **bold text** for key concepts, important terminology, and critical insights
-        - Use *italic text* for definitions, emphasis, and nuanced points
-        - Use numbered lists for sequential processes, methodologies, or chronological information
-        - Use > blockquotes for important notes, expert insights, or significant quotations
-        - Use tables for comparative data, structured information, or organized content
-        - Use horizontal rules (---) to separate major sections elegantly
-
-        At the conclusion of each chapter, professionally ask if the learner wishes to proceed to the next chapter with a question such as: "Would you like to continue to Chapter X+1, or would you prefer to explore a specific aspect of this chapter in more detail?"
-
-        When beginning a new course, after presenting the outline, ask if the learner would like to begin with Chapter 1 or if they prefer to jump to a specific chapter of interest.
-
-        When creating a course outline, ALWAYS include a dedicated "## Course Outline" section after the introduction that lists all chapters with their numbers and titles. This section is critical for the frontend to properly parse and display the course structure.
-
-        For code examples, use triple backticks with the appropriate language identifier:
-
-        ```python
-        # Example code
-        x = 10
-        print(x)
-        ```
-
-        IMPORTANT: Never place [EXPLAIN] tags inside code blocks. Always place code examples within triple backticks, and then add explanations after the code block using [EXPLAIN][/EXPLAIN] tags.
-        """
-    }
-
-    # System prompt for Q&A mode
-    qa_mode_prompt = {
-        "role": "system",
-        "content": """
-        You are a distinguished subject matter expert with exceptional knowledge across multiple disciplines. Your responses combine academic precision with clarity and accessibility, making you an invaluable resource for learners seeking authoritative answers.
-
-        In Q&A MODE:
-        1. Provide precise, authoritative answers with optimal clarity and concision
-        2. Deliver methodical, step-by-step explanations for complex problems
-        3. Incorporate relevant examples with proper context (including well-formatted code)
-        4. Address specific inquiries with focused expertise while providing sufficient context
-        5. Maintain a direct Q&A approach rather than creating structured courses
-        6. Deliver comprehensive answers that demonstrate depth of knowledge
-        7. Structure explanations with logical progression and clear organization
-
-        When explaining programming concepts, always follow each new piece of information with a brief explanation. After introducing any concept, fact, or code example (even if just one line), immediately add a concise explanation using the [EXPLAIN][/EXPLAIN] format. These explanations should be shorter than the information they clarify and should provide context, reasoning, or practical insights.
-
-        For example:
-        1. Present information: "Variables in Python are dynamically typed."
-        2. Follow with: "[EXPLAIN]This means you don't need to declare variable types explicitly, allowing for more flexible code writing but requiring careful attention to avoid type-related bugs.[/EXPLAIN]"
-
-        This pattern of information followed by explanation creates a rhythm that reinforces learning and ensures students understand not just what something is, but why it matters.
-
-        For programming questions:
-        - Begin with a direct answer to the specific question
-        - Provide necessary context and background information
-        - Include well-commented code examples that demonstrate the solution
-        - Explain both the how and why behind the solution
-        - Address potential edge cases or alternative approaches
-        - Highlight best practices and common pitfalls
-        - Connect the solution to broader programming principles
-
-        Structure your responses:
-        1. Direct answer to the question
-        2. Brief explanation of relevant concepts
-        3. Practical examples or code demonstrations
-        4. Additional context or considerations when appropriate
-
-        IMPORTANT: DO NOT name yourself or introduce yourself with a name. Never refer to yourself as Professor or any specific name. DO NOT use greetings at the beginning of your responses. Never use phrases like "I am Professor [Name]" or "My name is [Name]".
-
-        For code examples, use triple backticks with the appropriate language identifier:
-
-        ```python
-        # Example code
-        x = 10
-        print(x)
-        ```
-
-        IMPORTANT: Never place [EXPLAIN] tags inside code blocks. Always place code examples within triple backticks, and then add explanations after the code block using [EXPLAIN][/EXPLAIN] tags.
-        """
-    }
-
-    # Select the appropriate system prompt based on the teaching mode
-    system_prompt = teacher_mode_prompt if teaching_mode == "teacher" else qa_mode_prompt
+    # Get the appropriate system prompt based on the teaching mode
+    system_prompt = get_system_prompt(teaching_mode)
 
     # Start with the system message
     conversation_history = [system_prompt]
@@ -670,13 +489,10 @@ def generate_ai_response(text, conversation_id=None):
             result = response.json()
             ai_response = result["choices"][0]["message"]["content"]
 
-            # Add model info to the response for transparency
+            # Get model description for logging/debugging
             model_descriptions = {
-                "llama-3.1-8b-instant": "Llama 3.1 8B Instant - Fast model with 128K context window",
-                "llama-3.3-70b-versatile": "Llama 3.3 70B Versatile - Powerful model with 128K context window",
-                "llama3-70b-8192": "Llama 3 70B - Powerful model with strong reasoning capabilities",
-                "llama3-8b-8192": "Llama 3 8B - Balanced model for general tasks",
-                "gemma2-9b-it": "Gemma 2 9B - Google's instruction-tuned model"
+                "llama-3.3-70b-versatile": "Llama 3.3 70B Versatile",
+                "llama3-70b-8192": "Llama 3 70B"
             }
             model_description = model_descriptions.get(model_name, model_name)
 
@@ -782,11 +598,8 @@ async def _forward_transcription(
 
             logger.info(f"AI Response: {ai_response}")
 
-            # Process multi-part messages if needed
-            multi_part_processed = await process_multi_part_messages(ai_response, current_conversation_id, room.local_participant)
-
-            # If multi-part messages weren't processed, send the response as a single message
-            if not multi_part_processed and current_conversation_id:
+            # Send the response as a single message (multi-part processing disabled)
+            if current_conversation_id:
                 # Send AI response to all participants as a single message
                 data_message = {
                     "type": "ai_response",
@@ -899,363 +712,42 @@ async def entrypoint(ctx: JobContext):
             message_str = data.data.decode('utf-8')
             message = json.loads(message_str)
 
-            if message.get('type') == 'clear_all_conversations':
-                # Get the teaching mode from the message
-                teaching_mode = message.get('teaching_mode', 'teacher')
+            # Route messages to appropriate handlers
+            message_type = message.get('type')
 
-                # Clear conversations for the specified teaching mode
-                result = database_updates.clear_conversations_by_mode(teaching_mode)
-                deleted_count = result["deleted_count"]
-                current_conversation_id = result["new_conversation_id"]
-
-                logger.info(f"Cleared {deleted_count} conversations with teaching mode: {teaching_mode}")
-                logger.info(f"Created new conversation with ID: {current_conversation_id} and teaching mode: {teaching_mode}")
-
-                response_message = {
-                    "type": "all_conversations_cleared",
-                    "new_conversation_id": current_conversation_id,
-                    "teaching_mode": teaching_mode,
-                    "deleted_count": deleted_count
-                }
-                await safe_publish_data(ctx.room.local_participant, json.dumps(response_message).encode())
-            elif message.get('type') == 'rename_conversation':
-                # Rename a conversation
-                conversation_id = message.get('conversation_id')
-                new_title = message.get('title')
-
-                if conversation_id and new_title:
-                    success = database.update_conversation_title(conversation_id, new_title)
-
-                    if success:
-                        response_message = {
-                            "type": "conversation_renamed",
-                            "conversation_id": conversation_id,
-                            "title": new_title
-                        }
-                        await safe_publish_data(ctx.room.local_participant, json.dumps(response_message).encode())
-            elif message.get('type') == 'delete_conversation':
-                # Delete a conversation
-                conversation_id = message.get('conversation_id')
-                user_id = message.get('user_id')
-
-                if conversation_id:
-                    # Pass user_id for data isolation
-                    success = database.delete_conversation(conversation_id, user_id)
-
-                    if success:
-                        # If we deleted the current conversation, find another one to use
-                        if current_conversation_id == conversation_id:
-                            # Get remaining conversations
-                            remaining_conversations = database.list_conversations(limit=1)
-                            if remaining_conversations:
-                                # Use the most recent conversation
-                                current_conversation_id = remaining_conversations[0]["id"]
-                                logger.info(f"Switched to existing conversation with ID: {current_conversation_id}")
-                            else:
-                                # Create a new conversation if none exist
-                                current_conversation_id = database.create_conversation("New Conversation")
-                                logger.info(f"Created new conversation with ID: {current_conversation_id}")
-
-                        # If we deleted the current conversation, we need to send the new conversation ID
-                        # Otherwise, we don't need to send a new conversation ID
-                        new_conversation_id = None
-                        if current_conversation_id == conversation_id:
-                            # The current conversation is the one we just deleted
-                            # We need to create or find a new one
-                            # Get remaining conversations with the current teaching mode
-                            teaching_mode = None
-                            try:
-                                # Try to get the teaching mode from the deleted conversation
-                                conn = database.get_db_connection()
-                                cursor = conn.cursor()
-                                cursor.execute(
-                                    "SELECT teaching_mode FROM conversations WHERE id = ?",
-                                    (conversation_id,)
-                                )
-                                result = cursor.fetchone()
-                                if result:
-                                    teaching_mode = result['teaching_mode']
-                            except Exception as e:
-                                logger.error(f"Error getting teaching mode: {e}")
-                            finally:
-                                database.release_connection(conn)
-
-                            # Create a new conversation with the same teaching mode
-                            current_conversation_id = database.create_conversation(
-                                title="New Conversation",
-                                teaching_mode=teaching_mode
-                            )
-                            new_conversation_id = current_conversation_id
-                            logger.info(f"Created new conversation with ID: {new_conversation_id} and teaching mode: {teaching_mode}")
-
-                        response_message = {
-                            "type": "conversation_deleted",
-                            "conversation_id": conversation_id,
-                            "new_conversation_id": new_conversation_id
-                        }
-                        await safe_publish_data(ctx.room.local_participant, json.dumps(response_message).encode())
-            elif message.get('type') == 'list_conversations':
-                # Return the list of conversations for a specific user
-                user_id = message.get('user_id')
-                conversations = database.list_conversations(limit=20, user_id=user_id)
-                response_message = {
-                    "type": "conversations_list",
-                    "conversations": conversations
-                }
-                await safe_publish_data(ctx.room.local_participant, json.dumps(response_message).encode())
-            elif message.get('type') == 'auth_request':
-                # Handle authentication requests (register, login, verify, logout)
-                auth_data = message.get('data', {})
-
-                # Process the authentication request using the new auth_api module
-                response_data, status_code = auth_api.handle_auth_request(json.dumps(auth_data).encode())
-
-                # Create a response message with the authentication result
-                response_message = {
-                    "type": "auth_response",
-                    "data": response_data,
-                    "status": status_code
-                }
-
-                # Send the response back to the client
-                await safe_publish_data(ctx.room.local_participant, json.dumps(response_message).encode())
-
-                # Log the authentication request (without sensitive data)
-                auth_type = auth_data.get('type', 'unknown')
-                username = auth_data.get('username', 'unknown')
-                logger.info(f"Processed {auth_type} request for user: {username}, status: {status_code}")
-
-                # If this was a successful login, update the current user context
-                if auth_type == 'login' and response_data.get('success'):
+            if message_type == 'clear_all_conversations':
+                current_conversation_id = await handle_clear_conversations(message, ctx, current_conversation_id, safe_publish_data)
+            elif message_type == 'rename_conversation':
+                await handle_rename_conversation(message, ctx, safe_publish_data)
+            elif message_type == 'delete_conversation':
+                new_id = await handle_delete_conversation(message, ctx, current_conversation_id, safe_publish_data)
+                if new_id:
+                    current_conversation_id = new_id
+            elif message_type == 'list_conversations':
+                await handle_list_conversations(message, ctx, safe_publish_data)
+            elif message_type == 'auth_request':
+                response_data = await handle_auth_request(message, ctx, safe_publish_data)
+                # Update current conversation if login was successful
+                if response_data.get('success') and message.get('data', {}).get('type') == 'login':
                     user_id = response_data.get('user', {}).get('id')
                     if user_id:
-                        logger.info(f"User {username} (ID: {user_id}) logged in successfully")
-
-                        # Get or create a conversation for this user
-                        teaching_mode = 'teacher'  # Default mode
                         current_conversation_id = find_or_create_empty_conversation(
-                            teaching_mode=teaching_mode,
+                            teaching_mode='teacher',
                             check_current=True,
                             user_id=user_id
                         )
-
-                        # Send the conversation list for this user
-                        try:
-                            conversations = database.list_conversations(limit=20, user_id=user_id)
-                            list_response = {
-                                "type": "conversations_list",
-                                "conversations": conversations
-                            }
-                            await safe_publish_data(ctx.room.local_participant, json.dumps(list_response).encode())
-                        except Exception as e:
-                            logger.error(f"Error getting conversation list after login: {e}")
-
-            # Keep the old authentication endpoints for backward compatibility
-            elif message.get('type') == 'register_user':
-                # Convert to new format and forward to auth_request handler
-                auth_data = {
-                    "type": "register",
-                    "username": message.get('username'),
-                    "password": message.get('password'),
-                    "email": message.get('email')
-                }
-
-                # Process using the new auth API
-                response_data, status_code = auth_api.handle_auth_request(json.dumps(auth_data).encode())
-
-                # Format response to match old format
-                response_message = {
-                    "type": "register_response",
-                    "success": response_data.get('success', False),
-                    "message": response_data.get('message', "Registration failed")
-                }
-
-                if response_data.get('success') and response_data.get('user'):
-                    response_message["user"] = response_data.get('user')
-
-                await safe_publish_data(ctx.room.local_participant, json.dumps(response_message).encode())
-
-            elif message.get('type') == 'login_user':
-                # Convert to new format and forward to auth_request handler
-                auth_data = {
-                    "type": "login",
-                    "username": message.get('username'),
-                    "password": message.get('password')
-                }
-
-                # Process using the new auth API
-                response_data, status_code = auth_api.handle_auth_request(json.dumps(auth_data).encode())
-
-                # Format response to match old format
-                response_message = {
-                    "type": "login_response",
-                    "success": response_data.get('success', False),
-                    "message": response_data.get('message', "Login failed")
-                }
-
-                if response_data.get('success'):
-                    if response_data.get('user'):
-                        response_message["user"] = response_data.get('user')
-                    if response_data.get('token'):
-                        response_message["token"] = response_data.get('token')
-
-                await safe_publish_data(ctx.room.local_participant, json.dumps(response_message).encode())
-
-            elif message.get('type') == 'verify_token':
-                # Convert to new format and forward to auth_request handler
-                auth_data = {
-                    "type": "verify",
-                    "token": message.get('token')
-                }
-
-                # Process using the new auth API
-                response_data, status_code = auth_api.handle_auth_request(json.dumps(auth_data).encode())
-
-                # Format response to match old format
-                response_message = {
-                    "type": "token_verification",
-                    "success": response_data.get('success', False)
-                }
-
-                if response_data.get('success') and response_data.get('user'):
-                    response_message["user"] = response_data.get('user')
-
-                await safe_publish_data(ctx.room.local_participant, json.dumps(response_message).encode())
-            elif message.get('type') == 'get_conversation':
-                # Return a specific conversation
-                conversation_id = message.get('conversation_id')
-                user_id = message.get('user_id')
-
+            elif message_type == 'get_conversation':
+                conversation_id = await handle_get_conversation(message, ctx, safe_publish_data)
                 if conversation_id:
-                    # Get the conversation with user_id check for data isolation
-                    conversation = database.get_conversation(conversation_id, user_id)
-
-                    if conversation:
-                        # Set this as the current conversation
-                        current_conversation_id = conversation_id
-
-                        response_message = {
-                            "type": "conversation_data",
-                            "conversation": conversation
-                        }
-                        await safe_publish_data(ctx.room.local_participant, json.dumps(response_message).encode())
-                    else:
-                        # Send error response if conversation not found or not accessible
-                        error_message = {
-                            "type": "error",
-                            "error": "conversation_not_found",
-                            "message": "Conversation not found or you don't have access to it"
-                        }
-                        await safe_publish_data(ctx.room.local_participant, json.dumps(error_message).encode())
-            elif message.get('type') == 'new_conversation':
-                # Get the teaching mode from the message
-                teaching_mode = message.get('teaching_mode', 'teacher')
-                user_id = message.get('user_id')
-
-                # Find or create an empty conversation
-                current_conversation_id = find_or_create_empty_conversation(teaching_mode, user_id=user_id)
-
-                # Get the updated conversation list
-                try:
-                    conversations = database.list_conversations(limit=20, user_id=user_id)
-                    list_response = {
-                        "type": "conversations_list",
-                        "conversations": conversations
-                    }
-                    await safe_publish_data(ctx.room.local_participant, json.dumps(list_response).encode())
-                except Exception as e:
-                    logger.error(f"Error getting conversation list: {e}")
-
-                # Send the new conversation created response
-                response_message = {
-                    "type": "new_conversation_created",
-                    "conversation_id": current_conversation_id,
-                    "teaching_mode": teaching_mode,
-                    "user_id": user_id
-                }
-                await safe_publish_data(ctx.room.local_participant, json.dumps(response_message).encode())
-            elif message.get('type') == 'text_input':
-                text_input = message.get('text')
-                logger.info(f"Received text input: {text_input}")
-
-                # Check if we need to create a new conversation
-                if message.get('new_conversation'):
-                    # Get the teaching mode from the message
-                    teaching_mode = message.get('teaching_mode', 'teacher')
-                    user_id = message.get('user_id')
-
-                    # Log the user ID for debugging
-                    logger.info(f"Creating new conversation for user: {user_id}")
-
-                    # Find or create an empty conversation
-                    current_conversation_id = find_or_create_empty_conversation(teaching_mode, check_current=True, user_id=user_id)
-
-                    # Get the updated conversation list
-                    try:
-                        # Always filter by user_id for data isolation
-                        conversations = database.list_conversations(limit=20, user_id=user_id)
-                        list_response = {
-                            "type": "conversations_list",
-                            "conversations": conversations
-                        }
-                        await safe_publish_data(ctx.room.local_participant, json.dumps(list_response).encode())
-                    except Exception as e:
-                        logger.error(f"Error getting conversation list: {e}")
-
-                # Check if this is a hidden instruction
-                is_hidden = message.get('hidden', False)
-
-                # Only echo back the user's message if it's not a hidden instruction
-                if not is_hidden:
-                    echo_message = {
-                        "type": "user_message_echo",
-                        "text": text_input,
-                        "conversation_id": current_conversation_id
-                    }
-                    await safe_publish_data(ctx.room.local_participant, json.dumps(echo_message).encode())
-
-                # Get the teaching mode from the message
-                teaching_mode = message.get('teaching_mode', 'teacher')
-                logger.info(f"Using teaching mode: {teaching_mode}")
-
-                # Create a context object with conversation ID, teaching mode, and hidden flag
-                context = {
-                    "conversation_id": current_conversation_id,
-                    "teaching_mode": teaching_mode,
-                    "is_hidden": is_hidden
-                }
-
-                # Generate AI response using the current conversation and teaching mode
-                ai_response = generate_ai_response(text_input, context)
-
-                # Check if the response is empty or just whitespace
-                if not ai_response or not ai_response.strip():
-                    logger.warning("Received empty AI response, using fallback message")
-                    ai_response = generate_fallback_message(text_input)
-
-                logger.info(f"AI Response to text input: {ai_response}")
-
-                # Process multi-part messages if needed
-                multi_part_processed = await process_multi_part_messages(ai_response, current_conversation_id, ctx.room.local_participant)
-
-                # If multi-part messages weren't processed, send the response as a single message
-                if not multi_part_processed and current_conversation_id:
-                    # Send AI response as a single message
-                    response_message = {
-                        "type": "ai_response",
-                        "text": ai_response,
-                        "conversation_id": current_conversation_id
-                    }
-                    await safe_publish_data(ctx.room.local_participant, json.dumps(response_message).encode())
-                elif not current_conversation_id:
-                    # Log an error if we don't have a valid conversation ID
-                    logger.error("Cannot send AI response: No valid conversation ID")
-
-                # Synthesize speech from the AI response
-                await synthesize_speech(ai_response, ctx.room)
-
-                # Send updated conversation data to ensure UI is in sync
-                await send_conversation_data(current_conversation_id, ctx.room.local_participant)
+                    current_conversation_id = conversation_id
+            elif message_type == 'new_conversation':
+                current_conversation_id = await handle_new_conversation(message, ctx, safe_publish_data, find_or_create_empty_conversation)
+            elif message_type == 'text_input':
+                current_conversation_id = await handle_text_input(
+                    message, ctx, current_conversation_id, safe_publish_data,
+                    find_or_create_empty_conversation, generate_ai_response,
+                    synthesize_speech, send_conversation_data
+                )
         except Exception as e:
             logger.error(f"Error handling data message: {e}")
 
