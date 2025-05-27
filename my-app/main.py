@@ -124,15 +124,16 @@ def find_or_create_empty_conversation(teaching_mode="teacher", check_current=Tru
     # First, verify if the current conversation exists (if requested)
     if check_current and current_conversation_id:
         try:
-            # Get the conversation from the database
-            conversation = database.get_conversation(current_conversation_id)
+            # Get the conversation from the database with user_id check
+            conversation = database.get_conversation(current_conversation_id, user_id)
 
-            # If the conversation doesn't exist, reset current_conversation_id
+            # If the conversation doesn't exist or user doesn't have access, reset current_conversation_id
             if not conversation:
-                logger.warning(f"Current conversation ID {current_conversation_id} does not exist, will create a new one")
+                logger.warning(f"Current conversation ID {current_conversation_id} does not exist or user {user_id} doesn't have access, will create a new one")
                 current_conversation_id = None
         except Exception as e:
             logger.error(f"Error checking if conversation exists: {e}")
+            current_conversation_id = None
 
     # Look for empty conversations for this user
     empty_conversation_id = None
@@ -152,14 +153,18 @@ def find_or_create_empty_conversation(teaching_mode="teacher", check_current=Tru
 
         # Update the conversation with the new teaching mode
         try:
-            database.reuse_empty_conversation(
+            result = database.reuse_empty_conversation(
                 conversation_id=current_conversation_id,
                 teaching_mode=teaching_mode
             )
-            logger.info(f"Updated empty conversation with teaching mode: {teaching_mode}")
-            return current_conversation_id
+            if result and result.get("conversation_id"):
+                logger.info(f"Updated empty conversation with teaching mode: {teaching_mode}")
+                return result["conversation_id"]
+            else:
+                logger.warning(f"Failed to reuse conversation {current_conversation_id}, will create new one")
         except Exception as e:
             logger.error(f"Error reusing empty conversation: {e}")
+            # Continue to create a new conversation
 
     # Create a new conversation if no empty one was found
     # Ensure teaching_mode is either 'teacher' or 'qa'

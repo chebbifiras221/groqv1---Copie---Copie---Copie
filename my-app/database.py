@@ -427,6 +427,17 @@ def clear_all_conversations() -> int:
 def generate_conversation_title(conversation_id: str) -> str:
     """Generate a title for a conversation based on its content"""
     try:
+        # First check if conversation exists
+        conversation = execute_query(
+            "SELECT id FROM conversations WHERE id = ?",
+            (conversation_id,),
+            fetch_one=True
+        )
+
+        if not conversation:
+            logger.warning(f"Cannot generate title: conversation {conversation_id} does not exist")
+            return f"New Conversation {conversation_id[:8]}"
+
         # Get the first user message
         first_message = execute_query(
             "SELECT content FROM messages WHERE conversation_id = ? AND type = 'user' ORDER BY timestamp LIMIT 1",
@@ -446,9 +457,11 @@ def generate_conversation_title(conversation_id: str) -> str:
         else:
             title = content
 
-        # Update the conversation title
-        update_conversation_title(conversation_id, title)
-        logger.info(f"Generated title for conversation {conversation_id}: {title}")
+        # Update the conversation title only if conversation still exists
+        if update_conversation_title(conversation_id, title):
+            logger.info(f"Generated title for conversation {conversation_id}: {title}")
+        else:
+            logger.warning(f"Failed to update title for conversation {conversation_id}")
 
         return title
     except Exception as e:

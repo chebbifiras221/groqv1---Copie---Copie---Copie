@@ -634,16 +634,17 @@ export function ConversationManager() {
               localStorage.setItem('current-conversation-id', data.new_conversation_id);
               console.log(`Stored new conversation ID after clearing: ${data.new_conversation_id}`);
 
-              // Then fetch the conversation with a small delay to ensure the backend is ready
+              // The backend already sent an updated conversation list, so we just need to load the conversation
+              // Use a small delay to ensure all state updates are processed
               setTimeout(() => {
                 fetchConversation(data.new_conversation_id);
-              }, 100);
+              }, 200);
+            } else {
+              // If no new conversation was created, just refresh the list
+              fetchConversations().catch(err =>
+                console.error("Error refreshing conversation list:", err)
+              );
             }
-
-            // Refresh the conversation list
-            fetchConversations().catch(err =>
-              console.error("Error refreshing conversation list:", err)
-            );
           } else {
             console.log(`Received clear confirmation for ${responseMode} mode, but we're in ${currentMode} mode. Ignoring.`);
             // Still refresh the list to get the updated state
@@ -719,7 +720,8 @@ export function ConversationManager() {
     try {
       const message = {
         type: "clear_all_conversations",
-        teaching_mode: currentMode // Include the current teaching mode
+        teaching_mode: currentMode, // Include the current teaching mode
+        user_id: user?.id // Include user ID for data isolation
       };
       await publishDataWithRetry(room, message);
     } catch (error) {
