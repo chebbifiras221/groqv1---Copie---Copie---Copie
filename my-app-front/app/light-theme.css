@@ -375,12 +375,28 @@
 }
 
 /* Scrollbar styling */
+.light-theme ::-webkit-scrollbar {
+  width: 12px !important;
+  height: 12px !important;
+}
+
+.light-theme ::-webkit-scrollbar-track {
+  background: var(--bg-primary) !important;
+  border-radius: 6px !important;
+}
+
 .light-theme ::-webkit-scrollbar-thumb {
   background-color: rgba(0, 0, 0, 0.2) !important;
+  border-radius: 6px !important;
+  border: 2px solid var(--bg-primary) !important;
 }
 
 .light-theme ::-webkit-scrollbar-thumb:hover {
   background-color: rgba(0, 0, 0, 0.3) !important;
+}
+
+.light-theme ::-webkit-scrollbar-corner {
+  background: var(--bg-primary) !important;
 }
 
 /* Fix for language selector in light theme */

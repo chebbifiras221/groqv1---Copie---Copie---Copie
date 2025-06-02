@@ -51,7 +51,7 @@ function AppContent() {
   // Show loading state while checking authentication
   if (isLoading) {
     return (
-      <div className="h-dvh w-full bg-bg-primary flex items-center justify-center">
+      <div className="h-screen w-full bg-bg-primary flex items-center justify-center">
         <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary-DEFAULT"></div>
       </div>
     );
@@ -64,7 +64,7 @@ function AppContent() {
 
   // If authenticated, show the connection page or room component
   return (
-    <div className="h-dvh w-full bg-bg-primary">
+    <div className="h-screen w-full bg-bg-primary overflow-hidden">
       {shouldConnect ? <RoomComponent /> : <ConnectionPage />}
     </div>
   );

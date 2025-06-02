@@ -9,7 +9,7 @@ import { Code, MessageSquare, Github, Mic, LogOut } from "lucide-react";
 import { SimpleBotFace } from "@/components/ui/simple-bot-face";
 
 export function ConnectionPage() {
-  const { connect } = useConnection();
+  const { connect, disconnect } = useConnection();
   const { user, logout } = useAuth();
   const [isLoading, setIsLoading] = useState(false);
   const [connectionStep, setConnectionStep] = useState(0);

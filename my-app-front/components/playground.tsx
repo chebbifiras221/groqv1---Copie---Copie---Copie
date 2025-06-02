@@ -115,7 +115,7 @@ export function Playground({ onConnect: _ }: PlaygroundProps) {
   const isConnected = roomState === ConnectionState.Connected;
 
   return (
-    <div className="flex flex-col h-full w-full">
+    <div className="flex flex-col h-screen w-full">
       <Header title="Teacher Assistant" />
 
       <AnimatePresence>
@@ -136,15 +136,17 @@ export function Playground({ onConnect: _ }: PlaygroundProps) {
 
         {/* Desktop sidebar */}
         {isConnected && (
-          <div className="hidden md:block w-64 lg:w-72 bg-bg-secondary relative overflow-hidden">
-            <ConversationManager />
+          <div className="hidden md:block w-64 lg:w-72 bg-bg-secondary border-r border-bg-tertiary/30">
+            <div className="h-full overflow-y-auto">
+              <ConversationManager />
+            </div>
           </div>
         )}
 
-        <div className="relative flex-col grow h-full bg-bg-primary">
+        <div className="flex flex-col flex-1 bg-bg-primary relative">
           {/* Mobile conversation button */}
           {isConnected && (
-            <div className="md:hidden absolute top-16 left-4 z-10">
+            <div className="md:hidden absolute top-4 left-4 z-10">
               <Button
                 variant="ghost"
                 size="icon"
@@ -156,14 +158,13 @@ export function Playground({ onConnect: _ }: PlaygroundProps) {
             </div>
           )}
 
-          <div className="h-full pb-48 overflow-hidden">
-            <Typewriter typingSpeed={25} />
-          </div>
-          <div className="absolute left-0 bottom-0 w-full bg-bg-secondary border-t border-bg-tertiary/30">
-            {/* Removed the audio tile content with the microphone button */}
-            <div className="bg-bg-secondary">
-              <TextInput isConnected={isConnected} />
+          <div className="flex-1 overflow-y-auto">
+            <div className="h-full">
+              <Typewriter typingSpeed={25} />
             </div>
+          </div>
+          <div className="flex-shrink-0 bg-bg-secondary border-t border-bg-tertiary/30">
+            <TextInput isConnected={isConnected} />
           </div>
         </div>
       </div>

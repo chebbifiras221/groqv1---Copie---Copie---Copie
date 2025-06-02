@@ -164,8 +164,10 @@ export function RegisterForm({ onSuccess, onLoginClick }: RegisterFormProps) {
           isLoading={isLoading}
           disabled={isLoading}
         >
-          <UserPlus className="w-4 h-4 mr-2" />
-          Create Account
+          <span className="flex items-center justify-center gap-2">
+            <span>Create Account</span>
+            <UserPlus className="w-4 h-4" />
+          </span>
         </Button>
 
         <div className="text-center text-sm text-text-secondary">

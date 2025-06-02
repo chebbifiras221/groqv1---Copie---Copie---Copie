@@ -135,8 +135,10 @@ export function LoginForm({ onSuccess, onRegisterClick }: LoginFormProps) {
           isLoading={isLoading}
           disabled={isLoading}
         >
-          <LogIn className="w-4 h-4 mr-2" />
-          Sign In
+          <span className="flex items-center justify-center gap-2">
+            <span>Sign In</span>
+            <LogIn className="w-4 h-4" />
+          </span>
         </Button>
 
         <div className="text-center text-sm text-text-secondary">

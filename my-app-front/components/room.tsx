@@ -129,7 +129,7 @@ export function RoomComponent() {
         </div>
       )}
       <LiveKitRoom
-        className="overflow-y-hidden w-full h-full"
+        className="w-full h-screen overflow-hidden"
         serverUrl={wsUrl}
         token={token}
         room={room}

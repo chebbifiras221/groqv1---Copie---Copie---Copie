@@ -1137,7 +1137,7 @@ Please focus specifically on this section and provide a clear, concise explanati
   const isTeacherMode = settings.teachingMode === 'teacher';
 
   return (
-    <div className="relative h-full text-lg font-mono overflow-hidden flex">
+    <div className="relative h-full text-lg font-mono flex">
       {/* Course Navigation Sidebar using our new CourseUI component */}
       <CourseUI
         chapters={courseChapters}
@@ -1148,14 +1148,14 @@ Please focus specifically on this section and provide a clear, concise explanati
       />
 
       {/* Main Content Area */}
-      <div className={`flex-1 px-4 md:px-8 pt-6 pb-20 overflow-hidden ${courseChapters.length > 0 ? 'md:border-l md:border-bg-tertiary/50' : ''}`}>
+      <div className={`flex-1 px-4 md:px-8 pt-6 pb-6 ${courseChapters.length > 0 ? 'md:border-l md:border-bg-tertiary/50' : ''}`}>
         {state === ConnectionState.Disconnected && (
           <div className="text-text-secondary h-full flex items-center justify-center pb-16 max-w-md mx-auto">
             <p>{emptyTextAnimation}</p>
           </div>
         )}
         {state !== ConnectionState.Disconnected && (
-          <div className="h-full overflow-y-auto" ref={conversationContainerRef}>
+          <div className="h-full" ref={conversationContainerRef}>
             <div className="h-12" />
 
             {/* Explanation Toggle Button (only shown when there are messages) */}

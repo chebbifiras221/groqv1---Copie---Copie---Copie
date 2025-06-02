@@ -50,7 +50,7 @@ export function AuthPage({ onAuthSuccess }: AuthPageProps) {
   };
 
   return (
-    <div className="min-h-screen w-full flex flex-col items-center justify-center bg-bg-primary p-4">
+    <div className="min-h-screen w-full flex flex-col items-center justify-center bg-bg-primary p-4 overflow-y-auto">
       <motion.div
         className="mb-8 flex flex-col items-center"
         initial={{ opacity: 0, y: -20 }}
