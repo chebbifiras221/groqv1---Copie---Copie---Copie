@@ -6,6 +6,7 @@ This module handles text input processing and AI response generation.
 import json
 import logging
 import asyncio
+import config
 import database
 
 logger = logging.getLogger("text-processor")
@@ -42,7 +43,7 @@ async def handle_text_input(message, ctx, current_conversation_id, safe_publish_
     # Check if we need to create a new conversation
     if message.get('new_conversation'):
         # Get the teaching mode from the message
-        teaching_mode = message.get('teaching_mode', 'teacher')
+        teaching_mode = message.get('teaching_mode', config.DEFAULT_TEACHING_MODE)
         user_id = message.get('user_id')
 
         # Log the user ID for debugging
@@ -55,7 +56,7 @@ async def handle_text_input(message, ctx, current_conversation_id, safe_publish_
         try:
             # Run database operation in thread pool to avoid blocking
             conversations = await asyncio.get_event_loop().run_in_executor(
-                None, lambda: database.list_conversations(limit=20, user_id=user_id)
+                None, lambda: database.list_conversations(limit=config.CONVERSATION_LIST_LIMIT, user_id=user_id)
             )
             list_response = {
                 "type": "conversations_list",
@@ -78,7 +79,7 @@ async def handle_text_input(message, ctx, current_conversation_id, safe_publish_
         await safe_publish_data(ctx.room.local_participant, json.dumps(echo_message).encode())
 
     # Get the teaching mode from the message
-    teaching_mode = message.get('teaching_mode', 'teacher')
+    teaching_mode = message.get('teaching_mode', config.DEFAULT_TEACHING_MODE)
     logger.info(f"Using teaching mode: {teaching_mode}")
 
     # Create a context object with conversation ID, teaching mode, and hidden flag
@@ -109,7 +110,7 @@ async def handle_text_input(message, ctx, current_conversation_id, safe_publish_
         await safe_publish_data(ctx.room.local_participant, json.dumps(response_message).encode())
     elif not current_conversation_id:
         # Log an error if we don't have a valid conversation ID
-        logger.error("Cannot send AI response: No valid conversation ID")
+        logger.error(config.ERROR_MESSAGES["no_conversation_id"])
 
     # Synthesize speech from the AI response
     await synthesize_speech(ai_response, ctx.room)

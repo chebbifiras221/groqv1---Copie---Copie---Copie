@@ -5,6 +5,7 @@ This module contains handlers for various message types to improve code organiza
 
 import json
 import logging
+import config
 import database
 import database_updates
 import auth_api
@@ -13,9 +14,9 @@ logger = logging.getLogger("message-handlers")
 
 async def handle_clear_conversations(message, ctx, current_conversation_id, safe_publish_data):
     """Handle clearing all conversations for a specific teaching mode."""
-    teaching_mode = message.get('teaching_mode', 'teacher')
+    teaching_mode = message.get('teaching_mode', config.DEFAULT_TEACHING_MODE)
     user_id = message.get('user_id')
-    # Note: current_conversation_id parameter is kept for API consistency
+    # Note: current_conversation_id parameter is kept for API consistency but not used in this function
 
     # Clear conversations for the specified teaching mode with user_id
     result = database_updates.clear_conversations_by_mode(teaching_mode, user_id)
@@ -36,7 +37,7 @@ async def handle_clear_conversations(message, ctx, current_conversation_id, safe
 
     # Also send updated conversation list
     try:
-        conversations = database.list_conversations(limit=20, user_id=user_id)
+        conversations = database.list_conversations(limit=config.CONVERSATION_LIST_LIMIT, user_id=user_id)
         list_response = {
             "type": "conversations_list",
             "conversations": conversations
@@ -84,15 +85,15 @@ async def handle_delete_conversation(message, ctx, current_conversation_id, safe
                     logger.info(f"Switched to existing conversation with ID: {new_conversation_id}")
                 else:
                     # Create a new conversation if none exist
-                    new_conversation_id = database.create_conversation("New Conversation")
+                    new_conversation_id = database.create_conversation(config.DEFAULT_CONVERSATION_TITLE)
                     logger.info(f"Created new conversation with ID: {new_conversation_id}")
 
             # If we deleted the current conversation, create a new one
             if current_conversation_id == conversation_id:
                 # Create a new conversation with default teaching mode
                 new_conversation_id = database.create_conversation(
-                    title="New Conversation",
-                    teaching_mode="teacher",  # Default mode
+                    title=config.DEFAULT_CONVERSATION_TITLE,
+                    teaching_mode=config.DEFAULT_TEACHING_MODE,
                     user_id=user_id
                 )
                 logger.info(f"Created new conversation with ID: {new_conversation_id}")
@@ -114,7 +115,7 @@ async def handle_list_conversations(message, ctx, safe_publish_data):
     if not user_id:
         logger.warning("List conversations request without user_id - using legacy mode")
 
-    conversations = database.list_conversations(limit=20, user_id=user_id)
+    conversations = database.list_conversations(limit=config.CONVERSATION_LIST_LIMIT, user_id=user_id)
     response_message = {
         "type": "conversations_list",
         "conversations": conversations
@@ -151,7 +152,7 @@ async def handle_auth_request(message, ctx, safe_publish_data):
 
             # Send the conversation list for this user
             try:
-                conversations = database.list_conversations(limit=20, user_id=user_id)
+                conversations = database.list_conversations(limit=config.CONVERSATION_LIST_LIMIT, user_id=user_id)
                 list_response = {
                     "type": "conversations_list",
                     "conversations": conversations
@@ -191,7 +192,7 @@ async def handle_get_conversation(message, ctx, safe_publish_data):
 
 async def handle_new_conversation(message, ctx, safe_publish_data, find_or_create_empty_conversation):
     """Handle creating a new conversation."""
-    teaching_mode = message.get('teaching_mode', 'teacher')
+    teaching_mode = message.get('teaching_mode', config.DEFAULT_TEACHING_MODE)
     user_id = message.get('user_id')
 
     # Find or create an empty conversation
@@ -199,7 +200,7 @@ async def handle_new_conversation(message, ctx, safe_publish_data, find_or_creat
 
     # Get the updated conversation list
     try:
-        conversations = database.list_conversations(limit=20, user_id=user_id)
+        conversations = database.list_conversations(limit=config.CONVERSATION_LIST_LIMIT, user_id=user_id)
         list_response = {
             "type": "conversations_list",
             "conversations": conversations

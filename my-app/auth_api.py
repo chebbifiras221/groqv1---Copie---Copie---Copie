@@ -10,8 +10,6 @@ from typing import Dict, Any, Tuple
 
 import auth_db
 
-# Get logger for this module
-
 logger = logging.getLogger("auth-api")
 
 def handle_auth_request(data: bytes) -> Tuple[Dict[str, Any], int]:

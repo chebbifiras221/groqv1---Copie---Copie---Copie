@@ -1,39 +1,37 @@
 import asyncio
-import logging
 import json
+import logging
 import os
-import requests
+
+from dotenv import load_dotenv
 from livekit import rtc
 from livekit.agents import JobContext, WorkerOptions, cli, stt, AutoSubscribe, transcription
 from livekit.plugins.openai import stt as plugin
-from dotenv import load_dotenv
+from livekit.plugins import silero
+
+import config
 import database
 import auth_db
 import shutdown
+import ai_utils
 from tts_web import WebTTS
-from ai_prompts import get_system_prompt
 from message_handlers import (
     handle_clear_conversations, handle_rename_conversation, handle_delete_conversation,
     handle_list_conversations, handle_auth_request, handle_get_conversation, handle_new_conversation
 )
 from text_processor import handle_text_input, generate_fallback_message
 
-# Import silero conditionally to avoid unused import
-from livekit.plugins import silero
-
 load_dotenv(dotenv_path=".env.local")
 
 # Configure detailed logging
 logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s [%(levelname)s] %(name)s: %(message)s',
-    datefmt='%Y-%m-%d %H:%M:%S'
+    level=getattr(logging, config.LOGGING_CONFIG["level"]),
+    format=config.LOGGING_CONFIG["format"],
+    datefmt=config.LOGGING_CONFIG["datefmt"]
 )
 
 logger = logging.getLogger("groq-whisper-stt-transcriber")
 
-GROQ_API_KEY = os.getenv("GROQ_API_KEY")
-GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions"
 # Initialize shutdown handling with the '9' key
 shutdown.initialize_shutdown_handling()
 print("\n=== Press the '9' key to gracefully shutdown the application ===\n")
@@ -56,7 +54,7 @@ try:
 
     logger.info("Database and authentication systems initialized successfully")
 except Exception as e:
-    logger.error(f"Error during database initialization: {e}")
+    logger.error(config.ERROR_MESSAGES["database_init_error"].format(error=e))
     raise
 
 # Current conversation ID
@@ -65,46 +63,8 @@ current_conversation_id = None
 # Initialize TTS engine
 tts_engine = None
 
-# Maximum message length for splitting long responses
-MAX_MESSAGE_LENGTH = 4000
 
-
-def get_teaching_mode_from_db(conversation_id):
-    """
-    Get the teaching mode for a conversation from the database.
-
-    Args:
-        conversation_id: The ID of the conversation
-
-    Returns:
-        str: The teaching mode ('teacher' or 'qa'), defaults to 'teacher' if not found
-    """
-    teaching_mode = "teacher"  # Default to teacher mode
-
-    if not conversation_id:
-        return teaching_mode
-
-    try:
-        # Get the conversation from the database
-        conversation = database.get_conversation(conversation_id)
-
-        # If the conversation exists and has a teaching_mode, use it
-        if conversation and "teaching_mode" in conversation and conversation["teaching_mode"]:
-            teaching_mode = conversation["teaching_mode"]
-            logger.info(f"Retrieved teaching mode from database: {teaching_mode}")
-        else:
-            logger.warning(f"No teaching mode found for conversation {conversation_id}, using default mode")
-
-            # Try to run the migration to add the column if needed
-            try:
-                database.migrate_db()
-                logger.info("Ran migration in get_teaching_mode_from_db")
-            except Exception as e:
-                logger.error(f"Failed to run migration in get_teaching_mode_from_db: {e}")
-    except Exception as e:
-        logger.error(f"Error getting teaching mode from database: {e}")
-
-    return teaching_mode
+# Use ai_utils.get_teaching_mode_from_db instead of this function
 
 
 def find_or_create_empty_conversation(teaching_mode="teacher", check_current=True, user_id=None):
@@ -181,12 +141,6 @@ def find_or_create_empty_conversation(teaching_mode="teacher", check_current=Tru
     return current_conversation_id
 
 
-# Fallback message generation moved to text_processor module
-
-
-# Multi-part message processing has been removed to prevent TTS and UI issues
-
-
 async def send_conversation_data(conversation_id, participant):
     """
     Send updated conversation data to the client.
@@ -258,7 +212,7 @@ async def synthesize_speech(text, room, voice_name=None):
 
     # Helper function to get voice name
     def get_voice_name():
-        return voice_name or (tts_engine.default_voice_name if hasattr(tts_engine, 'default_voice_name') else "Web Voice")
+        return voice_name or (tts_engine.default_voice_name if hasattr(tts_engine, 'default_voice_name') else config.TTS_DEFAULT_VOICE)
 
     # Helper function to send error message
     async def send_error(message):
@@ -306,7 +260,7 @@ async def synthesize_speech(text, room, voice_name=None):
 
         if not audio_data:
             logger.error("Failed to synthesize speech: No audio data generated")
-            return await send_error("Failed to generate audio data")
+            return await send_error(config.ERROR_MESSAGES["tts_synthesis_failed"])
 
         logger.info(f"Audio data generated, size: {len(audio_data)} bytes")
 
@@ -358,68 +312,7 @@ async def synthesize_speech(text, room, voice_name=None):
         return await send_error(f"Speech synthesis error: {str(e)}")
 
 
-def extract_conversation_context(conversation_id):
-    """
-    Extract conversation context from the conversation_id parameter.
-
-    Args:
-        conversation_id: Can be a string ID or a dictionary with context
-
-    Returns:
-        Tuple of (actual_conversation_id, teaching_mode, is_hidden)
-    """
-    # Default values
-    actual_conversation_id = conversation_id
-    teaching_mode = "teacher"
-    is_hidden = False
-
-    # Check if conversation_id is a dictionary with additional context
-    if isinstance(conversation_id, dict):
-        # Extract teaching mode if provided
-        if "teaching_mode" in conversation_id:
-            teaching_mode = conversation_id["teaching_mode"]
-
-        # Extract actual conversation ID
-        if "conversation_id" in conversation_id:
-            actual_conversation_id = conversation_id["conversation_id"]
-
-        # Check if this is a hidden instruction
-        if "is_hidden" in conversation_id:
-            is_hidden = conversation_id["is_hidden"]
-
-    # If no teaching mode was specified in the message, try to get it from the database
-    elif teaching_mode == "teacher" and actual_conversation_id:
-        teaching_mode = get_teaching_mode_from_db(actual_conversation_id)
-
-    return actual_conversation_id, teaching_mode, is_hidden
-
-def prepare_conversation_history(messages, teaching_mode):
-    """
-    Prepare conversation history for the AI model.
-
-    Args:
-        messages: List of message objects from the database
-        teaching_mode: The teaching mode to use ('teacher' or 'qa')
-
-    Returns:
-        List of message objects formatted for the Groq API
-    """
-    # Get the appropriate system prompt based on the teaching mode
-    system_prompt = get_system_prompt(teaching_mode)
-
-    # Start with the system message
-    conversation_history = [system_prompt]
-
-    # Add the conversation history
-    for msg in messages:
-        role = "user" if msg["type"] == "user" else "assistant"
-        conversation_history.append({"role": role, "content": msg["content"]})
-
-    # Keep only the last 15 messages to avoid token limits, but always keep the system prompt
-    if len(conversation_history) > 16:  # 15 messages + 1 system prompt
-        conversation_history = [conversation_history[0]] + conversation_history[-15:]
-
-    return conversation_history
+# Use ai_utils.extract_conversation_context and ai_utils.prepare_conversation_history instead
 
 def generate_ai_response(text, conversation_id=None):
     """Generate an AI response using Groq API"""
@@ -428,17 +321,17 @@ def generate_ai_response(text, conversation_id=None):
     # If no conversation ID is provided, use the current one or create a new one
     if conversation_id is None:
         if current_conversation_id is None:
-            current_conversation_id = database.create_conversation("New Conversation")
+            current_conversation_id = database.create_conversation(config.DEFAULT_CONVERSATION_TITLE)
         conversation_id = current_conversation_id
 
-    if not GROQ_API_KEY:
+    if not config.GROQ_API_KEY:
         logger.error("GROQ_API_KEY is not set in the environment")
-        error_msg = "Error: API key not configured. Please set GROQ_API_KEY in .env.local file."
+        error_msg = config.ERROR_MESSAGES["api_key_missing"]
         database.add_message(conversation_id, "ai", error_msg)
         return error_msg
 
     # Extract conversation context
-    actual_conversation_id, teaching_mode, is_hidden = extract_conversation_context(conversation_id)
+    actual_conversation_id, teaching_mode, is_hidden = ai_utils.extract_conversation_context(conversation_id)
 
     # Add user message to database only if it's not a hidden instruction
     if not is_hidden:
@@ -453,122 +346,28 @@ def generate_ai_response(text, conversation_id=None):
         logger.info(f"Generated title for conversation {actual_conversation_id}: {title}")
 
     # Prepare conversation history for the AI model
-    conversation_history = prepare_conversation_history(conversation["messages"], teaching_mode)
+    conversation_history = ai_utils.prepare_conversation_history(conversation["messages"], teaching_mode)
 
-    # teaching_mode is already determined above when we extracted the conversation_id
+    # Generate AI response using multiple models
+    ai_response = ai_utils.generate_ai_response_with_models(conversation_history)
 
-    # We've already prepared the conversation history in the prepare_conversation_history function
+    # Check if this is the first message and clean the response
+    is_first_message = len([msg for msg in conversation["messages"] if msg["type"] == "ai"]) == 0
+    ai_response = ai_utils.clean_ai_response(ai_response, is_first_message)
 
-    headers = {
-        "Authorization": f"Bearer {GROQ_API_KEY}",
-        "Content-Type": "application/json"
-    }
+    # Process the response (add model info if needed)
+    show_model_info = False  # Can be made configurable
+    ai_response_with_model = ai_utils.process_ai_response(ai_response, show_model_info)
 
-    # Only use the 70B model for best results
-    models_to_try = [
-        {"name": "llama-3.3-70b-versatile", "temperature": 0.6},  # First choice: Llama 3.3 70B (most powerful)
-        {"name": "llama3-70b-8192", "temperature": 0.6}       # Backup: Llama3 70B
-    ]
+    # Store the response in the database
+    database.add_message(actual_conversation_id, "ai", ai_response_with_model)
 
-    last_error = None
+    # Log response length for debugging
+    if ai_utils.should_split_response(ai_response_with_model):
+        logger.info(f"Response is long ({len(ai_response_with_model)} chars), but not splitting to avoid TTS and UI issues")
 
-    # Try each model in sequence until one works
-    for model_info in models_to_try:
-        model_name = model_info["name"]
-        temperature = model_info["temperature"]
-
-        data = {
-            "model": model_name,
-            "messages": conversation_history,
-            "temperature": temperature,
-            "max_tokens": 1024,
-            "top_p": 0.9,  # More focused on likely responses (good for factual teaching)
-            "frequency_penalty": 0.2,  # Slightly reduce repetition
-            "presence_penalty": 0.1  # Slightly encourage topic diversity
-        }
-
-        try:
-            logger.info(f"Trying to generate teacher response with model: {model_name}")
-            response = requests.post(GROQ_API_URL, headers=headers, json=data)
-            response.raise_for_status()
-            result = response.json()
-            ai_response = result["choices"][0]["message"]["content"]
-
-            # Get model description for logging/debugging
-            model_descriptions = {
-                "llama-3.3-70b-versatile": "Llama 3.3 70B Versatile",
-                "llama3-70b-8192": "Llama 3 70B"
-            }
-            model_description = model_descriptions.get(model_name, model_name)
-
-            # Check if this is the first message and remove any introductions/greetings
-            is_first_message = len([msg for msg in conversation["messages"] if msg["type"] == "ai"]) == 0
-
-            if is_first_message:
-                # Only remove self-introductions with names, but allow friendly greetings
-                self_intro_patterns = [
-                    r"^I('m| am) [^.!?]*\.",  # Matches "I'm [name]" or "I am [description]"
-                    r"^My name is [^.!?]*\.",
-                    r"^I('m| am) (a|your|an) [^.!?]*\.",  # Matches "I'm a professor" or "I'm your teacher"
-                    r"^I('ll| will) be [^.!?]*\.",  # Matches "I'll be your guide"
-                    r"^As (a|an|your) [^.!?]*\.",  # Matches "As a professor, I..."
-                ]
-
-                import re
-                cleaned_response = ai_response
-                for pattern in self_intro_patterns:
-                    cleaned_response = re.sub(pattern, "", cleaned_response, flags=re.IGNORECASE | re.MULTILINE)
-
-                # Remove extra whitespace and newlines from the beginning
-                cleaned_response = cleaned_response.lstrip()
-
-                # If we removed something, use the cleaned response
-                if cleaned_response != ai_response:
-                    logger.info("Removed self-introduction from first response")
-                    ai_response = cleaned_response
-
-            # Decide whether to include model info based on user preference
-            # You can set this to False if you don't want to show model info
-            show_model_info = False
-
-            if show_model_info:
-                # Prepend model info to the response
-                ai_response_with_model = f"[Using {model_description}]\n\n{ai_response}"
-            else:
-                # Just use the response without model info
-                ai_response_with_model = ai_response
-
-            # Check if the response is too long and needs to be split
-            # Use the global MAX_MESSAGE_LENGTH constant
-
-            if len(ai_response_with_model) > MAX_MESSAGE_LENGTH:
-                logger.info(f"Response is long ({len(ai_response_with_model)} chars), but not splitting to avoid TTS and UI issues")
-
-                # Store the entire response as a single message, even if it's longer than MAX_MESSAGE_LENGTH
-                # This prevents multi-part message issues with TTS and UI rendering
-                database.add_message(actual_conversation_id, "ai", ai_response_with_model)
-
-                logger.info(f"Stored long response as a single message")
-
-                # Return the full response for TTS purposes
-                return ai_response_with_model
-            else:
-                # For normal-sized responses, just add to database as before
-                database.add_message(actual_conversation_id, "ai", ai_response_with_model)
-
-                logger.info(f"Successfully generated teacher response with model: {model_name}")
-                return ai_response_with_model
-
-        except Exception as e:
-            last_error = e
-            logger.warning(f"Error using model {model_name}: {e}. Trying next model if available.")
-            continue
-
-    # If we get here, all models failed
-    error_msg = f"Error generating response: All models failed. Last error: {str(last_error)}"
-    logger.error(error_msg)
-    database.add_message(actual_conversation_id, "ai", error_msg)
-    return error_msg
+    logger.info("Successfully generated AI response")
+    return ai_response_with_model
 
 async def _forward_transcription(
     stt_stream: stt.SpeechStream, stt_forwarder: transcription.STTSegmentsForwarder, room: rtc.Room
@@ -583,7 +382,7 @@ async def _forward_transcription(
             logger.debug(f" ~> {transcribed_text}")
 
             # Get the teaching mode from the database for the current conversation
-            teaching_mode = get_teaching_mode_from_db(current_conversation_id)
+            teaching_mode = ai_utils.get_teaching_mode_from_db(current_conversation_id)
             logger.info(f"Using teaching mode for voice input: {teaching_mode}")
 
             # Create a context object with conversation ID, teaching mode, and is_hidden flag
@@ -615,7 +414,7 @@ async def _forward_transcription(
                 await safe_publish_data(room.local_participant, json.dumps(data_message).encode())
             elif not current_conversation_id:
                 # Log an error if we don't have a valid conversation ID
-                logger.error("Cannot send AI response: No valid conversation ID")
+                logger.error(config.ERROR_MESSAGES["no_conversation_id"])
 
             # Synthesize speech from the AI response
             await synthesize_speech(ai_response, room)
@@ -629,7 +428,7 @@ async def _forward_transcription(
         stt_forwarder.update(ev)
 
 
-async def safe_publish_data(participant, data, max_retries=3, retry_delay=0.5):
+async def safe_publish_data(participant, data, max_retries=config.DEFAULT_MAX_RETRIES, retry_delay=config.DEFAULT_RETRY_DELAY):
     """
     Safely publish data with retry logic to handle connection timeouts
 
@@ -669,7 +468,7 @@ async def entrypoint(ctx: JobContext):
     if initialize_tts():
         logger.info("TTS engine initialization successful")
     else:
-        logger.warning("TTS engine initialization failed, speech synthesis will not be available")
+        logger.warning(config.ERROR_MESSAGES["tts_init_failed"])
 
     # Check if there are any existing conversations
     conversations = database.list_conversations(limit=1)
@@ -683,7 +482,7 @@ async def entrypoint(ctx: JobContext):
         logger.info("No existing conversations found. Waiting for frontend to create one.")
 
     # Check if Groq API key is available
-    if GROQ_API_KEY:
+    if config.GROQ_API_KEY:
         # uses "whisper-large-v3-turbo" model by default
         stt_impl = plugin.STT.with_groq()
     else:
@@ -692,9 +491,9 @@ async def entrypoint(ctx: JobContext):
         stt_impl = stt.StreamAdapter(
             stt=stt.STT.with_default(),
             vad=silero.VAD.load(
-                min_silence_duration=1.0,  # Increased from 0.2 to allow for natural pauses in speech
-                min_speech_duration=0.1,   # Minimum duration to consider as speech
-                prefix_padding_duration=0.5  # Add padding to the beginning of speech segments
+                min_silence_duration=config.STT_CONFIG["min_silence_duration"],
+                min_speech_duration=config.STT_CONFIG["min_speech_duration"],
+                prefix_padding_duration=config.STT_CONFIG["prefix_padding_duration"]
             ),
         )
 
@@ -703,9 +502,9 @@ async def entrypoint(ctx: JobContext):
         stt_impl = stt.StreamAdapter(
             stt=stt_impl,
             vad=silero.VAD.load(
-                min_silence_duration=1.0,  # Increased from 0.2 to allow for natural pauses in speech
-                min_speech_duration=0.1,   # Minimum duration to consider as speech
-                prefix_padding_duration=0.5  # Add padding to the beginning of speech segments
+                min_silence_duration=config.STT_CONFIG["min_silence_duration"],
+                min_speech_duration=config.STT_CONFIG["min_speech_duration"],
+                prefix_padding_duration=config.STT_CONFIG["prefix_padding_duration"]
             ),
         )
 

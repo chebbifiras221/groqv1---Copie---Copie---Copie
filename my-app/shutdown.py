@@ -4,11 +4,28 @@ This module provides functions to handle termination signals and ensure
 database connections are properly closed before the application exits.
 """
 
+import logging
+import platform
 import signal
 import sys
-import logging
+import threading
 import time
 from typing import Callable, List
+
+# Platform-specific imports
+try:
+    import msvcrt  # Windows
+except ImportError:
+    msvcrt = None
+
+try:
+    import termios  # Unix-like systems
+    import tty
+    import select
+except ImportError:
+    termios = None
+    tty = None
+    select = None
 
 logger = logging.getLogger("shutdown-handler")
 
@@ -68,15 +85,10 @@ def setup_signal_handlers() -> None:
     logger.info("Signal handlers registered for graceful shutdown")
 
     # Start a thread to listen for the '9' key
-    import threading
-    import platform
-
     # Different keyboard input handling based on platform
     if platform.system() == 'Windows':
         # Windows-specific keyboard input
-        try:
-            import msvcrt
-
+        if msvcrt:
             def keyboard_listener():
                 """Listen for '9' keypress and trigger shutdown (Windows)"""
                 logger.info("Keyboard listener started. Press '9' to shutdown gracefully.")
@@ -95,7 +107,7 @@ def setup_signal_handlers() -> None:
                         break
                     # Sleep briefly to avoid consuming too much CPU
                     time.sleep(0.1)
-        except ImportError:
+        else:
             logger.error("msvcrt module not available on this Windows system")
 
             def keyboard_listener():
@@ -105,12 +117,7 @@ def setup_signal_handlers() -> None:
                     time.sleep(1)
     else:
         # Unix-like systems (Linux, macOS)
-        try:
-            import termios
-            import tty
-            import sys
-            import select
-
+        if termios and tty and select:
             def keyboard_listener():
                 """Listen for '9' keypress and trigger shutdown (Unix)"""
                 logger.info("Keyboard listener started. Press '9' to shutdown gracefully.")
@@ -141,7 +148,7 @@ def setup_signal_handlers() -> None:
                 finally:
                     # Restore terminal settings
                     termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
-        except (ImportError, AttributeError):
+        else:
             logger.error("Terminal control modules not available on this system")
 
             def keyboard_listener():
