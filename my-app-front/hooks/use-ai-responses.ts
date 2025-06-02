@@ -77,7 +77,6 @@ export function useAIResponses() {
       // Try each voice in order until one is found
       for (const voiceName of femaleVoices) {
         if (webTTS.selectVoiceByName(voiceName)) {
-          console.log(`Successfully selected voice containing: ${voiceName}`);
           break;
         }
       }
@@ -123,13 +122,10 @@ export function useAIResponses() {
           try {
             // Use web speech to speak the response
             webTTS.speak(lastResponse.text);
-            console.log('Speaking last response with Web TTS (manual) with hash:', messageHash);
           } catch (error) {
             handleError(error, 'audio', 'Failed to play text-to-speech');
           }
         }, 100);
-      } else {
-        console.log('Skipping duplicate manual speak request');
       }
     }
   }, [responses, webTTS, handleError]);
@@ -149,7 +145,6 @@ export function useAIResponses() {
   // Function to clear the spoken messages tracking
   const clearSpokenMessages = useCallback(() => {
     spokenMessages.clear();
-    console.log('Cleared spoken messages tracking');
   }, []);
 
   useEffect(() => {
@@ -161,7 +156,6 @@ export function useAIResponses() {
       try {
         // Handle binary audio data with specific topic
         if (topic === "binary_audio") {
-          console.log("Received binary audio data with topic 'binary_audio'", payload.length);
           // Only play audio if it's not a web TTS message (which is handled separately)
           if (payload.length > 100) { // Assuming web TTS messages are small JSON
             // Create a blob from the binary data
@@ -181,7 +175,6 @@ export function useAIResponses() {
         if (topic === "audio_info") {
           const dataString = new TextDecoder().decode(payload);
           const data = JSON.parse(dataString);
-          console.log("Received audio info:", data);
           return;
         }
 
@@ -192,8 +185,6 @@ export function useAIResponses() {
 
           if (data.type === "web_tts") {
             // This is a web TTS message from the server
-            console.log('Received web TTS message:', data.text.substring(0, 30) + '...');
-
             // Create a hash of the message to track if we've spoken it before
             const messageHash = createMessageHash(data.text);
             const currentTime = Date.now();
@@ -203,7 +194,6 @@ export function useAIResponses() {
             const isRecentlySpoken = lastSpokenTime && (currentTime - lastSpokenTime < 5000);
 
             if (isRecentlySpoken) {
-              console.log('Skipping recently spoken message:', messageHash);
               return;
             }
 
@@ -223,7 +213,6 @@ export function useAIResponses() {
             // Add a small delay to ensure any other audio has stopped
             setTimeout(() => {
               webTTS.speak(data.text);
-              console.log('Speaking web TTS message with hash:', messageHash);
             }, 100);
             return;
           } else if (data.type === "ai_response" && data.text) {
@@ -246,7 +235,6 @@ export function useAIResponses() {
               };
 
               setResponses((prev) => [...prev, newResponse]);
-              console.log('Processing AI response:', data.text.substring(0, 30) + '...');
 
               // Auto-speak if enabled in settings
               if (webTTS && settings.autoSpeak) {
@@ -258,19 +246,15 @@ export function useAIResponses() {
                   // Add a small delay to ensure any other audio has stopped
                   setTimeout(() => {
                     webTTS.speak(data.text);
-                    console.log('Auto-speaking AI response with hash:', messageHash.substring(0, 8));
                   }, 100);
                 } catch (speakError) {
                   handleError(speakError, 'audio', 'Failed to auto-speak response');
                 }
               }
-            } else {
-              console.log('Skipping duplicate AI response');
             }
           }
         } catch (error) {
           // If it's not valid JSON, it might be binary audio data without a topic
-          console.log("Received possible binary audio data without topic", payload.length);
           // Only play audio if it's not a web TTS message (which is handled separately)
           if (payload.length > 100) { // Assuming web TTS messages are small JSON
             // Create a blob from the binary data

@@ -32,9 +32,8 @@ export function CourseUI({
   // Listen for course UI reset events
   useEffect(() => {
     const handleCourseReset = (event: Event) => {
-      console.log("Course UI reset event received");
       // The course chapters state is managed in the parent component (typewriter),
-      // so we don't need to do anything here except log for debugging
+      // so we don't need to do anything here
     };
 
     window.addEventListener('course-ui-reset', handleCourseReset);

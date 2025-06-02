@@ -113,8 +113,6 @@ export function useConversation() {
       // Clear the current conversation ID to force creating a new one
       setCurrentConversationId(null);
       localStorage.removeItem('current-conversation-id');
-
-      console.log("Mode switch detected - cleared conversation state");
     };
 
     window.addEventListener('create-new-conversation-for-mode-switch', handleModeSwitch);
@@ -331,13 +329,11 @@ export function useConversation() {
 
             // If it's a duplicate, don't add it
             if (isDuplicate) {
-              console.log('Detected duplicate AI message, skipping');
               return prev;
             }
 
             // If the message is empty, add a placeholder
             if (!data.text || !data.text.trim()) {
-              console.log('Received empty AI message, adding placeholder');
               newMessage.text = ' '; // Add a space to prevent rendering issues
             }
 
@@ -419,7 +415,7 @@ export function useConversation() {
           storedConversationId === 'undefined' ||
           (storedConversationId && teachingMode !== currentMode);
 
-        console.log(`Current mode: ${teachingMode}, conversation mode: ${currentMode}, stored ID: ${storedConversationId}, needs new conversation: ${needsNewConversation}`);
+
 
         const message = {
           type: "text_input",
@@ -437,7 +433,6 @@ export function useConversation() {
           for (let i = 0; i < 5; i++) {
             await new Promise(resolve => setTimeout(resolve, 1000));
             if (isRoomConnected(room)) {
-              console.log('Room reconnected successfully');
               break;
             }
 
@@ -554,7 +549,6 @@ export function useConversation() {
           while (retryCount < maxRetries) {
             try {
               await room.localParticipant.publishData(new TextEncoder().encode(JSON.stringify(message)));
-              console.log('Successfully created new conversation');
               break; // Success, exit the loop
             } catch (publishError) {
               retryCount++;
@@ -610,7 +604,7 @@ export function useConversation() {
         storedConversationId === 'undefined' ||
         (storedConversationId && teachingMode !== currentMode);
 
-      console.log(`Hidden instruction - Current mode: ${teachingMode}, conversation mode: ${currentMode}, stored ID: ${storedConversationId}, needs new conversation: ${needsNewConversation}`);
+
 
       // Create a message with a special flag indicating it's a hidden instruction
       const message = {

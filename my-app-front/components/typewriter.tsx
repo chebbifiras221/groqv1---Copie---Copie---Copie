@@ -177,17 +177,11 @@ export function Typewriter({ typingSpeed = 50 }: TypewriterProps) {
         });
       }
 
-      // Log the original code content
-      console.log("Original markdown code block content:", match[2].substring(0, 100) + "...");
-
       // Decode HTML entities in the code content multiple times to handle nested encodings
       let decodedCodeContent = match[2].trim();
       for (let i = 0; i < 3; i++) {
         decodedCodeContent = decodeHtmlEntities(decodedCodeContent);
       }
-
-      // Log the decoded content
-      console.log("Decoded markdown code block content:", decodedCodeContent.substring(0, 100) + "...");
 
       // Add the code block with decoded content
       segments.push({
@@ -254,7 +248,6 @@ export function Typewriter({ typingSpeed = 50 }: TypewriterProps) {
 
   // Function to toggle a specific explanation's visibility
   const toggleExplanation = useCallback((id: string) => {
-    console.log(`Toggling explanation ${id}`);
     setVisibleExplanations(prev => {
       const newState = {
         ...prev,
@@ -262,7 +255,6 @@ export function Typewriter({ typingSpeed = 50 }: TypewriterProps) {
       };
       // Also update the ref immediately for any code that might use it before the next render
       visibleExplanationsRef.current = newState;
-      console.log('New visibility state:', newState);
       return newState;
     });
   }, []);
@@ -300,12 +292,8 @@ export function Typewriter({ typingSpeed = 50 }: TypewriterProps) {
     // Check if the text contains explain or code blocks (more robust check)
     const hasSpecialSections = /\[\s*EXPLAIN\s*\]/.test(text) || /\[\s*CODE\s*\]/.test(text);
 
-    // Debug logging
-    console.log("Special sections detected:", hasSpecialSections);
-    console.log("Text contains [EXPLAIN]:", /\[\s*EXPLAIN\s*\]/.test(text));
-    console.log("Text contains [CODE]:", /\[\s*CODE\s*\]/.test(text));
+    // Check for special sections processing
     if (hasSpecialSections) {
-      console.log("First 100 chars:", text.substring(0, 100));
 
       // Check for incomplete markers
       const hasOpenBoard = openBoardRegex.test(text);
@@ -324,21 +312,12 @@ export function Typewriter({ typingSpeed = 50 }: TypewriterProps) {
       closeCodeRegex.lastIndex = 0;
 
       if (hasOpenBoard || hasOpenExplain || hasOpenCode || hasCloseBoard || hasCloseExplain || hasCloseCode) {
-        console.log("Warning: Incomplete markers detected");
-        console.log("Open [BOARD] without close:", hasOpenBoard);
-        console.log("Open [EXPLAIN] without close:", hasOpenExplain);
-        console.log("Open [CODE] without close:", hasOpenCode);
-        console.log("Close [/BOARD] without open:", hasCloseBoard);
-        console.log("Close [/EXPLAIN] without open:", hasCloseExplain);
-        console.log("Close [/CODE] without open:", hasCloseCode);
-
         // Fix incomplete markers
         let fixedText = text;
 
         // Fix open [BOARD] without close by adding a closing tag at the end
         if (hasOpenBoard) {
           fixedText = fixedText.replace(openBoardRegex, (match) => {
-            console.log("Fixing open [BOARD] marker");
             return match + "\n\nContent\n\n[/BOARD]";
           });
         }
@@ -346,7 +325,6 @@ export function Typewriter({ typingSpeed = 50 }: TypewriterProps) {
         // Fix open [EXPLAIN] without close by adding a closing tag at the end
         if (hasOpenExplain) {
           fixedText = fixedText.replace(openExplainRegex, (match) => {
-            console.log("Fixing open [EXPLAIN] marker");
             return match + "\n\nExplanation\n\n[/EXPLAIN]";
           });
         }
@@ -354,7 +332,6 @@ export function Typewriter({ typingSpeed = 50 }: TypewriterProps) {
         // Fix open [CODE] without close by adding a closing tag at the end
         if (hasOpenCode) {
           fixedText = fixedText.replace(openCodeRegex, (match) => {
-            console.log("Fixing open [CODE] marker");
             return match + "\n\n```\n\n```\n\n[/CODE]";
           });
         }
@@ -362,7 +339,6 @@ export function Typewriter({ typingSpeed = 50 }: TypewriterProps) {
         // Fix close [/BOARD] without open by adding an opening tag before it
         if (hasCloseBoard) {
           fixedText = fixedText.replace(closeBoardRegex, (match) => {
-            console.log("Fixing close [/BOARD] marker");
             return "[BOARD]\n\nContent\n\n" + match;
           });
         }
@@ -370,7 +346,6 @@ export function Typewriter({ typingSpeed = 50 }: TypewriterProps) {
         // Fix close [/EXPLAIN] without open by adding an opening tag before it
         if (hasCloseExplain) {
           fixedText = fixedText.replace(closeExplainRegex, (match) => {
-            console.log("Fixing close [/EXPLAIN] marker");
             return "[EXPLAIN]\n\nExplanation\n\n" + match;
           });
         }
@@ -378,7 +353,6 @@ export function Typewriter({ typingSpeed = 50 }: TypewriterProps) {
         // Fix close [/CODE] without open by adding an opening tag before it
         if (hasCloseCode) {
           fixedText = fixedText.replace(closeCodeRegex, (match) => {
-            console.log("Fixing close [/CODE] marker");
             return "[CODE]\n\n```\n\n```\n\n" + match;
           });
         }
@@ -419,7 +393,6 @@ export function Typewriter({ typingSpeed = 50 }: TypewriterProps) {
 
           // Process code blocks found in the content
           if (codeBlocksInContent || codeBlocksWithPrefix) {
-            console.log("Found code blocks inside content, moving them outside");
 
             // First, handle regular code blocks
             if (codeBlocksInContent) {
@@ -500,7 +473,6 @@ export function Typewriter({ typingSpeed = 50 }: TypewriterProps) {
 
           // If content is empty or just whitespace, skip it
           if (!content || content.trim() === '') {
-            console.log("Empty content detected, skipping");
             continue;
           }
 

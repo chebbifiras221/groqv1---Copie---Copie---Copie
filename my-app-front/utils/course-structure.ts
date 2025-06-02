@@ -58,7 +58,6 @@ export const extractCourseStructure = (text: string): ChapterData[] => {
         isExpanded: chapters.length === 0 // First chapter is expanded by default
       });
 
-      console.log(`Added chapter ${chapterNumber}: ${cleanTitle}`);
       return true;
     }
     return false;
@@ -151,8 +150,6 @@ export const extractCourseStructure = (text: string): ChapterData[] => {
 
   // Sort chapters by number before returning
   const sortedChapters = chapters.sort((a, b) => a.number - b.number);
-
-  console.log(`Final extracted chapters (${sortedChapters.length}):`, sortedChapters.map(ch => `${ch.number}. ${ch.title}`));
 
   return sortedChapters;
 };
