@@ -39,6 +39,10 @@ const codeBlockRegex = /```([\w-]*)?\n([\s\S]*?)\n```/g;
 export function Typewriter({ typingSpeed = 50 }: TypewriterProps) {
   // State for tracking course structure
   const [courseChapters, setCourseChapters] = useState<ChapterData[]>([]);
+  // State to track if this is the first conversation with course outline
+  const [isFirstConversationWithOutline, setIsFirstConversationWithOutline] = useState(false);
+  // State to store the original foundation course outline (immutable once set)
+  const [foundationCourseOutline, setFoundationCourseOutline] = useState<ChapterData[]>([]);
 
   const { state } = useTranscriber();
   const { isTtsSpeaking, isProcessingTTS, stopSpeaking, speakLastResponse } = useAIResponses();
@@ -52,44 +56,65 @@ export function Typewriter({ typingSpeed = 50 }: TypewriterProps) {
   const processMessageForCourseStructure = useCallback((text: string) => {
     if (!text) return;
 
-    // Check if the message contains chapter-like content
-    if (text.includes('Chapter') || text.includes('**Introduction to')) {
+    // CRITICAL: If we already have the first conversation with outline, NEVER process new course structures
+    // The first course outline is the immutable foundation
+    if (isFirstConversationWithOutline) {
+      console.log('🛡️ PROTECTION: Skipping course structure processing - first conversation outline is protected');
+      return;
+    }
+
+    // More comprehensive check for chapter-like content
+    const hasChapterContent = (
+      text.includes('Chapter') ||
+      text.includes('**Introduction to') ||
+      /^\s*\d+\.\s+\*\*/.test(text) || // Numbered list with bold text
+      /^\s*\d+\.\s+[A-Z]/.test(text) || // Numbered list starting with capital letter
+      text.includes('Course Outline') ||
+      text.includes('Learning Path') ||
+      /## Chapter \d+/.test(text) // Traditional chapter format
+    );
+
+    if (hasChapterContent) {
+      console.log('Chapter content detected, extracting structure...');
       const newChapters = extractCourseStructure(text);
+      console.log(`Extracted ${newChapters.length} chapters:`, newChapters.map(ch => `${ch.number}. ${ch.title}`));
 
       if (newChapters.length > 0) {
+        // Check if this is the first time we're setting course chapters
+        // and if we have a substantial course outline (3+ chapters)
+        const isFirstTimeWithFullOutline = courseChapters.length === 0 && newChapters.length >= 3;
+
         // Preserve active chapter when updating course structure
         setCourseChapters(prevChapters => {
           // If we have no previous chapters, use the new ones
           if (prevChapters.length === 0) {
+            // Check if this should be marked as the first conversation with outline
+            if (isFirstTimeWithFullOutline) {
+              console.log('🏛️ FOUNDATION: Setting first conversation with course outline as immutable foundation');
+              setIsFirstConversationWithOutline(true);
+              // Store the foundation outline permanently
+              setFoundationCourseOutline(newChapters);
+            }
             return newChapters;
           }
 
-          // Find the currently active chapter number
-          const activeChapterNumber = prevChapters.find(ch => ch.isActive)?.number;
-
-          // If we have an active chapter, maintain its active state in the new structure
-          if (activeChapterNumber) {
-            return newChapters.map(chapter => ({
-              ...chapter,
-              isActive: chapter.number === activeChapterNumber,
-              isExpanded: chapter.number === activeChapterNumber || chapter.isExpanded
-            }));
-          }
-
-          // Otherwise, just use the new chapters
-          return newChapters;
+          // This should never happen now due to the early return, but keeping as extra safety
+          console.log('⚠️ WARNING: Attempted to update course structure after foundation was set');
+          return prevChapters;
         });
 
         console.log(`Course structure updated with ${newChapters.length} chapters`);
       }
     }
-  }, []);
+  }, [isFirstConversationWithOutline, courseChapters.length]);
 
   // Reset course structure when conversation ID changes
   useEffect(() => {
     // Reset course chapters when conversation ID changes or is null
     setCourseChapters([]);
-    console.log("Conversation ID changed, resetting course structure");
+    setIsFirstConversationWithOutline(false);
+    setFoundationCourseOutline([]);
+    console.log("Conversation ID changed, resetting course structure and foundation");
 
     // Also reset any localStorage data related to course structure for this conversation
     localStorage.removeItem(`course-chapters-${currentConversationId}`);
@@ -1007,25 +1032,41 @@ export function Typewriter({ typingSpeed = 50 }: TypewriterProps) {
 
   // Function to toggle chapter expansion
   const toggleChapter = (chapterId: string) => {
-    setCourseChapters(prev =>
-      prev.map(chapter =>
-        chapter.id === chapterId
-          ? { ...chapter, isExpanded: !chapter.isExpanded }
-          : chapter
-      )
-    );
+    if (isFirstConversationWithOutline) {
+      // For foundation outline, update the foundation state
+      setFoundationCourseOutline(prev =>
+        prev.map(chapter =>
+          chapter.id === chapterId
+            ? { ...chapter, isExpanded: !chapter.isExpanded }
+            : chapter
+        )
+      );
+    } else {
+      // For regular conversations, update the regular state
+      setCourseChapters(prev =>
+        prev.map(chapter =>
+          chapter.id === chapterId
+            ? { ...chapter, isExpanded: !chapter.isExpanded }
+            : chapter
+        )
+      );
+    }
   };
 
   // sendTextMessage is available from the useConversation hook above and is used to send messages to the AI
 
   // Function to navigate to a specific chapter
   const navigateToChapter = (chapterId: string) => {
+    // Determine which chapter list to use
+    const chaptersToUse = isFirstConversationWithOutline ? foundationCourseOutline : courseChapters;
+    const setChaptersFunction = isFirstConversationWithOutline ? setFoundationCourseOutline : setCourseChapters;
+
     // Find the chapter by ID first to avoid setting active chapter if it doesn't exist
-    const chapter = courseChapters.find(ch => ch.id === chapterId);
+    const chapter = chaptersToUse.find(ch => ch.id === chapterId);
     if (!chapter || !sendHiddenInstruction) return;
 
     // Set the active chapter only if we found the chapter
-    setCourseChapters(prev =>
+    setChaptersFunction(prev =>
       prev.map(ch => ({
         ...ch,
         isActive: ch.id === chapterId,
@@ -1034,7 +1075,7 @@ export function Typewriter({ typingSpeed = 50 }: TypewriterProps) {
     );
 
     const currentChapterNum = chapter.number;
-    const totalChapters = courseChapters.length;
+    const totalChapters = chaptersToUse.length;
 
     // Create the instruction message
     const message = `I'd like to learn Chapter ${chapter.number}: ${chapter.title}.
@@ -1058,12 +1099,16 @@ Do NOT automatically proceed to the next chapter when you're done - wait for me 
 
   // Function to navigate to a specific section within a chapter
   const navigateToSection = (chapterId: string, sectionName: string) => {
+    // Determine which chapter list to use
+    const chaptersToUse = isFirstConversationWithOutline ? foundationCourseOutline : courseChapters;
+    const setChaptersFunction = isFirstConversationWithOutline ? setFoundationCourseOutline : setCourseChapters;
+
     // Find the chapter by ID first to avoid setting active chapter if it doesn't exist
-    const chapter = courseChapters.find(ch => ch.id === chapterId);
+    const chapter = chaptersToUse.find(ch => ch.id === chapterId);
     if (!chapter || !sendHiddenInstruction) return;
 
     // Set the active chapter only if we found the chapter
-    setCourseChapters(prev =>
+    setChaptersFunction(prev =>
       prev.map(ch => ({
         ...ch,
         isActive: ch.id === chapterId,
@@ -1137,25 +1182,33 @@ Please focus specifically on this section and provide a clear, concise explanati
   const isTeacherMode = settings.teachingMode === 'teacher';
 
   return (
-    <div className="relative h-full text-lg font-mono flex">
-      {/* Course Navigation Sidebar using our new CourseUI component */}
-      <CourseUI
-        chapters={courseChapters}
-        toggleChapter={toggleChapter}
-        navigateToChapter={navigateToChapter}
-        navigateToSection={navigateToSection}
-        isTeacherMode={isTeacherMode}
-      />
+    <div className="relative h-full text-lg font-mono flex flex-col">
+      {/* Special layout for first conversation with course outline */}
+      {isFirstConversationWithOutline ? (
+        <>
+          {/* Course content layout */}
+          <div className="flex flex-1 overflow-hidden">
+            {/* Course outline sidebar - always visible and sticky */}
+            <div className="w-80 border-r border-bg-tertiary/30 flex-shrink-0 sticky top-0 h-full">
+              <CourseUI
+                chapters={foundationCourseOutline.length > 0 ? foundationCourseOutline : courseChapters}
+                toggleChapter={toggleChapter}
+                navigateToChapter={navigateToChapter}
+                navigateToSection={navigateToSection}
+                isTeacherMode={isTeacherMode}
+                isFirstConversationLayout={true}
+              />
+            </div>
 
-      {/* Main Content Area */}
-      <div className={`flex-1 px-4 md:px-8 pt-6 pb-6 ${courseChapters.length > 0 ? 'md:border-l md:border-bg-tertiary/50' : ''}`}>
-        {state === ConnectionState.Disconnected && (
-          <div className="text-text-secondary h-full flex items-center justify-center pb-16 max-w-md mx-auto">
-            <p>{emptyTextAnimation}</p>
-          </div>
-        )}
-        {state !== ConnectionState.Disconnected && (
-          <div className="h-full" ref={conversationContainerRef}>
+            {/* Main content area */}
+            <div className="flex-1 px-4 md:px-8 pt-6 pb-6 overflow-y-auto">
+              {state === ConnectionState.Disconnected && (
+                <div className="text-text-secondary h-full flex items-center justify-center pb-16 max-w-md mx-auto">
+                  <p>{emptyTextAnimation}</p>
+                </div>
+              )}
+              {state !== ConnectionState.Disconnected && (
+                <div className="h-full" ref={conversationContainerRef}>
             <div className="h-12" />
 
             {/* Explanation Toggle Button (only shown when there are messages) */}
@@ -1352,10 +1405,236 @@ Please focus specifically on this section and provide a clear, concise explanati
                 ))
               )}
             </div>
-            <div ref={transcriptionEndRef} className="h-24" />
+                  <div ref={transcriptionEndRef} className="h-24" />
+                </div>
+              )}
+            </div>
           </div>
-        )}
-      </div>
+        </>
+      ) : (
+        /* Regular layout for non-first conversations */
+        <div className="flex h-full">
+          {/* Course Navigation Sidebar using our new CourseUI component */}
+          <CourseUI
+            chapters={courseChapters}
+            toggleChapter={toggleChapter}
+            navigateToChapter={navigateToChapter}
+            navigateToSection={navigateToSection}
+            isTeacherMode={isTeacherMode}
+            isFirstConversationLayout={false}
+          />
+
+          {/* Main Content Area */}
+          <div className={`flex-1 px-4 md:px-8 pt-6 pb-6 ${courseChapters.length > 0 ? 'md:border-l md:border-bg-tertiary/50' : ''}`}>
+            {state === ConnectionState.Disconnected && (
+              <div className="text-text-secondary h-full flex items-center justify-center pb-16 max-w-md mx-auto">
+                <p>{emptyTextAnimation}</p>
+              </div>
+            )}
+            {state !== ConnectionState.Disconnected && (
+              <div className="h-full" ref={conversationContainerRef}>
+                <div className="h-12" />
+
+                {/* Explanation Toggle Button (only shown when there are messages) */}
+                {messages.length > 0 && (
+                  <div className="flex justify-end mb-4 px-4">
+                    <button
+                      onClick={() => {
+                        // Get all explanation segments from the current messages
+                        const allSegments: string[] = [];
+                        messages
+                          .filter(item => item.conversation_id === currentConversationId)
+                          .forEach(item => {
+                            if (item.text) {
+                              // Extract all explanation blocks
+                              const explainBlockRegex = /\[\s*EXPLAIN\s*\]([\s\S]*?)\[\s*\/\s*EXPLAIN\s*\]/g;
+                              let match;
+                              let index = 0;
+                              while ((match = explainBlockRegex.exec(item.text)) !== null) {
+                                allSegments.push(`explain-${item.id}-${index++}`);
+                              }
+                            }
+                          });
+
+                        // Check if any explanations are currently visible
+                        const anyVisible = allSegments.some(id => visibleExplanations[id]);
+
+                        // Toggle all explanations based on current state
+                        const newState = !anyVisible;
+                        const newVisibleExplanations: Record<string, boolean> = {};
+                        allSegments.forEach(id => {
+                          newVisibleExplanations[id] = newState;
+                        });
+
+                        setVisibleExplanations(newVisibleExplanations);
+                      }}
+                      className={`text-xs px-3 py-1.5 rounded-full flex items-center gap-1 transition-colors ${
+                        Object.values(visibleExplanations).some(v => v)
+                          ? 'bg-primary-DEFAULT/20 text-primary-DEFAULT hover:bg-primary-DEFAULT/30 border border-primary-DEFAULT/20'
+                          : 'bg-bg-tertiary/50 text-text-tertiary hover:bg-bg-tertiary/70 border border-bg-tertiary/20'
+                      }`}
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path>
+                      </svg>
+                      <span>{Object.values(visibleExplanations).some(v => v) ? 'Hide All Explanations' : 'Show All Explanations'}</span>
+                    </button>
+                  </div>
+                )}
+
+                {/* Mobile Course Navigation is now handled by the CourseUI component */}
+                {/* Conversation History */}
+                <div className="flex flex-col gap-8 max-w-4xl mx-auto">
+                  {messages.length === 0 || !currentConversationId ? (
+                    <div className="text-text-secondary text-center py-12">
+                      <div className="mb-6">
+                        <MessageSquare className="w-16 h-16 mx-auto text-primary-DEFAULT opacity-80" />
+                      </div>
+                      <p className="text-2xl font-semibold text-text-primary mb-3">Hi there! What would you like to learn?</p>
+                      <p className="text-md mt-3 text-text-secondary max-w-lg mx-auto leading-relaxed">
+                        Type your question below or use the microphone to start a conversation.
+                      </p>
+                      <div className="mt-6 flex justify-center">
+                        <div className="inline-flex items-center gap-2 px-4 py-2 bg-bg-tertiary/30 rounded-lg text-text-tertiary text-sm">
+                          <span>Try asking about:</span>
+                          <span className="text-primary-DEFAULT">"Explain object-oriented programming"</span>
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    messages
+                      .filter(item => item.conversation_id === currentConversationId)
+                      .map((item) => (
+                      <motion.div
+                        key={item.id}
+                        className={`${
+                          // Add special styling for multi-part messages
+                          item.type === "ai" && item.isPart
+                            ? (item.partNumber === 1)
+                              // First part of multi-part message
+                              ? "mb-1 whitespace-pre-wrap p-6 pt-6 pb-3 bg-gradient-to-r from-bg-tertiary/50 to-bg-tertiary/30 rounded-t-lg border-l-2 border-primary-DEFAULT/40 shadow-sm"
+                              : (item.isFinal === true)
+                                // Last part of multi-part message
+                                ? "mb-8 whitespace-pre-wrap p-6 pt-3 pb-6 bg-gradient-to-r from-bg-tertiary/50 to-bg-tertiary/30 rounded-b-lg border-l-2 border-primary-DEFAULT/40 shadow-sm"
+                                // Middle part of multi-part message
+                                : "mb-1 whitespace-pre-wrap p-6 py-3 bg-gradient-to-r from-bg-tertiary/50 to-bg-tertiary/30 border-l-2 border-primary-DEFAULT/40 shadow-sm"
+                            // Regular message styling
+                            : item.type === "ai"
+                              ? "mb-8 whitespace-pre-wrap p-6 bg-gradient-to-r from-bg-tertiary/50 to-bg-tertiary/30 rounded-lg border-l-2 border-primary-DEFAULT/40 shadow-sm"
+                              : "mb-8 whitespace-pre-wrap px-2"
+                        }`}
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        transition={{ duration: 0.2, ease: "easeOut" }}
+                        style={{
+                          willChange: "opacity",
+                          contain: "content",
+                          contentVisibility: "auto"
+                        }}
+                      >
+                        {/* Only show the header for user messages or the first part of AI messages */}
+                        {item.type === "user" || !item.isPart || (item.isPart && item.partNumber === 1) ? (
+                          <div className="flex items-center gap-2 mb-3">
+                            {item.type === "user" ? (
+                              <>
+                                <div className="w-8 h-8 rounded-full flex items-center justify-center bg-primary-DEFAULT">
+                                  <span className="text-white font-bold text-xs">You</span>
+                                </div>
+                              </>
+                            ) : (
+                              <>
+                                <SimpleBotFace size={32} animated={false} />
+                                <div className="text-sm text-text-secondary font-medium flex items-center gap-2">
+                                  <span>Teacher</span>
+                                  {/* Show part indicator for multi-part messages */}
+                                  {item.type === "ai" && item.isPart && (
+                                    <div className="text-xs bg-bg-tertiary/50 px-2 py-0.5 rounded-full">
+                                      Part {item.partNumber || 1} of {item.totalParts || 1}
+                                    </div>
+                                  )}
+                                </div>
+                              </>
+                            )}
+                          </div>
+                        ) : null}
+
+                        {item.type === "user" ? (
+                          <div className="leading-relaxed pl-10 text-text-primary">
+                            {/* Check if user message contains code blocks or markdown */}
+                            {item.text.includes("```") || item.text.includes("#") ? (
+                              renderEnhancedResponse(item.text)
+                            ) : (
+                              /* Decode HTML entities in user messages */
+                              <ContentSegment
+                                type="regular"
+                                content={decodeHtmlEntities(item.text)}
+                                id={`user-${item.id}`}
+                              />
+                            )}
+                          </div>
+                        ) : (
+                          <div className="leading-relaxed pl-10 text-text-primary">
+                            {item.text && item.text.trim() ? (
+                              renderEnhancedResponse(item.text)
+                            ) : (
+                              <div className="text-text-tertiary italic">
+                                [No response received. Please try again.]
+                              </div>
+                            )}
+                          </div>
+                        )}
+
+                        {/* Only show speak button for non-part messages or the final part of multi-part messages */}
+                        {item.type === "ai" && (!item.isPart || (item.isPart && item.isFinal === true)) && (
+                          <div className="flex justify-end mt-4">
+                            {isTtsSpeaking ? (
+                              <button
+                                onClick={stopSpeaking}
+                                className="text-xs bg-danger-DEFAULT/90 text-white px-3 py-1.5 rounded-full hover:opacity-90 flex items-center gap-1 border border-danger-DEFAULT/20 shadow-none"
+                              >
+                                <span className="w-2 h-2 bg-white rounded-full animate-pulse"></span>
+                                Stop TTS
+                              </button>
+                            ) : isProcessingTTS ? (
+                              <button
+                                disabled
+                                className="text-xs bg-bg-tertiary/80 text-text-secondary px-3 py-1.5 rounded-full cursor-wait flex items-center gap-1"
+                              >
+                                <span className="w-2 h-2 bg-text-tertiary rounded-full animate-pulse"></span>
+                                Loading...
+                              </button>
+                            ) : (
+                              <button
+                                onClick={speakLastResponse}
+                                className="text-xs bg-primary-DEFAULT/80 text-white px-3 py-1.5 rounded-full hover:opacity-90 border border-primary-DEFAULT/20 shadow-none"
+                              >
+                                Speak
+                              </button>
+                            )}
+                          </div>
+                        )}
+
+                        {/* Show continuation indicator for non-final parts */}
+                        {item.type === "ai" && item.isPart && item.isFinal !== true && (
+                          <div className="flex justify-center mt-2">
+                            <div className="flex space-x-1">
+                              <div className="w-1.5 h-1.5 bg-primary-DEFAULT/40 rounded-full animate-pulse"></div>
+                              <div className="w-1.5 h-1.5 bg-primary-DEFAULT/40 rounded-full animate-pulse" style={{ animationDelay: '0.2s' }}></div>
+                              <div className="w-1.5 h-1.5 bg-primary-DEFAULT/40 rounded-full animate-pulse" style={{ animationDelay: '0.4s' }}></div>
+                            </div>
+                          </div>
+                        )}
+                      </motion.div>
+                    ))
+                  )}
+                </div>
+                <div ref={transcriptionEndRef} className="h-24" />
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

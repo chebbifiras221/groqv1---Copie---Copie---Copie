@@ -18,6 +18,7 @@ interface CourseUIProps {
   navigateToChapter: (chapterId: string) => void;
   navigateToSection: (chapterId: string, sectionName: string) => void;
   isTeacherMode: boolean;
+  isFirstConversationLayout?: boolean; // New prop to indicate special layout
 }
 
 export function CourseUI({
@@ -25,7 +26,8 @@ export function CourseUI({
   toggleChapter,
   navigateToChapter,
   navigateToSection,
-  isTeacherMode
+  isTeacherMode,
+  isFirstConversationLayout = false
 }: CourseUIProps) {
   // Listen for course UI reset events
   useEffect(() => {
@@ -45,7 +47,11 @@ export function CourseUI({
   return (
     <>
       {/* Desktop Course Navigation */}
-      <div className="hidden md:block w-64 h-full border-r border-bg-tertiary/50 overflow-y-auto pt-4 pb-20 bg-bg-secondary/50">
+      <div className={`hidden md:block h-full overflow-y-auto pt-4 pb-20 ${
+        isFirstConversationLayout
+          ? 'w-full bg-bg-secondary' // Full width for special layout, no extra borders
+          : 'w-64 border-r border-bg-tertiary/50 bg-bg-secondary/50' // Regular layout
+      }`}>
         <div className="px-4 py-2 mb-2 flex items-center gap-2">
           <BookOpen className="w-4 h-4 text-primary-DEFAULT" />
           <h3 className="text-sm font-semibold text-text-secondary uppercase tracking-wider">Course Outline</h3>
