@@ -20,9 +20,23 @@ MAX_CONVERSATION_HISTORY = 15  # Keep last 15 messages + system prompt
 CONVERSATION_LIST_LIMIT = 20
 
 # AI Model Configuration
+# Models are tried in order - put best/preferred models first
 AI_MODELS = [
+    # Primary models (70B - highest quality)
     {"name": "llama-3.3-70b-versatile", "temperature": 0.6, "description": "Llama 3.3 70B Versatile"},
-    {"name": "llama3-70b-8192", "temperature": 0.6, "description": "Llama 3 70B"}
+    {"name": "llama3-70b-8192", "temperature": 0.6, "description": "Llama 3 70B"},
+
+    # Secondary models (8B - good balance of speed and quality)
+    {"name": "llama-3.1-8b-instant", "temperature": 0.6, "description": "Llama 3.1 8B Instant"},
+    {"name": "llama3-8b-8192", "temperature": 0.6, "description": "Llama 3 8B"},
+
+    # Fallback models (7B - faster, still capable)
+    {"name": "llama-3.2-7b-preview", "temperature": 0.6, "description": "Llama 3.2 7B Preview"},
+    {"name": "llama-3.1-7b-versatile", "temperature": 0.6, "description": "Llama 3.1 7B Versatile"},
+
+    # Emergency fallback (smaller but very fast)
+    {"name": "llama-3.2-3b-preview", "temperature": 0.7, "description": "Llama 3.2 3B Preview"},
+    {"name": "llama-3.2-1b-preview", "temperature": 0.7, "description": "Llama 3.2 1B Preview"}
 ]
 
 # AI Request Parameters
@@ -39,6 +53,17 @@ TTS_DEFAULT_VOICE = "Web Voice"
 # Retry Configuration
 DEFAULT_MAX_RETRIES = 3
 DEFAULT_RETRY_DELAY = 0.5
+
+# AI Request Configuration
+AI_REQUEST_TIMEOUT = (10, 30)  # (connection timeout, read timeout) in seconds
+AI_MODEL_RETRY_COUNT = 2  # Number of retries per model
+AI_MODEL_SWITCH_DELAY = 1.0  # Delay between trying different models
+
+# Temperature Strategy Explanation:
+# - 70B models: 0.6 (balanced, high quality responses)
+# - 8B models: 0.6 (maintain consistency with primary models)
+# - 7B models: 0.6 (good balance for educational content)
+# - 3B/1B models: 0.7 (slightly higher to compensate for smaller model limitations)
 
 # Speech-to-Text Configuration
 STT_CONFIG = {
@@ -84,6 +109,26 @@ def get_model_description(model_name: str) -> str:
         if model["name"] == model_name:
             return model["description"]
     return model_name
+
+def get_model_info(model_name: str) -> Dict[str, Any]:
+    """Get complete model information."""
+    for model in AI_MODELS:
+        if model["name"] == model_name:
+            return model
+    return {"name": model_name, "temperature": 0.6, "description": model_name}
+
+def get_model_tier(model_name: str) -> str:
+    """Get the tier/category of a model based on its capabilities."""
+    if "70b" in model_name.lower():
+        return "primary"
+    elif "8b" in model_name.lower():
+        return "secondary"
+    elif "7b" in model_name.lower():
+        return "fallback"
+    elif any(size in model_name.lower() for size in ["3b", "1b"]):
+        return "emergency"
+    else:
+        return "unknown"
 
 def validate_teaching_mode(mode: str) -> str:
     """Validate and return a valid teaching mode."""

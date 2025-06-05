@@ -5,8 +5,9 @@ This module contains utilities for AI response generation and processing.
 
 import logging
 import re
+import time
 import requests
-from typing import Dict, Any, List, Optional, Tuple
+from typing import Dict, Any, List, Tuple
 
 import config
 import database
@@ -109,20 +110,25 @@ def clean_ai_response(ai_response: str, is_first_message: bool) -> str:
     return cleaned_response
 
 
-def make_ai_request(model_name: str, conversation_history: List[Dict[str, Any]], temperature: float = None) -> Tuple[bool, str]:
+def make_ai_request(model_name: str, conversation_history: List[Dict[str, Any]], temperature: float = None, max_retries: int = None) -> Tuple[bool, str]:
     """
-    Make a request to the AI API.
+    Make a request to the AI API with retry logic and better error handling.
 
     Args:
         model_name: Name of the model to use
         conversation_history: Prepared conversation history
         temperature: Optional temperature override
+        max_retries: Maximum number of retries for this specific model
 
     Returns:
         Tuple of (success, response_or_error)
     """
     if not config.GROQ_API_KEY:
         return False, config.ERROR_MESSAGES["api_key_missing"]
+
+    # Use config default if max_retries not specified
+    if max_retries is None:
+        max_retries = config.AI_MODEL_RETRY_COUNT
 
     headers = {
         "Authorization": f"Bearer {config.GROQ_API_KEY}",
@@ -131,21 +137,101 @@ def make_ai_request(model_name: str, conversation_history: List[Dict[str, Any]],
 
     data = config.get_ai_request_data(model_name, conversation_history, temperature)
 
-    try:
-        logger.info(f"Making AI request with model: {model_name}")
-        response = requests.post(config.GROQ_API_URL, headers=headers, json=data)
-        response.raise_for_status()
-        result = response.json()
-        ai_response = result["choices"][0]["message"]["content"]
-        return True, ai_response
-    except Exception as e:
-        logger.warning(f"Error using model {model_name}: {e}")
-        return False, str(e)
+    for attempt in range(max_retries + 1):
+        try:
+            logger.info(f"Making AI request with model: {model_name} (attempt {attempt + 1}/{max_retries + 1})")
+
+            # Add timeout to prevent hanging requests
+            response = requests.post(
+                config.GROQ_API_URL,
+                headers=headers,
+                json=data,
+                timeout=config.AI_REQUEST_TIMEOUT
+            )
+            response.raise_for_status()
+            result = response.json()
+
+            # Validate response structure
+            if "choices" not in result or not result["choices"]:
+                raise ValueError("Invalid API response: missing choices")
+
+            if "message" not in result["choices"][0] or "content" not in result["choices"][0]["message"]:
+                raise ValueError("Invalid API response: missing message content")
+
+            ai_response = result["choices"][0]["message"]["content"]
+            if not ai_response or not ai_response.strip():
+                raise ValueError("Empty response from API")
+
+            logger.info(f"Successfully generated response with model: {model_name}")
+            return True, ai_response
+
+        except requests.exceptions.Timeout as e:
+            error_msg = f"Request timeout for model {model_name}: {e}"
+            logger.warning(error_msg)
+            if attempt < max_retries:
+                wait_time = 2 ** attempt  # Exponential backoff: 1s, 2s, 4s
+                logger.info(f"Retrying in {wait_time} seconds...")
+                time.sleep(wait_time)
+                continue
+            return False, error_msg
+
+        except requests.exceptions.HTTPError as e:
+            # Check for specific HTTP status codes
+            if e.response.status_code == 429:  # Rate limit
+                error_msg = f"Rate limit exceeded for model {model_name}"
+                logger.warning(error_msg)
+                if attempt < max_retries:
+                    wait_time = 5 * (2 ** attempt)  # Longer wait for rate limits: 5s, 10s, 20s
+                    logger.info(f"Rate limited. Retrying in {wait_time} seconds...")
+                    time.sleep(wait_time)
+                    continue
+                return False, error_msg
+            elif e.response.status_code == 503:  # Service unavailable
+                error_msg = f"Service unavailable for model {model_name}"
+                logger.warning(error_msg)
+                if attempt < max_retries:
+                    wait_time = 3 * (2 ** attempt)  # Wait for service: 3s, 6s, 12s
+                    logger.info(f"Service unavailable. Retrying in {wait_time} seconds...")
+                    time.sleep(wait_time)
+                    continue
+                return False, error_msg
+            else:
+                error_msg = f"HTTP error {e.response.status_code} for model {model_name}: {e}"
+                logger.warning(error_msg)
+                return False, error_msg
+
+        except requests.exceptions.ConnectionError as e:
+            error_msg = f"Connection error for model {model_name}: {e}"
+            logger.warning(error_msg)
+            if attempt < max_retries:
+                wait_time = 2 ** attempt
+                logger.info(f"Connection failed. Retrying in {wait_time} seconds...")
+                time.sleep(wait_time)
+                continue
+            return False, error_msg
+
+        except ValueError as e:
+            # Don't retry for invalid responses
+            error_msg = f"Invalid response from model {model_name}: {e}"
+            logger.warning(error_msg)
+            return False, error_msg
+
+        except Exception as e:
+            error_msg = f"Unexpected error with model {model_name}: {e}"
+            logger.warning(error_msg)
+            if attempt < max_retries:
+                wait_time = 2 ** attempt
+                logger.info(f"Unexpected error. Retrying in {wait_time} seconds...")
+                time.sleep(wait_time)
+                continue
+            return False, error_msg
+
+    return False, f"All retry attempts failed for model {model_name}"
 
 
 def generate_ai_response_with_models(conversation_history: List[Dict[str, Any]]) -> str:
     """
-    Try multiple AI models to generate a response.
+    Try multiple AI models to generate a response with improved fallback logic.
 
     Args:
         conversation_history: Prepared conversation history
@@ -153,23 +239,34 @@ def generate_ai_response_with_models(conversation_history: List[Dict[str, Any]])
     Returns:
         AI response or error message
     """
-    last_error = None
+    model_errors = []
 
     # Try each model in sequence until one works
-    for model_info in config.AI_MODELS:
+    for i, model_info in enumerate(config.AI_MODELS):
         model_name = model_info["name"]
         temperature = model_info["temperature"]
 
+        model_tier = config.get_model_tier(model_name)
+        logger.info(f"Attempting model {i + 1}/{len(config.AI_MODELS)}: {model_name} ({model_tier} tier)")
+
         success, response = make_ai_request(model_name, conversation_history, temperature)
         if success:
-            logger.info(f"Successfully generated response with model: {model_name}")
+            logger.info(f"Successfully generated response with model: {model_name} ({model_tier} tier)")
             return response
         else:
-            last_error = response
+            model_errors.append(f"{model_name}: {response}")
+            logger.warning(f"Model {model_name} failed: {response}")
+
+            # Add a small delay before trying the next model (except for the last one)
+            if i < len(config.AI_MODELS) - 1:
+                delay = config.AI_MODEL_SWITCH_DELAY
+                logger.info(f"Waiting {delay} seconds before trying next model...")
+                time.sleep(delay)
 
     # If we get here, all models failed
-    error_msg = config.ERROR_MESSAGES["all_models_failed"].format(error=last_error)
-    logger.error(error_msg)
+    error_details = "; ".join(model_errors)
+    error_msg = config.ERROR_MESSAGES["all_models_failed"].format(error=error_details)
+    logger.error(f"All models failed. Details: {error_details}")
     return error_msg
 
 
