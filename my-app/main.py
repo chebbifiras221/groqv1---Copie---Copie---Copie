@@ -1,7 +1,6 @@
 import asyncio
 import json
 import logging
-import os
 
 from dotenv import load_dotenv
 from livekit import rtc
@@ -354,23 +353,15 @@ def generate_ai_response(text, conversation_id=None):
     # Generate AI response using multiple models
     ai_response = ai_utils.generate_ai_response_with_models(conversation_history)
 
-    # Check if this is the first message and clean the response
-    is_first_message = len([msg for msg in conversation["messages"] if msg["type"] == "ai"]) == 0
-    ai_response = ai_utils.clean_ai_response(ai_response, is_first_message)
-
-    # Process the response (add model info if needed)
-    show_model_info = False  # Can be made configurable
-    ai_response_with_model = ai_utils.process_ai_response(ai_response, show_model_info)
-
     # Store the response in the database
-    database.add_message(actual_conversation_id, "ai", ai_response_with_model)
+    database.add_message(actual_conversation_id, "ai", ai_response)
 
     # Log response length for debugging
-    if ai_utils.should_split_response(ai_response_with_model):
-        logger.info(f"Response is long ({len(ai_response_with_model)} chars), but not splitting to avoid TTS and UI issues")
+    if ai_utils.should_split_response(ai_response):
+        logger.info(f"Response is long ({len(ai_response)} chars), but not splitting to avoid TTS and UI issues")
 
     logger.info("Successfully generated AI response")
-    return ai_response_with_model
+    return ai_response
 
 async def _forward_transcription(
     stt_stream: stt.SpeechStream, stt_forwarder: transcription.STTSegmentsForwarder, room: rtc.Room

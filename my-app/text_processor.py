@@ -11,27 +11,17 @@ import database
 
 logger = logging.getLogger("text-processor")
 
-def generate_fallback_message(input_text):
+def generate_fallback_message(_input_text):
     """
-    Generate a fallback message when the AI response is empty.
+    Generate a simple fallback message when the AI response is empty.
 
     Args:
-        input_text: The user's input text
+        _input_text: The user's input text (unused but kept for API compatibility)
 
     Returns:
-        str: A fallback message based on the input
+        str: A simple fallback message
     """
-    # Check if this is a course outline section request
-    if "learning objectives" in input_text.lower():
-        return "Here are the Learning Objectives for this chapter:\n\n• Understand the key concepts covered in this chapter\n• Learn how to apply these concepts in practical situations\n• Develop skills to solve problems related to this topic\n• Build a foundation for more advanced topics in future chapters"
-    elif "practice exercises" in input_text.lower():
-        return "Here are some Practice Exercises for this chapter:\n\n**Exercise 1: Basic Application**\n• Try implementing the concepts from this chapter in a simple program\n• Start with the examples provided and modify them to solve a similar problem\n\n**Exercise 2: Problem Solving**\n• Apply what you've learned to solve a more complex problem\n• Break down the problem into smaller steps and tackle each one using the techniques from this chapter"
-    elif "quiz" in input_text.lower():
-        return "Let's test your knowledge with a quiz on this chapter:\n\n1. What is the main purpose of the concepts covered in this chapter?\n   a) To improve code efficiency\n   b) To enhance code readability\n   c) To organize code better\n   d) All of the above\n\n2. When would you typically use these techniques?\n   a) For small projects only\n   b) For large projects only\n   c) For any project where they provide value\n   d) Only when required by specifications\n\nAnswers: 1-d, 2-c"
-    elif "summary" in input_text.lower():
-        return "**Summary of this chapter:**\n\n• We covered the fundamental concepts and their importance in programming\n• We explored practical applications and common use cases\n• We examined best practices and how to avoid common pitfalls\n• We connected these ideas to the broader context of software development"
-    else:
-        return "I apologize, but I couldn't generate a proper response. Please try again with a different question or instruction."
+    return "I apologize, but I couldn't generate a proper response. Please try again with a different question or instruction."
 
 async def handle_text_input(message, ctx, current_conversation_id, safe_publish_data,
                            find_or_create_empty_conversation, generate_ai_response,

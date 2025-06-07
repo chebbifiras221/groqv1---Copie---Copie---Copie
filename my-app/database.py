@@ -11,8 +11,7 @@ from db_utils import (
     execute_query,
     execute_transaction,
     get_record_by_id,
-    count_records,
-    batch_update
+    count_records
 )
 
 logger = logging.getLogger("database")
@@ -132,55 +131,22 @@ def init_db():
 
 def create_conversation(title: str = "New Conversation", teaching_mode: str = "teacher", user_id: str = None) -> str:
     """Create a new conversation and return its ID"""
-    conn = get_db_connection()
     try:
         conversation_id = str(uuid.uuid4())
         now = datetime.now().isoformat()
 
-        # Check if teaching_mode column exists
-        has_teaching_mode = check_column_exists(conn, "conversations", "teaching_mode")
-        # Check if user_id column exists
-        has_user_id = check_column_exists(conn, "conversations", "user_id")
-
-        # Prepare query and parameters based on available columns
-        if has_teaching_mode and has_user_id:
-            # If both columns exist, include them in the INSERT
-            query = "INSERT INTO conversations (id, title, created_at, updated_at, teaching_mode, user_id) VALUES (?, ?, ?, ?, ?, ?)"
-            params = (conversation_id, title, now, now, teaching_mode, user_id)
-        elif has_teaching_mode:
-            # If only teaching_mode exists
-            query = "INSERT INTO conversations (id, title, created_at, updated_at, teaching_mode) VALUES (?, ?, ?, ?, ?)"
-            params = (conversation_id, title, now, now, teaching_mode)
-            logger.warning(f"user_id column doesn't exist yet, created conversation without it")
-        elif has_user_id:
-            # If only user_id exists
-            query = "INSERT INTO conversations (id, title, created_at, updated_at, user_id) VALUES (?, ?, ?, ?, ?)"
-            params = (conversation_id, title, now, now, user_id)
-            logger.warning(f"teaching_mode column doesn't exist yet, created conversation without it")
-        else:
-            # If neither column exists yet, use the old schema
-            query = "INSERT INTO conversations (id, title, created_at, updated_at) VALUES (?, ?, ?, ?)"
-            params = (conversation_id, title, now, now)
-            logger.warning(f"teaching_mode and user_id columns don't exist yet, created conversation without them")
-
-        # Execute the query
-        execute_query(query, params, commit=True)
-
-        # If columns don't exist, try to run the migration
-        if not has_teaching_mode or not has_user_id:
-            try:
-                migrate_db()
-                logger.info("Ran migration after creating conversation")
-            except Exception as e:
-                logger.error(f"Failed to run migration after creating conversation: {e}")
+        # Create conversation with all modern columns (migrations should have run during startup)
+        execute_query(
+            "INSERT INTO conversations (id, title, created_at, updated_at, teaching_mode, user_id) VALUES (?, ?, ?, ?, ?, ?)",
+            (conversation_id, title, now, now, teaching_mode, user_id),
+            commit=True
+        )
 
         logger.info(f"Created new conversation: {conversation_id} with teaching mode: {teaching_mode} for user: {user_id}")
         return conversation_id
     except Exception as e:
         logger.error(f"Error creating conversation: {e}")
         raise
-    finally:
-        release_connection(conn)
 
 def get_conversation(conversation_id: str, user_id: str = None) -> Optional[Dict[str, Any]]:
     """
@@ -378,18 +344,13 @@ def update_conversation_title(conversation_id: str, title: str) -> bool:
     try:
         now = datetime.now().isoformat()
 
-        # Use batch_update utility function to update the title and timestamp
-        field_updates = {
-            "title": title,
-            "updated_at": now
-        }
-
-        success = batch_update(
-            "conversations",
-            field_updates,
-            "id = ?",
-            (conversation_id,)
+        # Update the title and timestamp
+        execute_query(
+            "UPDATE conversations SET title = ?, updated_at = ? WHERE id = ?",
+            (title, now, conversation_id),
+            commit=True
         )
+        success = True
 
         # Log the result
         if success:
@@ -470,8 +431,7 @@ def generate_conversation_title(conversation_id: str) -> str:
 
 def reuse_empty_conversation(conversation_id: str, teaching_mode: str = None, limit: int = 20) -> Dict[str, Any]:
     """
-    Reuse an empty conversation by updating its timestamp and teaching mode, and returning the updated conversation list.
-    This combines multiple database operations into a single transaction for better performance.
+    Reuse an empty conversation by updating its timestamp and teaching mode.
 
     Args:
         conversation_id: The ID of the empty conversation to reuse
@@ -482,9 +442,6 @@ def reuse_empty_conversation(conversation_id: str, teaching_mode: str = None, li
         A dictionary with the updated conversation list and the reused conversation ID
     """
     try:
-        now = datetime.now().isoformat()
-        conn = get_db_connection()
-
         # Check if conversation exists
         conversation = get_record_by_id("conversations", conversation_id)
         if not conversation:
@@ -494,39 +451,21 @@ def reuse_empty_conversation(conversation_id: str, teaching_mode: str = None, li
                 "conversations": list_conversations(limit=limit, include_messages=False)
             }
 
-        # Check if teaching_mode column exists
-        has_teaching_mode = check_column_exists(conn, "conversations", "teaching_mode")
-
-        # Prepare field updates
-        field_updates = {"updated_at": now}
-
-        # Add teaching_mode if provided and column exists
-        if teaching_mode and has_teaching_mode:
-            field_updates["teaching_mode"] = teaching_mode
-            logger.info(f"Updating conversation {conversation_id} with teaching mode: {teaching_mode}")
-        elif teaching_mode and not has_teaching_mode:
-            # If teaching_mode was provided but column doesn't exist, try to run migration
-            logger.warning(f"teaching_mode column doesn't exist yet, running migration")
-            try:
-                release_connection(conn)  # Release connection before migration
-                migrate_db()
-                logger.info("Ran migration after updating conversation")
-
-                # Get a new connection and check if column exists now
-                conn = get_db_connection()
-                if check_column_exists(conn, "conversations", "teaching_mode"):
-                    field_updates["teaching_mode"] = teaching_mode
-            except Exception as e:
-                logger.error(f"Failed to run migration: {e}")
-            finally:
-                release_connection(conn)
-                conn = get_db_connection()  # Get a fresh connection
-
-        # Update the conversation
-        success = batch_update("conversations", field_updates, "id = ?", (conversation_id,))
-
-        if not success:
-            logger.warning(f"Failed to update conversation {conversation_id}")
+        # Update the conversation timestamp and teaching mode
+        now = datetime.now().isoformat()
+        if teaching_mode:
+            execute_query(
+                "UPDATE conversations SET updated_at = ?, teaching_mode = ? WHERE id = ?",
+                (now, teaching_mode, conversation_id),
+                commit=True
+            )
+            logger.info(f"Updated conversation {conversation_id} with teaching mode: {teaching_mode}")
+        else:
+            execute_query(
+                "UPDATE conversations SET updated_at = ? WHERE id = ?",
+                (now, conversation_id),
+                commit=True
+            )
 
         # Get the updated conversation list
         conversations = list_conversations(limit=limit, include_messages=False)
@@ -538,6 +477,3 @@ def reuse_empty_conversation(conversation_id: str, teaching_mode: str = None, li
     except Exception as e:
         logger.error(f"Error reusing empty conversation {conversation_id}: {e}")
         raise
-    finally:
-        if 'conn' in locals():
-            release_connection(conn)

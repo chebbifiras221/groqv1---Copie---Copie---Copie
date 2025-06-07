@@ -14,106 +14,34 @@ logger = logging.getLogger("db-utils")
 import os
 DB_FILE = os.path.abspath(os.path.join(os.path.dirname(__file__), "conversations.db"))
 
-# Simple connection pool for SQLite
-class ConnectionPool:
-    """A simple connection pool for SQLite to manage database connections efficiently."""
+# Simple connection management for SQLite
+_connection_lock = threading.Lock()
 
-    _instance = None
-    _lock = threading.Lock()
+def _create_connection():
+    """Create a new database connection with proper settings"""
+    conn = sqlite3.connect(DB_FILE, check_same_thread=False)
+    conn.row_factory = sqlite3.Row  # Return rows as dictionaries
 
-    def __new__(cls):
-        with cls._lock:
-            if cls._instance is None:
-                cls._instance = super(ConnectionPool, cls).__new__(cls)
-                cls._instance.pool = []
-                cls._instance.max_connections = 5
-                cls._instance.in_use = set()
-            return cls._instance
+    # Enable WAL mode for better crash recovery
+    try:
+        conn.execute("PRAGMA journal_mode=WAL")
+        conn.execute("PRAGMA synchronous=NORMAL")
+        logger.debug("WAL mode enabled for new database connection")
+    except sqlite3.Error as e:
+        logger.warning(f"Failed to enable WAL mode: {e}")
 
-    def get_connection(self):
-        """Get a connection from the pool or create a new one"""
-        with self._lock:
-            # Try to reuse an existing connection
-            while self.pool:
-                conn = self.pool.pop()
-                if conn not in self.in_use:
-                    try:
-                        # Test if connection is still valid
-                        conn.execute("SELECT 1")
-                        self.in_use.add(conn)
-                        return conn
-                    except sqlite3.Error:
-                        # Connection is no longer valid, discard it
-                        continue
-
-            # Create a new connection
-            conn = sqlite3.connect(DB_FILE, check_same_thread=False)
-            conn.row_factory = sqlite3.Row  # Return rows as dictionaries
-
-            # Enable WAL mode for better crash recovery
-            try:
-                conn.execute("PRAGMA journal_mode=WAL")
-                conn.execute("PRAGMA synchronous=NORMAL")
-                logger.debug("WAL mode enabled for new database connection")
-            except sqlite3.Error as e:
-                logger.warning(f"Failed to enable WAL mode: {e}")
-
-            self.in_use.add(conn)
-            return conn
-
-    def release_connection(self, conn):
-        """Return a connection to the pool"""
-        with self._lock:
-            if conn in self.in_use:
-                self.in_use.remove(conn)
-                if len(self.pool) < self.max_connections:
-                    self.pool.append(conn)
-                else:
-                    conn.close()
-
-    def shutdown(self):
-        """Properly close all connections during shutdown"""
-        with self._lock:
-            # First checkpoint the database
-            try:
-                conn = self.get_connection()
-                conn.execute("PRAGMA wal_checkpoint(FULL)")
-                self.release_connection(conn)
-                logger.info("Database checkpoint completed during shutdown")
-            except Exception as e:
-                logger.error(f"Error during shutdown checkpoint: {e}")
-
-            # Close all connections in the pool
-            for conn in self.pool:
-                try:
-                    conn.close()
-                    logger.debug("Closed pooled connection during shutdown")
-                except Exception as e:
-                    logger.error(f"Error closing pooled connection: {e}")
-
-            # Close all in-use connections
-            for conn in self.in_use:
-                try:
-                    conn.close()
-                    logger.debug("Closed in-use connection during shutdown")
-                except Exception as e:
-                    logger.error(f"Error closing in-use connection: {e}")
-
-            # Clear the pools
-            self.pool = []
-            self.in_use = set()
-            logger.info("All database connections closed during shutdown")
-
-# Initialize the connection pool
-_pool = ConnectionPool()
+    return conn
 
 def get_db_connection():
-    """Get a connection from the pool"""
-    return _pool.get_connection()
+    """Get a database connection"""
+    return _create_connection()
 
 def release_connection(conn):
-    """Release a connection back to the pool"""
-    _pool.release_connection(conn)
+    """Close a database connection"""
+    try:
+        conn.close()
+    except Exception as e:
+        logger.error(f"Error closing connection: {e}")
 
 def check_column_exists(conn, table: str, column: str) -> bool:
     """Check if a column exists in a table"""
@@ -227,29 +155,7 @@ def count_records(table: str, where_clause: str = None, params: Tuple = ()) -> i
     result = execute_query(query, params, fetch_one=True)
     return result["count"] if result else 0
 
-def batch_update(table: str, field_updates: Dict[str, Any], where_clause: str, params: Tuple = ()) -> bool:
-    """
-    Update multiple records in a table.
 
-    Args:
-        table: Table name
-        field_updates: Dictionary of field names and values to update
-        where_clause: WHERE clause without the 'WHERE' keyword
-        params: Parameters for the WHERE clause
-
-    Returns:
-        True if successful, False otherwise
-    """
-    if not field_updates:
-        return False
-
-    set_clause = ", ".join([f"{field} = ?" for field in field_updates.keys()])
-    update_values = tuple(field_updates.values())
-
-    query = f"UPDATE {table} SET {set_clause} WHERE {where_clause}"
-    all_params = update_values + params
-
-    return execute_query(query, all_params, commit=True) is not None
 
 def checkpoint_database():
     """
@@ -282,10 +188,12 @@ def enable_wal_mode():
 
 def close_all_connections():
     """
-    Close all database connections in the pool.
+    Close all database connections.
     This should be called during application shutdown.
     """
-    _pool.shutdown()
+    # With the simplified approach, connections are closed immediately after use
+    # This function is kept for API compatibility
+    logger.info("Database connections cleanup completed")
 
 def ensure_db_file_exists():
     """

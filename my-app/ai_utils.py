@@ -4,7 +4,6 @@ This module contains utilities for AI response generation and processing.
 """
 
 import logging
-import re
 import time
 import requests
 from typing import Dict, Any, List, Tuple
@@ -46,7 +45,8 @@ def extract_conversation_context(conversation_id) -> Tuple[str, str, bool]:
             is_hidden = conversation_id["is_hidden"]
 
     # Validate teaching mode
-    teaching_mode = config.validate_teaching_mode(teaching_mode)
+    if teaching_mode not in config.TEACHING_MODES:
+        teaching_mode = config.DEFAULT_TEACHING_MODE
 
     return actual_conversation_id, teaching_mode, is_hidden
 
@@ -81,33 +81,7 @@ def prepare_conversation_history(messages: List[Dict[str, Any]], teaching_mode: 
     return conversation_history
 
 
-def clean_ai_response(ai_response: str, is_first_message: bool) -> str:
-    """
-    Clean AI response by removing self-introductions and unwanted patterns.
 
-    Args:
-        ai_response: The raw AI response
-        is_first_message: Whether this is the first AI message in the conversation
-
-    Returns:
-        Cleaned AI response
-    """
-    if not is_first_message:
-        return ai_response
-
-    # Only remove self-introductions with names, but allow friendly greetings
-    cleaned_response = ai_response
-    for pattern in config.SELF_INTRO_PATTERNS:
-        cleaned_response = re.sub(pattern, "", cleaned_response, flags=re.IGNORECASE | re.MULTILINE)
-
-    # Remove extra whitespace and newlines from the beginning
-    cleaned_response = cleaned_response.lstrip()
-
-    # Log if we removed something
-    if cleaned_response != ai_response:
-        logger.info("Removed self-introduction from first response")
-
-    return cleaned_response
 
 
 def make_ai_request(model_name: str, conversation_history: List[Dict[str, Any]], temperature: float = None, max_retries: int = None) -> Tuple[bool, str]:
@@ -246,12 +220,11 @@ def generate_ai_response_with_models(conversation_history: List[Dict[str, Any]])
         model_name = model_info["name"]
         temperature = model_info["temperature"]
 
-        model_tier = config.get_model_tier(model_name)
-        logger.info(f"Attempting model {i + 1}/{len(config.AI_MODELS)}: {model_name} ({model_tier} tier)")
+        logger.info(f"Attempting model {i + 1}/{len(config.AI_MODELS)}: {model_name}")
 
         success, response = make_ai_request(model_name, conversation_history, temperature)
         if success:
-            logger.info(f"Successfully generated response with model: {model_name} ({model_tier} tier)")
+            logger.info(f"Successfully generated response with model: {model_name}")
             return response
         else:
             model_errors.append(f"{model_name}: {response}")
@@ -270,23 +243,7 @@ def generate_ai_response_with_models(conversation_history: List[Dict[str, Any]])
     return error_msg
 
 
-def process_ai_response(ai_response: str, show_model_info: bool = False, model_name: str = None) -> str:
-    """
-    Process AI response by adding model info if requested.
 
-    Args:
-        ai_response: The AI response
-        show_model_info: Whether to include model information
-        model_name: Name of the model used
-
-    Returns:
-        Processed AI response
-    """
-    if show_model_info and model_name:
-        model_description = config.get_model_description(model_name)
-        return f"[Using {model_description}]\n\n{ai_response}"
-    else:
-        return ai_response
 
 
 def should_split_response(response: str) -> bool:
@@ -323,7 +280,11 @@ def get_teaching_mode_from_db(conversation_id: str) -> str:
         if conversation and "teaching_mode" in conversation and conversation["teaching_mode"]:
             teaching_mode = conversation["teaching_mode"]
             logger.info(f"Retrieved teaching mode from database: {teaching_mode}")
-            return config.validate_teaching_mode(teaching_mode)
+            # Validate teaching mode
+            if teaching_mode in config.TEACHING_MODES:
+                return teaching_mode
+            else:
+                return config.DEFAULT_TEACHING_MODE
         else:
             logger.warning(f"No teaching mode found for conversation {conversation_id}, using default mode")
             return config.DEFAULT_TEACHING_MODE

@@ -67,6 +67,11 @@ export const extractCourseStructure = (text: string): ChapterData[] => {
   let foundTraditionalFormat = false;
 
   lines.forEach((line, index) => {
+    // Skip subtopic lines (### X.Y: format) - these should not be treated as chapters
+    if (line.match(/^### \d+\.\d+:/)) {
+      return;
+    }
+
     const match = line.match(chapterRegex);
     if (match) {
       foundTraditionalFormat = true;
@@ -79,6 +84,11 @@ export const extractCourseStructure = (text: string): ChapterData[] => {
   // Second pass: look for bold chapter format (**Chapter X: Title**)
   if (!foundTraditionalFormat) {
     lines.forEach((line, index) => {
+      // Skip subtopic lines (### X.Y: format) - these should not be treated as chapters
+      if (line.match(/^### \d+\.\d+:/)) {
+        return;
+      }
+
       const match = line.match(boldChapterRegex);
       if (match) {
         foundTraditionalFormat = true;
@@ -97,6 +107,11 @@ export const extractCourseStructure = (text: string): ChapterData[] => {
 
     // Try numbered bold format first (1. **Title**)
     lines.forEach((line, index) => {
+      // Skip subtopic lines (### X.Y: format) - these should not be treated as chapters
+      if (line.match(/^### \d+\.\d+:/)) {
+        return;
+      }
+
       const match = line.match(numberedBoldRegex);
       if (match) {
         const chapterNumber = parseInt(match[1]);
@@ -108,6 +123,11 @@ export const extractCourseStructure = (text: string): ChapterData[] => {
     // If no numbered bold found, try the primary outline regex (with asterisks)
     if (chapters.length === 0) {
       lines.forEach((line, index) => {
+        // Skip subtopic lines (### X.Y: format) - these should not be treated as chapters
+        if (line.match(/^### \d+\.\d+:/)) {
+          return;
+        }
+
         const match = line.match(outlineChapterRegex);
         if (match) {
           const chapterNumber = parseInt(match[1]);
@@ -120,6 +140,11 @@ export const extractCourseStructure = (text: string): ChapterData[] => {
     // If still no chapters found, try simple numbered format
     if (chapters.length === 0) {
       lines.forEach((line, index) => {
+        // Skip subtopic lines (### X.Y: format) - these should not be treated as chapters
+        if (line.match(/^### \d+\.\d+:/)) {
+          return;
+        }
+
         const match = line.match(simpleNumberedRegex);
         if (match) {
           const chapterNumber = parseInt(match[1]);

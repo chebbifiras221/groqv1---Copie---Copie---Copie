@@ -5,27 +5,11 @@ database connections are properly closed before the application exits.
 """
 
 import logging
-import platform
 import signal
 import sys
-import threading
-import time
 from typing import Callable, List
 
-# Platform-specific imports
-try:
-    import msvcrt  # Windows
-except ImportError:
-    msvcrt = None
 
-try:
-    import termios  # Unix-like systems
-    import tty
-    import select
-except ImportError:
-    termios = None
-    tty = None
-    select = None
 
 logger = logging.getLogger("shutdown-handler")
 
@@ -80,86 +64,10 @@ def setup_signal_handlers() -> None:
     """
     Set up signal handlers for graceful shutdown.
     """
-    # Register signal handler for termination signal
+    # Register signal handlers for termination signals
     signal.signal(signal.SIGTERM, signal_handler)  # Termination signal
-    logger.info("Signal handlers registered for graceful shutdown")
-
-    # Start a thread to listen for the '9' key
-    # Different keyboard input handling based on platform
-    if platform.system() == 'Windows':
-        # Windows-specific keyboard input
-        if msvcrt:
-            def keyboard_listener():
-                """Listen for '9' keypress and trigger shutdown (Windows)"""
-                logger.info("Keyboard listener started. Press '9' to shutdown gracefully.")
-                while not shutdown_in_progress:
-                    try:
-                        if msvcrt.kbhit():  # Check if a key has been pressed
-                            key = msvcrt.getch()  # Get the key
-                            # '9' key is ASCII 57
-                            if key == b'9':
-                                print("\n=== Number '9' key pressed ===")
-                                logger.info("Number '9' key detected, initiating graceful shutdown...")
-                                signal_handler(signal.SIGTERM, None)
-                                break
-                    except Exception as e:
-                        logger.error(f"Error in keyboard listener: {e}")
-                        break
-                    # Sleep briefly to avoid consuming too much CPU
-                    time.sleep(0.1)
-        else:
-            logger.error("msvcrt module not available on this Windows system")
-
-            def keyboard_listener():
-                """Dummy keyboard listener when msvcrt is not available"""
-                logger.warning("Keyboard listener not available. Use SIGTERM to shutdown.")
-                while not shutdown_in_progress:
-                    time.sleep(1)
-    else:
-        # Unix-like systems (Linux, macOS)
-        if termios and tty and select:
-            def keyboard_listener():
-                """Listen for '9' keypress and trigger shutdown (Unix)"""
-                logger.info("Keyboard listener started. Press '9' to shutdown gracefully.")
-
-                # Save the terminal settings
-                fd = sys.stdin.fileno()
-                old_settings = termios.tcgetattr(fd)
-
-                try:
-                    # Set the terminal to raw mode
-                    tty.setraw(fd)
-
-                    while not shutdown_in_progress:
-                        # Check if there's input available
-                        if select.select([sys.stdin], [], [], 0.1)[0]:
-                            key = sys.stdin.read(1)
-                            if key == '9':
-                                print("\n=== Number '9' key pressed ===")
-                                logger.info("Number '9' key detected, initiating graceful shutdown...")
-                                # Restore terminal settings before shutdown
-                                termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
-                                signal_handler(signal.SIGTERM, None)
-                                break
-                        # Sleep briefly to avoid consuming too much CPU
-                        time.sleep(0.1)
-                except Exception as e:
-                    logger.error(f"Error in keyboard listener: {e}")
-                finally:
-                    # Restore terminal settings
-                    termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
-        else:
-            logger.error("Terminal control modules not available on this system")
-
-            def keyboard_listener():
-                """Dummy keyboard listener when terminal control is not available"""
-                logger.warning("Keyboard listener not available. Use SIGTERM to shutdown.")
-                while not shutdown_in_progress:
-                    time.sleep(1)
-
-    # Start the keyboard listener in a daemon thread
-    keyboard_thread = threading.Thread(target=keyboard_listener, daemon=True)
-    keyboard_thread.start()
+    signal.signal(signal.SIGINT, signal_handler)   # Interrupt signal (Ctrl+C)
+    logger.info("Signal handlers registered for graceful shutdown (SIGTERM, SIGINT)")
 
 def close_db_connections() -> None:
     """

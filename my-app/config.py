@@ -72,14 +72,7 @@ STT_CONFIG = {
     "prefix_padding_duration": 0.5  # Add padding to the beginning of speech segments
 }
 
-# Self-introduction patterns to remove from AI responses
-SELF_INTRO_PATTERNS = [
-    r"^I('m| am) [^.!?]*\.",  # Matches "I'm [name]" or "I am [description]"
-    r"^My name is [^.!?]*\.",
-    r"^I('m| am) (a|your|an) [^.!?]*\.",  # Matches "I'm a professor" or "I'm your teacher"
-    r"^I('ll| will) be [^.!?]*\.",  # Matches "I'll be your guide"
-    r"^As (a|an|your) [^.!?]*\.",  # Matches "As a professor, I..."
-]
+
 
 # Teaching Modes
 TEACHING_MODES = ["teacher", "qa"]
@@ -117,22 +110,7 @@ def get_model_info(model_name: str) -> Dict[str, Any]:
             return model
     return {"name": model_name, "temperature": 0.6, "description": model_name}
 
-def get_model_tier(model_name: str) -> str:
-    """Get the tier/category of a model based on its capabilities."""
-    if "70b" in model_name.lower():
-        return "primary"
-    elif "8b" in model_name.lower():
-        return "secondary"
-    elif "7b" in model_name.lower():
-        return "fallback"
-    elif any(size in model_name.lower() for size in ["3b", "1b"]):
-        return "emergency"
-    else:
-        return "unknown"
 
-def validate_teaching_mode(mode: str) -> str:
-    """Validate and return a valid teaching mode."""
-    return mode if mode in TEACHING_MODES else DEFAULT_TEACHING_MODE
 
 def get_ai_request_data(model_name: str, conversation_history: List[Dict[str, Any]], temperature: float = None) -> Dict[str, Any]:
     """Build AI request data with consistent parameters."""
