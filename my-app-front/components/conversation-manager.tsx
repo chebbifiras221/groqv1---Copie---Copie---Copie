@@ -61,7 +61,7 @@ export function ConversationManager() {
   const [isLoadingHistory, setIsLoadingHistory] = useState(false); // Specific state for history loading
   const [initialLoadDone, setInitialLoadDone] = useState(false); // Flag to track initial load
   const [isCreatingNewConversation, setIsCreatingNewConversation] = useState(false); // Flag to prevent multiple creations
-  const [modeWarning, setModeWarning] = useState<string | null>(null); // Warning message for mode mismatch
+  const [isManuallySelecting, setIsManuallySelecting] = useState(false); // Flag to prevent auto-selection during manual selection
   const room = useMaybeRoomContext();
   const connectionState = useConnectionState();
   const isConnected = connectionState === ConnectionState.Connected;
@@ -114,30 +114,8 @@ export function ConversationManager() {
   const fetchConversation = async (conversationId: string) => {
     if (!room) return;
 
-    // Clear any previous mode warning
-    setModeWarning(null);
-
-    // Find the conversation in our list to check its teaching mode
-    const conversation = conversations.find(c => c.id === conversationId);
-
-    // Check if the conversation's teaching mode matches the current mode
-    if (conversation && conversation.teaching_mode) {
-      const currentMode = settings.teachingMode;
-
-      // If the modes don't match, show a warning and don't switch
-      if (conversation.teaching_mode !== currentMode) {
-        console.log(`Mode mismatch: Conversation is in ${conversation.teaching_mode} mode, but current mode is ${currentMode}`);
-
-        // Set a warning message
-        setModeWarning(
-          `This conversation is in ${conversation.teaching_mode === 'teacher' ? 'Teacher' : 'Q&A'} mode. ` +
-          `Please switch to ${conversation.teaching_mode === 'teacher' ? 'Teacher' : 'Q&A'} mode to access it.`
-        );
-
-        // Don't proceed with loading the conversation
-        return;
-      }
-    }
+    // Set flag to prevent automatic conversation selection
+    setIsManuallySelecting(true);
 
     setIsLoading(true);
     try {
@@ -174,6 +152,10 @@ export function ConversationManager() {
       handleError(error, 'conversation', 'Error loading conversation');
     } finally {
       setIsLoading(false);
+      // Reset the manual selection flag after a delay to allow the conversation to load
+      setTimeout(() => {
+        setIsManuallySelecting(false);
+      }, 1000);
     }
   };
 
@@ -381,15 +363,46 @@ export function ConversationManager() {
     }
   }, []);
 
+  // Function to select the latest empty conversation for the current mode - only used during initial load
+  const selectLatestEmptyConversation = async () => {
+    if (!room || !isConnected || isManuallySelecting || currentConversation) return;
+
+    // Don't auto-select if there's already a conversation ID in localStorage
+    const currentId = localStorage.getItem('current-conversation-id');
+    if (currentId) {
+      console.log("Skipping auto-selection: conversation ID already exists in localStorage");
+      return;
+    }
+
+    console.log("Auto-selecting latest empty conversation for current mode:", settings.teachingMode);
+
+    // Find the latest empty conversation for the current mode - be strict about mode matching
+    const emptyConversation = conversations.find(conv => {
+      const conversationMode = conv.teaching_mode || 'teacher';
+      const matchesMode = conversationMode === settings.teachingMode;
+      const isEmpty = !conv.message_count || conv.message_count === 0;
+      return matchesMode && isEmpty;
+    });
+
+    if (emptyConversation) {
+      console.log("Auto-selecting latest empty conversation:", emptyConversation.id);
+      localStorage.setItem('current-conversation-id', emptyConversation.id);
+      fetchConversation(emptyConversation.id);
+    } else {
+      console.log("No empty conversations found for current mode, creating new one");
+      createNewConversation();
+    }
+  };
+
   // Listen for the custom event to create a new conversation when switching modes
   useEffect(() => {
     if (!room) return;
 
-    const handleCreateNewConversationForModeSwitch = (event: Event) => {
+    const handleCreateNewConversationForModeSwitch = async (event: Event) => {
       const customEvent = event as CustomEvent;
       const teachingMode = customEvent.detail?.teachingMode;
 
-      console.log(`Creating new conversation for mode switch to: ${teachingMode}`);
+      console.log(`Handling mode switch to: ${teachingMode} - will force switch to new mode conversation`);
 
       // Clear the current conversation ID in localStorage
       localStorage.removeItem('current-conversation-id');
@@ -397,39 +410,50 @@ export function ConversationManager() {
       // Clear the current conversation in state
       setCurrentConversation(null);
 
-      // Clear any existing conversations from the UI that don't match the new mode
-      setConversations(prev =>
-        prev.filter(conv => conv.teaching_mode === teachingMode)
-      );
+      // Set manual selection flag to prevent auto-selection interference
+      setIsManuallySelecting(true);
 
-      // Create a message to request a new conversation with the specified teaching mode
-      // Always include user ID for data isolation
-      const message = {
-        type: "new_conversation",
-        title: "New Conversation",
-        teaching_mode: teachingMode,
-        user_id: user?.id
-      };
+      // First, refresh the conversation list to get the latest data
+      try {
+        await fetchConversations();
 
-      // Set the creating flag to prevent duplicate creations
-      setIsCreatingNewConversation(true);
+        // After fetching, look for conversations in the new mode - be strict about mode matching
+        const conversationsForMode = conversations.filter(conv => {
+          const conversationMode = conv.teaching_mode || 'teacher';
+          return conversationMode === teachingMode;
+        });
 
-      // Send the request to create a new conversation
-      room.localParticipant.publishData(
-        new TextEncoder().encode(JSON.stringify(message))
-      ).catch(error => {
-        console.error("Error creating new conversation for mode switch:", error);
-      }).finally(() => {
+        // Always create a new conversation when switching modes
+        // This ensures clean separation between teaching modes
+        console.log(`Creating new conversation for ${teachingMode} mode switch`);
+
+        // Create a message to request a new conversation with the specified teaching mode
+        const message = {
+          type: "new_conversation",
+          title: "New Conversation",
+          teaching_mode: teachingMode,
+          user_id: user?.id
+        };
+
+        // Set the creating flag to prevent duplicate creations
+        setIsCreatingNewConversation(true);
+
+        // Send the request to create a new conversation
+        await room.localParticipant.publishData(
+          new TextEncoder().encode(JSON.stringify(message))
+        );
+
+        console.log(`Successfully requested new conversation for ${teachingMode} mode`);
+
+      } catch (error) {
+        console.error("Error handling mode switch:", error);
+      } finally {
         // Reset the creating flag after a short delay
         setTimeout(() => {
           setIsCreatingNewConversation(false);
+          setIsManuallySelecting(false);
         }, 1000);
-      });
-
-      // Also refresh the conversation list to ensure we have the latest data
-      fetchConversations().catch(err =>
-        console.error("Error refreshing conversation list after mode switch:", err)
-      );
+      }
     };
 
     window.addEventListener('create-new-conversation-for-mode-switch', handleCreateNewConversationForModeSwitch);
@@ -437,7 +461,9 @@ export function ConversationManager() {
     return () => {
       window.removeEventListener('create-new-conversation-for-mode-switch', handleCreateNewConversationForModeSwitch);
     };
-  }, [room]);
+  }, [room, conversations, settings.teachingMode, user?.id, fetchConversations, createNewConversation, isManuallySelecting]);
+
+
 
   // Listen for data messages from the server
   useEffect(() => {
@@ -488,32 +514,25 @@ export function ConversationManager() {
           const currentId = localStorage.getItem('current-conversation-id');
 
           // If we have a specific conversation ID in localStorage, try to load it
-          if (sortedConversations.length > 0) {
-            if (currentId) {
-              // Check if the requested conversation exists
-              const conversationExists = sortedConversations.some((c: Conversation) => c.id === currentId);
+          if (sortedConversations.length > 0 && currentId) {
+            const requestedConversation = sortedConversations.find((c: Conversation) => c.id === currentId);
 
-              if (conversationExists) {
-                console.log(`Loading existing conversation: ${currentId}`);
-                // If the current conversation exists but isn't loaded, load it
-                if (!currentConversation || currentConversation.id !== currentId) {
-                  // Load the conversation from localStorage
-                  fetchConversation(currentId);
-                }
-              } else {
-                console.log(`Conversation ${currentId} not found in history`);
-                // The conversation ID in localStorage doesn't exist
-                // This could happen if conversations were deleted on another device
-                // We'll let the createNewConversation flow handle this case
+            if (requestedConversation) {
+              console.log(`Loading existing conversation: ${currentId}`);
+              // If the current conversation exists but isn't loaded, load it
+              if (!currentConversation || currentConversation.id !== currentId) {
+                fetchConversation(currentId);
               }
-            } else if (!initialLoadDone) {
-              // If we're in the initial loading phase and don't have a current ID,
-              // we'll create a new conversation after a short delay
-              // This ensures the history is loaded and visible first
-              console.log("Conversation list loaded, will create new conversation shortly");
-
-              // We don't need to do anything here - the useEffect will handle creating a new conversation
+            } else {
+              console.log(`Conversation ${currentId} not found in history`);
+              // Clear the invalid conversation ID
+              localStorage.removeItem('current-conversation-id');
+              setCurrentConversation(null);
             }
+          } else if (!initialLoadDone && sortedConversations.length > 0 && !isManuallySelecting && !currentConversation) {
+            // Only auto-select if we're in the initial loading phase AND don't have a current conversation
+            console.log("Conversation list loaded, checking for empty conversations");
+            selectLatestEmptyConversation();
           }
         } else if (data.type === "conversation_data") {
           // Update the current conversation in state
@@ -521,6 +540,9 @@ export function ConversationManager() {
 
           // Make sure localStorage is updated with the current conversation ID
           localStorage.setItem('current-conversation-id', data.conversation.id);
+
+          // Reset manual selection flag when conversation data is received
+          setIsManuallySelecting(false);
         } else if (data.type === "new_conversation_created") {
           // Handle new conversation creation
           console.log("New conversation created with ID:", data.conversation_id);
@@ -662,9 +684,7 @@ export function ConversationManager() {
     return () => {
       room.off("dataReceived", handleDataReceived);
     };
-  }, [room, currentConversation]);
-
-
+  }, [room, currentConversation, settings.teachingMode, initialLoadDone, isManuallySelecting]);
 
   const saveTitle = async (conversationId: string, newTitle: string) => {
     if (!room || !newTitle.trim()) return;
@@ -753,7 +773,7 @@ export function ConversationManager() {
             size="icon"
             className="h-10 w-10 rounded-full text-danger-DEFAULT hover:text-danger-hover hover:bg-danger-DEFAULT/10 transition-colors duration-200"
             title={`Clear All ${settings.teachingMode === 'teacher' ? 'Teacher' : 'Q&A'} Mode Conversations`}
-            disabled={isLoading || conversations.filter(c => !c.teaching_mode || c.teaching_mode === settings.teachingMode).length === 0}
+            disabled={isLoading || conversations.filter(c => (c.teaching_mode || 'teacher') === settings.teachingMode).length === 0}
           >
             <Trash2 size={18} />
           </Button>
@@ -817,13 +837,6 @@ export function ConversationManager() {
             </div>
           )}
 
-          {/* Warning message for mode mismatch */}
-          {modeWarning && (
-            <div className="mb-4 p-3 bg-warning-light border border-warning-DEFAULT rounded-lg text-sm text-warning-dark">
-              <p>{modeWarning}</p>
-            </div>
-          )}
-
           {conversations.length > 0 && (
             <div className="space-y-1.5">
               {/* Filter conversations based on current mode */}
@@ -831,8 +844,10 @@ export function ConversationManager() {
                 .filter(conversation => {
                   // Filter out conversations with null IDs
                   if (!conversation.id) return false;
-                  // Filter based on teaching mode
-                  return !conversation.teaching_mode || conversation.teaching_mode === settings.teachingMode;
+                  // Filter based on teaching mode - be more strict about mode matching
+                  // If conversation has no teaching_mode, treat it as 'teacher' mode (default)
+                  const conversationMode = conversation.teaching_mode || 'teacher';
+                  return conversationMode === settings.teachingMode;
                 })
                 .map((conversation) => (
                   <ConversationItem

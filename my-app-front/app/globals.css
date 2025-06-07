@@ -546,3 +546,48 @@ html:not(.dark) .value {
 html:not(.dark) .bracket {
   color: #000000;
 }
+
+/* Sidebar toggle button styling */
+.sidebar-toggle-btn {
+  position: relative;
+  overflow: hidden;
+  will-change: transform, box-shadow;
+  backface-visibility: hidden;
+  transform: translateZ(0);
+  animation: gentle-pulse 3s ease-in-out infinite;
+}
+
+.sidebar-toggle-btn::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 6px;
+  background: linear-gradient(135deg,
+    rgba(33, 136, 255, 0.08),
+    rgba(110, 64, 201, 0.08)
+  );
+  opacity: 1;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.sidebar-toggle-btn:hover {
+  animation: none;
+  box-shadow: 0 0 16px rgba(33, 136, 255, 0.25);
+}
+
+.sidebar-toggle-btn:hover::before {
+  background: linear-gradient(135deg,
+    rgba(33, 136, 255, 0.15),
+    rgba(110, 64, 201, 0.15)
+  );
+}
+
+/* Gentle pulse animation for sidebar toggle */
+@keyframes gentle-pulse {
+  0%, 100% {
+    box-shadow: 0 0 8px rgba(33, 136, 255, 0.12);
+  }
+  50% {
+    box-shadow: 0 0 12px rgba(33, 136, 255, 0.2);
+  }
+}

@@ -1097,52 +1097,32 @@ Do NOT automatically proceed to the next chapter when you're done - wait for me 
       case "start":
         message = `Teach me Chapter ${chapter.number}: ${chapter.title}.
 
-Please provide a clear explanation of this chapter with:
-• An introduction to the main topic
-• Key concepts explained step by step
-• Examples and code samples where helpful
-• Clear explanations of important ideas`;
+Please provide a clear explanation of this chapter in flowing paragraph format. Start with an introduction to the main topic followed by [EXPLAIN] tags explaining why this topic is important. Present key concepts in connected paragraphs with [EXPLAIN] tags after every significant statement or concept. Include examples and code samples within the paragraph flow, using [EXPLAIN] after each example to clarify its purpose. Avoid bullet points and structure everything as natural, flowing paragraphs. Use [EXPLAIN] extensively after every line that introduces new information.`;
         break;
       case "Learning Objectives":
         message = `Show me the Learning Objectives for Chapter ${chapter.number}: ${chapter.title}.
 
-Please provide a clear list of what I'll learn in this chapter, including:
-• The main concepts I should understand
-• The skills I should develop
-• The knowledge I should gain
-
-Please format this as a clean, bulleted list that's easy to read.`;
+Please provide 3-4 learning objectives in flowing paragraph format. Write each objective as a complete sentence and use [EXPLAIN] tags after each objective to explain why it's important and how it connects to practical programming. Avoid bullet points and structure the content as connected paragraphs that flow naturally from one objective to the next. Keep the entire response under 250 words while using [EXPLAIN] extensively.`;
         break;
       case "Practice Exercises":
         message = `Show me the Practice Exercises for Chapter ${chapter.number}: ${chapter.title}.
 
-I'd like 3-5 practical exercises that will help me apply what I've learned in this chapter.
-For each exercise, please include:
-• A clear problem statement
-• Example inputs/outputs where relevant
-• Difficulty level
-• Hints to help me if I get stuck`;
+I'd like 3-4 practical exercises presented in flowing paragraph format. For each exercise, write a clear problem statement followed by [EXPLAIN] tags that explain the purpose and learning goals. Include the difficulty level and any necessary hints in paragraph form with [EXPLAIN] tags explaining why each hint is helpful. Avoid bullet points and structure the content as connected paragraphs. Use [EXPLAIN] after every significant instruction or concept. Keep the entire response under 300 words.`;
         break;
       case "Quiz":
         message = `Give me a Quiz on Chapter ${chapter.number}: ${chapter.title}.
 
-I want to test my understanding with:
-• 5-10 questions covering the key concepts
-• A mix of multiple choice and short answer questions
-• The correct answers provided at the end`;
+I want 5-7 questions presented in flowing paragraph format. Write each question as part of a natural paragraph flow, then provide the answer followed by [EXPLAIN] tags that explain why the answer is correct and how it relates to the chapter concepts. Mix multiple choice and short answer questions but present them in paragraph form rather than bullet points. Use [EXPLAIN] after every answer to provide detailed reasoning. Keep the entire response under 350 words while using [EXPLAIN] extensively.`;
         break;
       case "Summary":
         message = `Provide a Summary of Chapter ${chapter.number}: ${chapter.title}.
 
-I need a concise overview that:
-• Highlights the most important concepts
-• Connects the main ideas together
-• Reinforces what I should remember from this chapter`;
+I need a concise overview (maximum 300 words) written in flowing paragraph format. Highlight the 3-4 most important concepts and connect them naturally in paragraph form. Use [EXPLAIN] tags after every major concept to explain why it's important and how it connects to practical programming. Avoid bullet points completely and structure the content as connected paragraphs that flow from one idea to the next. Use [EXPLAIN] extensively throughout to reinforce understanding.`;
         break;
       default:
         message = `Show me the ${sectionName} section of Chapter ${chapter.number}: ${chapter.title}.
 
-Please focus specifically on this section and provide a clear, concise explanation.`;
+Please focus specifically on this section and provide a clear explanation in flowing paragraph format. Use [EXPLAIN] tags after every significant statement or concept to provide detailed understanding. Avoid bullet points and structure the content as connected paragraphs that flow naturally. Use [EXPLAIN] extensively throughout your response.`;
     }
 
     // Instead of sending two separate messages, let's just send one visible message

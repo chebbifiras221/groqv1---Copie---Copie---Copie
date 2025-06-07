@@ -15,7 +15,7 @@ DB_FILE_NAME = "conversations.db"
 DEFAULT_CONVERSATION_TITLE = "New Conversation"
 
 # Message Processing Configuration
-MAX_MESSAGE_LENGTH = 4000
+MAX_MESSAGE_LENGTH = 50000  # Increased significantly to prevent truncation
 MAX_CONVERSATION_HISTORY = 15  # Keep last 15 messages + system prompt
 CONVERSATION_LIST_LIMIT = 20
 
@@ -41,7 +41,7 @@ AI_MODELS = [
 
 # AI Request Parameters
 AI_REQUEST_PARAMS = {
-    "max_tokens": 1024,
+    "max_tokens": 2048,  # Increased to allow longer responses when needed
     "top_p": 0.9,  # More focused on likely responses (good for factual teaching)
     "frequency_penalty": 0.2,  # Slightly reduce repetition
     "presence_penalty": 0.1  # Slightly encourage topic diversity

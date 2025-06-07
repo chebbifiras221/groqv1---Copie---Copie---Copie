@@ -5,7 +5,7 @@ import {
   useConnectionState,
   useLocalParticipant,
 } from "@livekit/components-react";
-import { AnimatePresence } from "framer-motion";
+import { AnimatePresence, motion } from "framer-motion";
 import { ConnectionState } from "livekit-client";
 import { MessageSquare } from "lucide-react";
 
@@ -16,6 +16,7 @@ import { TextInput } from "./text-input";
 import { ConversationManager } from "./conversation-manager";
 import { ConnectionToast } from "./ui/status-indicator";
 import { MobileConversationDrawer } from "./ui/mobile-conversation-drawer";
+import { useSettings } from "@/hooks/use-settings";
 
 export interface PlaygroundProps {
   onConnect?: (connect: boolean) => void;
@@ -24,6 +25,7 @@ export interface PlaygroundProps {
 export function Playground({ onConnect: _ }: PlaygroundProps) {
   const { localParticipant } = useLocalParticipant();
   const roomState = useConnectionState();
+  const { settings } = useSettings();
   const [showConnectionToast, setShowConnectionToast] = useState(false);
   const [lastConnectionState, setLastConnectionState] = useState<ConnectionState | null>(null);
   const [showMobileConversations, setShowMobileConversations] = useState(false);
@@ -134,14 +136,35 @@ export function Playground({ onConnect: _ }: PlaygroundProps) {
           onClose={() => setShowMobileConversations(false)}
         />
 
-        {/* Desktop sidebar */}
-        {isConnected && (
-          <div className="hidden md:block w-64 lg:w-72 bg-bg-secondary border-r border-bg-tertiary/30">
-            <div className="h-full overflow-y-auto">
-              <ConversationManager />
-            </div>
-          </div>
-        )}
+        {/* Desktop sidebar with smooth animation */}
+        <AnimatePresence mode="wait">
+          {isConnected && settings.sidebarVisible && (
+            <motion.div
+              className="hidden md:flex bg-bg-secondary border-r border-bg-tertiary/30 flex-shrink-0"
+              initial={{ width: 0, opacity: 0 }}
+              animate={{
+                width: 256, // Fixed width for smoother animation (16rem = 256px)
+                opacity: 1
+              }}
+              exit={{ width: 0, opacity: 0 }}
+              transition={{
+                duration: 0.35,
+                ease: [0.25, 0.1, 0.25, 1], // Optimized cubic-bezier for smoothest animation
+                width: { duration: 0.35, ease: [0.25, 0.1, 0.25, 1] },
+                opacity: { duration: 0.25, ease: "easeOut" }
+              }}
+              style={{
+                willChange: 'width, opacity',
+                backfaceVisibility: 'hidden',
+                transform: 'translateZ(0)' // Force hardware acceleration
+              }}
+            >
+              <div className="h-full overflow-y-auto w-64">
+                <ConversationManager />
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
 
         <div className="flex flex-col flex-1 bg-bg-primary relative">
           {/* Mobile conversation button */}

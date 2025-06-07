@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Settings, LogOut, HelpCircle, Moon, Sun, Menu, X, MessageSquare, BookOpen, HelpCircle as HelpIcon } from 'lucide-react';
+import { Settings, LogOut, HelpCircle, Moon, Sun, Menu, X, MessageSquare, BookOpen, HelpCircle as HelpIcon, PanelLeftClose, PanelLeft } from 'lucide-react';
 import { SimpleBotFace } from './simple-bot-face';
 import { Button } from './button';
 import { StatusIndicator } from './status-indicator';
@@ -22,7 +22,7 @@ export function Header({ title = "Programming Teacher" }: HeaderProps) {
   const { disconnect } = useConnection();
   const { logout } = useAuth();
   const { theme, toggleTheme } = useTheme();
-  const { settings, updateSettings } = useSettings();
+  const { settings, updateSettings, toggleSidebar } = useSettings();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isHelpOpen, setIsHelpOpen] = useState(false);
@@ -39,6 +39,11 @@ export function Header({ title = "Programming Teacher" }: HeaderProps) {
 
     // First update the teaching mode in settings
     updateSettings({ teachingMode: newMode });
+
+    // Ensure sidebar is visible when switching modes
+    if (!settings.sidebarVisible) {
+      updateSettings({ sidebarVisible: true });
+    }
 
     // Then create a new conversation with the new mode
     // This ensures the conversation uses the new teaching mode
@@ -103,6 +108,20 @@ export function Header({ title = "Programming Teacher" }: HeaderProps) {
             onClick={toggleMobileMenu}
           >
             {isMobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
+          </Button>
+
+          {/* Desktop sidebar toggle button */}
+          <Button
+            variant="ghost"
+            size="icon"
+            className="hidden md:flex mr-1 relative group transition-all duration-300 hover:bg-primary-DEFAULT/10 sidebar-toggle-btn"
+            onClick={toggleSidebar}
+            title={settings.sidebarVisible ? "Hide conversation history" : "Show conversation history"}
+          >
+            {/* Icon with enhanced styling */}
+            <div className="relative z-10 transition-all duration-300 group-hover:text-primary-DEFAULT group-hover:scale-110">
+              {settings.sidebarVisible ? <PanelLeftClose className="w-5 h-5" /> : <PanelLeft className="w-5 h-5" />}
+            </div>
           </Button>
 
           <SimpleBotFace size={32} />

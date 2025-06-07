@@ -95,15 +95,18 @@ def find_or_create_empty_conversation(teaching_mode="teacher", check_current=Tru
             logger.error(f"Error checking if conversation exists: {e}")
             current_conversation_id = None
 
-    # Look for empty conversations for this user
+    # Look for empty conversations for this user with matching teaching mode
     empty_conversation_id = None
     conversations = database.list_conversations(limit=10, user_id=user_id)
 
     for conv in conversations:
-        # Check if this conversation has any messages
-        if not conv.get("message_count") or conv.get("message_count") == 0:
+        # Check if this conversation has any messages AND matches the teaching mode
+        conversation_mode = conv.get("teaching_mode") or "teacher"  # Default to teacher if no mode set
+        has_no_messages = not conv.get("message_count") or conv.get("message_count") == 0
+
+        if has_no_messages and conversation_mode == teaching_mode:
             empty_conversation_id = conv["id"]
-            logger.info(f"Found existing empty conversation: {empty_conversation_id} for user: {user_id}")
+            logger.info(f"Found existing empty conversation with matching mode ({teaching_mode}): {empty_conversation_id} for user: {user_id}")
             break
 
     # If we found an empty conversation, use it
