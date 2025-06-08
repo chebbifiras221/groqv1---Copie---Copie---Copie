@@ -7,11 +7,8 @@ import { useAIResponses } from './use-ai-responses';
 import { useTranscriber } from './use-transcriber';
 import { useAuth } from './use-auth';
 
-// Helper function to check if a room is connected
-// This avoids TypeScript errors with ConnectionState comparison
-function isRoomConnected(room: Room): boolean {
-  return room.state === ConnectionState.Connected;
-}
+// Import isRoomConnected from conversation-utils to avoid duplication
+import { isRoomConnected } from '@/utils/conversation-utils';
 
 export type MessageType = 'user' | 'ai';
 

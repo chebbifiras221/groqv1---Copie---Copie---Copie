@@ -147,6 +147,22 @@ export function useAIResponses() {
     spokenMessages.clear();
   }, []);
 
+  // Helper function to handle binary audio data
+  const handleBinaryAudio = useCallback((payload: Uint8Array) => {
+    // Only play audio if it's not a web TTS message (which is handled separately)
+    if (payload.length > 100) { // Assuming web TTS messages are small JSON
+      // Create a blob from the binary data
+      const audioBlob = new Blob([payload], { type: "audio/mp3" });
+      // Create a URL for the audio blob
+      const audioUrl = URL.createObjectURL(audioBlob);
+      // Play the audio
+      const audio = new Audio(audioUrl);
+      audio.play();
+      // Clean up the URL when done
+      audio.onended = () => URL.revokeObjectURL(audioUrl);
+    }
+  }, []);
+
   useEffect(() => {
     if (!room) {
       return;
@@ -156,18 +172,7 @@ export function useAIResponses() {
       try {
         // Handle binary audio data with specific topic
         if (topic === "binary_audio") {
-          // Only play audio if it's not a web TTS message (which is handled separately)
-          if (payload.length > 100) { // Assuming web TTS messages are small JSON
-            // Create a blob from the binary data
-            const audioBlob = new Blob([payload], { type: "audio/mp3" });
-            // Create a URL for the audio blob
-            const audioUrl = URL.createObjectURL(audioBlob);
-            // Play the audio
-            const audio = new Audio(audioUrl);
-            audio.play();
-            // Clean up the URL when done
-            audio.onended = () => URL.revokeObjectURL(audioUrl);
-          }
+          handleBinaryAudio(payload);
           return;
         }
 
@@ -254,19 +259,8 @@ export function useAIResponses() {
             }
           }
         } catch (error) {
-          // If it's not valid JSON, it might be binary audio data without a topic
-          // Only play audio if it's not a web TTS message (which is handled separately)
-          if (payload.length > 100) { // Assuming web TTS messages are small JSON
-            // Create a blob from the binary data
-            const audioBlob = new Blob([payload], { type: "audio/mp3" });
-            // Create a URL for the audio blob
-            const audioUrl = URL.createObjectURL(audioBlob);
-            // Play the audio
-            const audio = new Audio(audioUrl);
-            audio.play();
-            // Clean up the URL when done
-            audio.onended = () => URL.revokeObjectURL(audioUrl);
-          }
+          // If it's not valid JSON, it might be binary audio data
+          handleBinaryAudio(payload);
         }
       } catch (error) {
         handleError(error, 'api', 'Error processing server data');
@@ -288,7 +282,7 @@ export function useAIResponses() {
         console.error('Error removing data receiver:', error);
       }
     };
-  }, [room, state, webTTS, settings, handleError]);
+  }, [room, state, webTTS, settings, handleError, handleBinaryAudio]);
 
   // Clear spoken messages when the room changes
   useEffect(() => {

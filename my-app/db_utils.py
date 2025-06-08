@@ -5,7 +5,6 @@ This module provides a connection pool and utility functions for database operat
 
 import sqlite3
 import logging
-import threading
 from typing import Any, Dict, List, Optional, Tuple, Union
 
 logger = logging.getLogger("db-utils")
@@ -15,7 +14,6 @@ import os
 DB_FILE = os.path.abspath(os.path.join(os.path.dirname(__file__), "conversations.db"))
 
 # Simple connection management for SQLite
-_connection_lock = threading.Lock()
 
 def _create_connection():
     """Create a new database connection with proper settings"""
@@ -136,24 +134,7 @@ def get_record_by_id(table: str, record_id: str, fields: List[str] = None) -> Op
     query = f"SELECT {field_list} FROM {table} WHERE id = ?"
     return execute_query(query, (record_id,), fetch_one=True)
 
-def count_records(table: str, where_clause: str = None, params: Tuple = ()) -> int:
-    """
-    Count records in a table with an optional WHERE clause.
 
-    Args:
-        table: Table name
-        where_clause: WHERE clause without the 'WHERE' keyword (optional)
-        params: Parameters for the WHERE clause (optional)
-
-    Returns:
-        Number of records
-    """
-    query = f"SELECT COUNT(*) as count FROM {table}"
-    if where_clause:
-        query += f" WHERE {where_clause}"
-
-    result = execute_query(query, params, fetch_one=True)
-    return result["count"] if result else 0
 
 
 

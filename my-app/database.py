@@ -10,8 +10,7 @@ from db_utils import (
     check_column_exists,
     execute_query,
     execute_transaction,
-    get_record_by_id,
-    count_records
+    get_record_by_id
 )
 
 logger = logging.getLogger("database")
@@ -208,8 +207,13 @@ def list_conversations(limit: int = 10, offset: int = 0, include_messages: bool 
 
         # Get message counts and last message for each conversation
         for conv in conversations:
-            # Get message count using the utility function
-            conv["message_count"] = count_records("messages", "conversation_id = ?", (conv["id"],))
+            # Get message count
+            count_result = execute_query(
+                "SELECT COUNT(*) as count FROM messages WHERE conversation_id = ?",
+                (conv["id"],),
+                fetch_one=True
+            )
+            conv["message_count"] = count_result["count"] if count_result else 0
 
             # Get last message
             last_message = execute_query(
@@ -476,4 +480,88 @@ def reuse_empty_conversation(conversation_id: str, teaching_mode: str = None, li
         }
     except Exception as e:
         logger.error(f"Error reusing empty conversation {conversation_id}: {e}")
+        raise
+
+
+def clear_conversations_by_mode(teaching_mode: str, user_id: str = None) -> Dict[str, Any]:
+    """
+    Delete all conversations and their messages for a specific teaching mode.
+
+    Args:
+        teaching_mode: The teaching mode to filter by ('teacher' or 'qa')
+        user_id: The user ID to filter by (for data isolation)
+
+    Returns:
+        Dict with deleted_count and new_conversation_id
+    """
+    try:
+        # First, get the IDs of conversations with the specified teaching mode and user
+        if user_id:
+            conversation_ids_result = execute_query(
+                "SELECT id FROM conversations WHERE (teaching_mode = ? OR (teaching_mode IS NULL AND ? = 'teacher')) AND user_id = ?",
+                (teaching_mode, teaching_mode, user_id),
+                fetch_all=True
+            )
+        else:
+            # Legacy mode - no user filtering
+            conversation_ids_result = execute_query(
+                "SELECT id FROM conversations WHERE (teaching_mode = ? OR (teaching_mode IS NULL AND ? = 'teacher')) AND user_id IS NULL",
+                (teaching_mode, teaching_mode),
+                fetch_all=True
+            )
+
+        conversation_ids = [row['id'] for row in conversation_ids_result] if conversation_ids_result else []
+
+        if not conversation_ids:
+            # No conversations to delete
+            logger.info(f"No conversations found with teaching mode: {teaching_mode} for user: {user_id}")
+
+            # Create a new conversation with user_id
+            new_conversation_id = create_conversation("New Conversation", teaching_mode, user_id)
+
+            return {
+                "deleted_count": 0,
+                "new_conversation_id": new_conversation_id
+            }
+
+        # Prepare transaction queries
+        queries: List[Dict[str, Any]] = []
+
+        # Delete messages for these conversations
+        placeholders = ','.join(['?'] * len(conversation_ids))
+        queries.append({
+            "query": f"DELETE FROM messages WHERE conversation_id IN ({placeholders})",
+            "params": conversation_ids
+        })
+
+        # Delete the conversations
+        queries.append({
+            "query": f"DELETE FROM conversations WHERE id IN ({placeholders})",
+            "params": conversation_ids
+        })
+
+        # Execute deletion queries in a transaction
+        if execute_transaction(queries):
+            deleted_count = len(conversation_ids)
+            logger.info(f"Cleared {deleted_count} conversations with teaching mode: {teaching_mode} for user: {user_id}")
+
+            # Create a new conversation after successful deletion
+            new_conversation_id = create_conversation("New Conversation", teaching_mode, user_id)
+            logger.info(f"Created new conversation with ID: {new_conversation_id} and teaching mode: {teaching_mode}")
+
+            return {
+                "deleted_count": deleted_count,
+                "new_conversation_id": new_conversation_id
+            }
+        else:
+            logger.error("Failed to execute transaction for clearing conversations")
+            # Try to create a new conversation separately if the transaction failed
+            new_conversation_id = create_conversation("New Conversation", teaching_mode, user_id)
+
+            return {
+                "deleted_count": 0,
+                "new_conversation_id": new_conversation_id
+            }
+    except Exception as e:
+        logger.error(f"Error clearing conversations by mode: {e}")
         raise

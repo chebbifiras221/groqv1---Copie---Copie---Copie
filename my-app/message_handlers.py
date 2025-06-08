@@ -7,7 +7,7 @@ import json
 import logging
 import config
 import database
-import database_updates
+import database
 import auth_api
 
 logger = logging.getLogger("message-handlers")
@@ -19,7 +19,7 @@ async def handle_clear_conversations(message, ctx, current_conversation_id, safe
     # Note: current_conversation_id parameter is kept for API consistency but not used in this function
 
     # Clear conversations for the specified teaching mode with user_id
-    result = database_updates.clear_conversations_by_mode(teaching_mode, user_id)
+    result = database.clear_conversations_by_mode(teaching_mode, user_id)
     deleted_count = result["deleted_count"]
     new_conversation_id = result["new_conversation_id"]
 

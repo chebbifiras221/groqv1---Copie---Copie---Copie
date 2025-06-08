@@ -1,15 +1,16 @@
 // Regular expressions to detect chapter titles
 const chapterRegex = /^## Chapter (\d+): (.+)$/;
+// Clean course outline format (preferred): "1. Chapter Title" or "1. Introduction to Topic"
+const cleanOutlineRegex = /^\s*(\d+)\.\s+([A-Z][^#\n]*?)(?:\s*$|\s*\n)/;
 // New regex to match the format in the image (numbered list with asterisks)
 // This captures the number before the dot as the chapter number
 const outlineChapterRegex = /^\s*(\d+)\.\s+\*\*([^*]+)\*\*$/;
-// Additional regex to match other common outline formats
-// This also captures the number before the dot as the chapter number
-const altOutlineRegex = /^\s*(\d+)\.\s+(.*?)$/;
 // More comprehensive regex patterns for different chapter formats
 const boldChapterRegex = /^\s*\*\*Chapter (\d+):\s*([^*]+)\*\*$/;
 const numberedBoldRegex = /^\s*(\d+)\.\s*\*\*([^*]+)\*\*.*$/;
 const simpleNumberedRegex = /^\s*(\d+)\.\s+([A-Z][^.\n]*?)(?:\s*$|\s*\n)/;
+// Fallback regex for other formats (but exclude lines with hashtags)
+const altOutlineRegex = /^\s*(\d+)\.\s+([^#\n]+?)(?:\s*$|\s*\n)/;
 
 export interface ChapterData {
   id: string;
@@ -105,20 +106,37 @@ export const extractCourseStructure = (text: string): ChapterData[] => {
     usedChapterNumbers.clear();
     processedChapters.clear();
 
-    // Try numbered bold format first (1. **Title**)
+    // Try clean outline format first (1. Chapter Title)
     lines.forEach((line, index) => {
       // Skip subtopic lines (### X.Y: format) - these should not be treated as chapters
       if (line.match(/^### \d+\.\d+:/)) {
         return;
       }
 
-      const match = line.match(numberedBoldRegex);
+      const match = line.match(cleanOutlineRegex);
       if (match) {
         const chapterNumber = parseInt(match[1]);
         const chapterTitle = match[2];
         addChapter(chapterNumber, chapterTitle, index);
       }
     });
+
+    // If no clean format found, try numbered bold format (1. **Title**)
+    if (chapters.length === 0) {
+      lines.forEach((line, index) => {
+        // Skip subtopic lines (### X.Y: format) - these should not be treated as chapters
+        if (line.match(/^### \d+\.\d+:/)) {
+          return;
+        }
+
+        const match = line.match(numberedBoldRegex);
+        if (match) {
+          const chapterNumber = parseInt(match[1]);
+          const chapterTitle = match[2];
+          addChapter(chapterNumber, chapterTitle, index);
+        }
+      });
+    }
 
     // If no numbered bold found, try the primary outline regex (with asterisks)
     if (chapters.length === 0) {

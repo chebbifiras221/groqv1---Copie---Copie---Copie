@@ -8,34 +8,8 @@ export function isRoomConnected(room: Room): boolean {
   return room.state === ConnectionState.Connected;
 }
 
-/**
- * Formats a date string into a human-readable format
- */
-export function formatDate(dateString: string): string {
-  try {
-    const date = new Date(dateString);
-    const now = new Date();
-    const isToday = date.getDate() === now.getDate() &&
-                   date.getMonth() === now.getMonth() &&
-                   date.getFullYear() === now.getFullYear();
-
-    // Format hours and minutes with leading zeros
-    const hours = date.getHours();
-    const minutes = date.getMinutes().toString().padStart(2, '0');
-    const ampm = hours >= 12 ? 'PM' : 'AM';
-    const hour12 = hours % 12 || 12; // Convert 0 to 12 for 12 AM
-
-    // If today, show only time, otherwise show date and time
-    if (isToday) {
-      return `Today at ${hour12}:${minutes} ${ampm}`;
-    } else {
-      // Format as MM/DD/YY, HH:MM AM/PM
-      return `${date.getMonth()+1}/${date.getDate()}/${date.getFullYear().toString().slice(-2)} · ${hour12}:${minutes} ${ampm}`;
-    }
-  } catch (e) {
-    return dateString;
-  }
-}
+// Note: formatDate function moved to lib/utils.ts to avoid duplication
+// Import it from there: import { formatDate } from '@/lib/utils';
 
 /**
  * Publishes data to a room with retry logic

@@ -4,7 +4,7 @@ import { useState } from "react";
 import { motion } from "framer-motion";
 import { Button } from "./ui/button";
 import { Edit, Trash2, Check, X, Clock, BookOpen, HelpCircle } from "lucide-react";
-import { formatDate } from "@/utils/conversation-utils";
+import { formatDate } from "@/lib/utils";
 
 interface ConversationItemProps {
   conversation: any;
