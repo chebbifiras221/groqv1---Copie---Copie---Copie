@@ -160,7 +160,7 @@ export function useConversation() {
                 return parsedData.teaching_mode;
               }
             } catch (parseError) {
-              console.error('Error parsing conversation data:', parseError);
+              // Silently handle parsing errors
             }
           }
         }
@@ -175,7 +175,7 @@ export function useConversation() {
           }
         }
       } catch (e) {
-        console.error('Error getting conversation mode:', e);
+        // Silently handle errors getting conversation mode
       }
     }
 
@@ -339,7 +339,7 @@ export function useConversation() {
           });
         }
       } catch (e) {
-        console.error("Error parsing data message:", e);
+        // Silently handle data parsing errors
       }
     };
 
@@ -395,7 +395,7 @@ export function useConversation() {
             teachingMode = parsedSettings.teachingMode || 'teacher';
           }
         } catch (e) {
-          console.error('Error getting teaching mode from settings:', e);
+          // Silently handle settings parsing errors
         }
 
         // Get the current conversation ID from localStorage
@@ -424,7 +424,7 @@ export function useConversation() {
 
         // Check if the room is connected before attempting to publish
         if (room.state !== ConnectionState.Connected) {
-          console.warn('Room not connected, attempting to reconnect...');
+          // Room not connected, attempting to reconnect
 
           // Wait for the room to reconnect (up to 5 seconds)
           for (let i = 0; i < 5; i++) {
@@ -451,7 +451,7 @@ export function useConversation() {
             break; // Success, exit the loop
           } catch (publishError) {
             retryCount++;
-            console.warn(`Publish attempt ${retryCount} failed:`, publishError);
+            // Publish attempt failed, will retry
 
             if (retryCount >= maxRetries) {
               throw publishError; // Rethrow after max retries
@@ -475,9 +475,7 @@ export function useConversation() {
           conversation_id: currentConversationId || undefined
         };
       } catch (error) {
-        console.error("Error sending text input:", error);
-        // Add user-visible error handling here if needed
-        // The message will still appear in the UI but with an error indicator
+        // Error sending text input - message will appear with error indicator
         const currentConversationId = localStorage.getItem('current-conversation-id');
         return {
           id: `user-error-${Date.now()}`,
@@ -519,7 +517,7 @@ export function useConversation() {
           teachingMode = parsedSettings.teachingMode || 'teacher';
         }
       } catch (e) {
-        console.error('Error getting teaching mode from settings:', e);
+        // Silently handle settings parsing errors
       }
 
       const message = {
@@ -533,7 +531,7 @@ export function useConversation() {
         try {
           // Check if the room is connected before attempting to publish
           if (room.state !== ConnectionState.Connected) {
-            console.warn('Room not connected, waiting before creating new conversation...');
+            // Room not connected, waiting before creating new conversation
             // Wait for the room to connect before trying to create a new conversation
             setTimeout(createNewConversation, 1000);
             return;
@@ -549,7 +547,7 @@ export function useConversation() {
               break; // Success, exit the loop
             } catch (publishError) {
               retryCount++;
-              console.warn(`Publish attempt ${retryCount} failed:`, publishError);
+              // Publish attempt failed, will retry
 
               if (retryCount >= maxRetries) {
                 throw publishError; // Rethrow after max retries
@@ -561,7 +559,7 @@ export function useConversation() {
             }
           }
         } catch (error) {
-          console.error('Error creating new conversation:', error);
+          // Silently handle conversation creation errors
         }
       };
 
@@ -584,7 +582,7 @@ export function useConversation() {
           teachingMode = parsedSettings.teachingMode || 'teacher';
         }
       } catch (e) {
-        console.error('Error getting teaching mode from settings:', e);
+        // Silently handle settings parsing errors
       }
 
       // Get the current conversation ID from localStorage
@@ -620,7 +618,7 @@ export function useConversation() {
         );
       }
     } catch (error) {
-      console.error("Error sending hidden instruction:", error);
+      // Silently handle hidden instruction errors
     }
   }, [room, currentConversationId, getCurrentConversationMode, user]);
 

@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Settings, LogOut, HelpCircle, Moon, Sun, Menu, X, MessageSquare, BookOpen, HelpCircle as HelpIcon, PanelLeftClose, PanelLeft } from 'lucide-react';
+import { Settings, LogOut, HelpCircle, Moon, Sun, Menu, X, MessageSquare, BookOpen, PanelLeftClose, PanelLeft } from 'lucide-react';
 import { SimpleBotFace } from './simple-bot-face';
 import { Button } from './button';
 import { StatusIndicator } from './status-indicator';
@@ -144,7 +144,7 @@ export function Header({ title = "Programming Teacher" }: HeaderProps) {
               </>
             ) : (
               <>
-                <HelpIcon size={16} className="teaching-mode-icon" />
+                <HelpCircle size={16} className="teaching-mode-icon" />
                 <span className="text-sm font-medium">Q&A Mode</span>
               </>
             )}

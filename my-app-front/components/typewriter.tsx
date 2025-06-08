@@ -142,7 +142,7 @@ export function Typewriter({ typingSpeed = 50 }: TypewriterProps) {
     }
   }, [messages, currentConversationId, processMessageForCourseStructure]);
 
-  // Helper function to process [CODE] tags is now imported from utils/markdown-formatter
+
 
   // Function to render AI responses with enhanced formatting
   const renderEnhancedResponse = (text: string) => {
@@ -227,7 +227,7 @@ export function Typewriter({ typingSpeed = 50 }: TypewriterProps) {
     );
   };
 
-  // HTML entity handling and parseMarkdownTable are imported at the top of the file
+
 
   // Get settings at the component level, not inside the helper function
   const { settings, updateSettings } = useSettings();
@@ -263,14 +263,11 @@ export function Typewriter({ typingSpeed = 50 }: TypewriterProps) {
     // First, process any [CODE] tags to ensure HTML entities are properly decoded
     text = processCodeTags(text);
 
-    // Define regex patterns for board, explain, and code blocks - more robust patterns
-    // These patterns will match even with whitespace or newlines around the markers
-    // Using balanced matching to ensure we don't capture nested sections
-    // We'll process the content in multiple passes to handle nested sections
+    // Define regex patterns for board, explain, and code blocks
 
-    // Function to find the outermost sections is now imported from utils/markdown-formatter
 
-    // These regex patterns are used for detecting if sections exist, not for extracting content
+
+
     const boardBlockRegex = /\[\s*BOARD\s*\]([\s\S]*?)\[\s*\/\s*BOARD\s*\]/g;
     const explainBlockRegex = /\[\s*EXPLAIN\s*\]([\s\S]*?)\[\s*\/\s*EXPLAIN\s*\]/g;
     const codeBlockRegex = /\[\s*CODE\s*\]([\s\S]*?)\[\s*\/\s*CODE\s*\]/g;

@@ -82,9 +82,9 @@ export async function POST(request: Request) {
       if (!existsSync(dataDir)) {
         try {
           mkdirSync(dataDir, { recursive: true });
-          console.log(`Created data directory: ${dataDir}`);
+          // Data directory created successfully
         } catch (error) {
-          console.error(`Error creating data directory: ${error}`);
+          // Error creating data directory - will continue with defaults
         }
       }
 
@@ -94,7 +94,7 @@ export async function POST(request: Request) {
         if (existsSync(usersFilePath)) {
           const usersData = readFileSync(usersFilePath, 'utf8');
           users = JSON.parse(usersData);
-          console.log(`Loaded users from file: ${usersFilePath}`);
+          // Users loaded from file successfully
         } else {
           // Create a default test user
           users = {
@@ -110,8 +110,7 @@ export async function POST(request: Request) {
           writeFileSync(usersFilePath, JSON.stringify(users, null, 2));
         }
       } catch (error) {
-        console.error("Error loading users file:", error);
-        // Create a default test user if there was an error
+        // Error loading users file - will create default user
         users = {
           "test": {
             id: "user-test-123",
@@ -127,15 +126,14 @@ export async function POST(request: Request) {
         try {
           // Use async writeFile for better performance
           await fs.writeFile(usersFilePath, JSON.stringify(users, null, 2));
-          console.log(`Saved users to file: ${usersFilePath}`);
+          // Users saved to file successfully
         } catch (error) {
-          console.error("Error saving users file:", error);
-          // Fallback to sync method if async fails
+          // Error saving users file - fallback to sync method
           try {
             writeFileSync(usersFilePath, JSON.stringify(users, null, 2));
-            console.log(`Saved users to file (sync): ${usersFilePath}`);
+            // Users saved to file (sync) successfully
           } catch (syncError) {
-            console.error("Error saving users file (sync):", syncError);
+            // Error saving users file (sync) - continuing without persistence
           }
         }
       };
@@ -278,7 +276,7 @@ export async function POST(request: Request) {
         errorType: "validation"
       }, { status: 400 });
     } catch (error) {
-      console.error("Auth processing error:", error);
+      // Auth processing error
       return NextResponse.json({
         success: false,
         message: error instanceof Error ? error.message : "Server error",
@@ -287,7 +285,7 @@ export async function POST(request: Request) {
     }
 
   } catch (error) {
-    console.error("Auth API error:", error);
+    // Auth API error
     return NextResponse.json({
       success: false,
       message: error instanceof Error ? error.message : "Unknown error",

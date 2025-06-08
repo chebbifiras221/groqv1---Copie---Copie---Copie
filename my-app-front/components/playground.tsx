@@ -44,13 +44,13 @@ export function Playground({ onConnect: _ }: PlaygroundProps) {
 
       // If we just connected, trigger the conversation manager
       if (roomState === ConnectionState.Connected) {
-        console.log("Connection established, conversation manager should initialize automatically");
+        // Connection established, conversation manager should initialize automatically
 
         // The conversation manager will now handle loading on its own
         // We'll just dispatch a storage event as a backup trigger
         setTimeout(() => {
           if (typeof window !== 'undefined') {
-            console.log("Dispatching backup storage event to trigger conversation manager");
+            // Dispatching backup storage event to trigger conversation manager
             const event = new Event('storage');
             window.dispatchEvent(event);
           }
@@ -84,7 +84,7 @@ export function Playground({ onConnect: _ }: PlaygroundProps) {
           localParticipant.setMicrophoneEnabled(false);
         }
       } catch (error) {
-        console.error('Error muting microphone:', error);
+        // Silently handle microphone muting errors
       }
     };
 
@@ -109,7 +109,7 @@ export function Playground({ onConnect: _ }: PlaygroundProps) {
         };
       }
     } catch (error) {
-      console.error('Error in microphone muting effect:', error);
+      // Silently handle microphone muting effect errors
     }
   }, [localParticipant, roomState]);
   // to the text input component
