@@ -277,18 +277,7 @@ def add_message(conversation_id: str, message_type: str, content: str) -> str:
         logger.error(f"Error adding message to conversation {conversation_id}: {e}")
         raise
 
-def get_messages(conversation_id: str) -> List[Dict[str, Any]]:
-    """Get all messages for a conversation"""
-    try:
-        messages = execute_query(
-            "SELECT * FROM messages WHERE conversation_id = ? ORDER BY timestamp",
-            (conversation_id,),
-            fetch_all=True
-        )
-        return messages or []
-    except Exception as e:
-        logger.error(f"Error getting messages for conversation {conversation_id}: {e}")
-        raise
+
 
 def delete_conversation(conversation_id: str, user_id: str = None) -> bool:
     """
@@ -365,28 +354,6 @@ def update_conversation_title(conversation_id: str, title: str) -> bool:
             return False
     except Exception as e:
         logger.error(f"Error updating conversation title for {conversation_id}: {e}")
-        raise
-
-def clear_all_conversations() -> int:
-    """Delete all conversations and their messages"""
-    try:
-        # Execute both operations in a transaction
-        queries = [
-            {"query": "DELETE FROM messages"},
-            {"query": "DELETE FROM conversations"}
-        ]
-
-        success = execute_transaction(queries)
-
-        if success:
-            # Get the count of deleted conversations (approximate since we already deleted them)
-            logger.info("Cleared all conversations and messages")
-            return 1  # We can't know the exact count after deletion
-        else:
-            logger.warning("Failed to clear conversations")
-            return 0
-    except Exception as e:
-        logger.error(f"Error clearing all conversations: {e}")
         raise
 
 def generate_conversation_title(conversation_id: str) -> str:

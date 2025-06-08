@@ -63,9 +63,6 @@ current_conversation_id = None
 tts_engine = None
 
 
-# Use ai_utils.get_teaching_mode_from_db instead of this function
-
-
 def find_or_create_empty_conversation(teaching_mode="teacher", check_current=True, user_id=None):
     """
     Find an existing empty conversation or create a new one.
@@ -312,9 +309,6 @@ async def synthesize_speech(text, room, voice_name=None):
     except Exception as e:
         logger.error(f"Error in speech synthesis: {e}")
         return await send_error(f"Speech synthesis error: {str(e)}")
-
-
-# Use ai_utils.extract_conversation_context and ai_utils.prepare_conversation_history instead
 
 def generate_ai_response(text, conversation_id=None):
     """Generate an AI response using Groq API"""

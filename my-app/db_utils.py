@@ -134,10 +134,6 @@ def get_record_by_id(table: str, record_id: str, fields: List[str] = None) -> Op
     query = f"SELECT {field_list} FROM {table} WHERE id = ?"
     return execute_query(query, (record_id,), fetch_one=True)
 
-
-
-
-
 def checkpoint_database():
     """
     Force a checkpoint of the database to ensure all changes are written to disk.

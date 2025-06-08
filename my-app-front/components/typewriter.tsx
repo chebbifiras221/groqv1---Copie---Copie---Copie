@@ -15,6 +15,7 @@ import { useConversation } from "@/hooks/use-conversation";
 import { CodeBlock } from "./code-block";
 import { SimpleBotFace } from "./ui/simple-bot-face";
 import { CourseUI } from "./course-ui";
+import { ExplanationToggleButton } from "./explanation-toggle-button";
 import { useSettings } from "@/hooks/use-settings";
 import { ContentSegment } from "./content-segment";
 import {
@@ -59,7 +60,6 @@ export function Typewriter({ typingSpeed = 50 }: TypewriterProps) {
     // CRITICAL: If we already have the first conversation with outline, NEVER process new course structures
     // The first course outline is the immutable foundation
     if (isFirstConversationWithOutline) {
-      console.log('🛡️ PROTECTION: Skipping course structure processing - first conversation outline is protected');
       return;
     }
 
@@ -75,9 +75,7 @@ export function Typewriter({ typingSpeed = 50 }: TypewriterProps) {
     );
 
     if (hasChapterContent) {
-      console.log('Chapter content detected, extracting structure...');
       const newChapters = extractCourseStructure(text);
-      console.log(`Extracted ${newChapters.length} chapters:`, newChapters.map(ch => `${ch.number}. ${ch.title}`));
 
       if (newChapters.length > 0) {
         // Check if this is the first time we're setting course chapters
@@ -90,7 +88,7 @@ export function Typewriter({ typingSpeed = 50 }: TypewriterProps) {
           if (prevChapters.length === 0) {
             // Check if this should be marked as the first conversation with outline
             if (isFirstTimeWithFullOutline) {
-              console.log('🏛️ FOUNDATION: Setting first conversation with course outline as immutable foundation');
+
               setIsFirstConversationWithOutline(true);
               // Store the foundation outline permanently
               setFoundationCourseOutline(newChapters);
@@ -99,11 +97,10 @@ export function Typewriter({ typingSpeed = 50 }: TypewriterProps) {
           }
 
           // This should never happen now due to the early return, but keeping as extra safety
-          console.log('⚠️ WARNING: Attempted to update course structure after foundation was set');
           return prevChapters;
         });
 
-        console.log(`Course structure updated with ${newChapters.length} chapters`);
+
       }
     }
   }, [isFirstConversationWithOutline, courseChapters.length]);
@@ -114,7 +111,7 @@ export function Typewriter({ typingSpeed = 50 }: TypewriterProps) {
     setCourseChapters([]);
     setIsFirstConversationWithOutline(false);
     setFoundationCourseOutline([]);
-    console.log("Conversation ID changed, resetting course structure and foundation");
+
 
     // Also reset any localStorage data related to course structure for this conversation
     localStorage.removeItem(`course-chapters-${currentConversationId}`);
@@ -519,7 +516,7 @@ export function Typewriter({ typingSpeed = 50 }: TypewriterProps) {
           // If content is empty or just whitespace, add a placeholder
           if (!content || content.trim() === '') {
             content = "This explanation provides additional context about the topic.";
-            console.log("Empty explanation content detected, adding placeholder");
+
           }
 
           allBlocks.push({
@@ -553,7 +550,7 @@ export function Typewriter({ typingSpeed = 50 }: TypewriterProps) {
 
           // If content is empty or just whitespace, log it but don't add a placeholder
           if (!content || content.trim() === '') {
-            console.log("Empty code content detected");
+
             // Don't add a default code snippet, let it be empty
           }
 
@@ -576,7 +573,6 @@ export function Typewriter({ typingSpeed = 50 }: TypewriterProps) {
 
         // If no blocks were found but special sections were detected, create default blocks
         if (allBlocks.length === 0 && hasSpecialSections) {
-          console.log("Special sections detected but no valid blocks found, creating default blocks");
 
           // Create a default regular content block
           allBlocks.push({
@@ -602,14 +598,10 @@ export function Typewriter({ typingSpeed = 50 }: TypewriterProps) {
         // Sort blocks by their appearance in the text
         allBlocks.sort((a, b) => a.startIndex - b.startIndex);
 
-        console.log("Found blocks:", allBlocks.length);
-
         // Don't enforce alternating pattern - respect the exact order from the backend
-        console.log("Original blocks order:", allBlocks.map(b => b.type).join(', '));
 
         // Only add a regular content block at the beginning if there are no blocks at all
         if (allBlocks.length === 0) {
-          console.log("No blocks found, adding default content block");
           allBlocks.push({
             type: 'regular',
             content: text, // Use the original text as regular content
@@ -621,12 +613,10 @@ export function Typewriter({ typingSpeed = 50 }: TypewriterProps) {
 
         // Sort blocks by their appearance in the text to maintain the exact order from the backend
         allBlocks.sort((a, b) => a.startIndex - b.startIndex);
-        console.log("Final blocks order:", allBlocks.map(b => b.type).join(', '));
 
         // Final check 1: Make sure no sections are completely empty
         for (const block of allBlocks) {
           if (!block.content || block.content.trim() === '') {
-            console.log(`Found empty ${block.type} section, adding default content`);
 
             if (block.type === 'regular') {
               block.content = "This section contains the main content.";
@@ -634,8 +624,7 @@ export function Typewriter({ typingSpeed = 50 }: TypewriterProps) {
               block.content = "This explanation provides additional context about the topic.";
             } else if (block.type === 'code-section') {
               // Don't add a default code snippet for empty code sections
-              // Just log it and let it be empty
-              console.log("Empty code section detected in final check");
+              // Just let it be empty
             }
           }
         }
@@ -648,7 +637,7 @@ export function Typewriter({ typingSpeed = 50 }: TypewriterProps) {
             const codeBlocksRemaining = block.content.match(/```[\s\S]*?```/g);
             const codeBlocksWithPrefixRemaining = block.content.match(/[^\n]*?:?\s*```[\s\S]*?```/g);
             if (codeBlocksRemaining || codeBlocksWithPrefixRemaining) {
-              console.log(`Found remaining code blocks in ${block.type} section, extracting them`);
+
 
               // First, handle regular code blocks
               if (codeBlocksRemaining) {
@@ -727,7 +716,6 @@ export function Typewriter({ typingSpeed = 50 }: TypewriterProps) {
 
         // Re-sort blocks after the final check
         allBlocks.sort((a, b) => a.startIndex - b.startIndex);
-        console.log("Final blocks order after code extraction:", allBlocks.map(b => b.type).join(', '));
 
         // Process blocks in order and handle any text between blocks
         const segments = [];
@@ -891,7 +879,7 @@ export function Typewriter({ typingSpeed = 50 }: TypewriterProps) {
           }
         }
 
-        console.log("Processed segments:", segments.length);
+
 
         // Render the segments using our ContentSegment component
         return (
@@ -910,7 +898,6 @@ export function Typewriter({ typingSpeed = 50 }: TypewriterProps) {
           </>
         );
       } catch (error) {
-        console.error("Error processing content with special sections:", error);
         // Fallback to regular content processing if there's an error
         return <ContentSegment type="regular" content={text} id="fallback" />;
       }
@@ -1165,50 +1152,12 @@ Please focus specifically on this section and provide a clear explanation in flo
 
             {/* Explanation Toggle Button (only shown when there are messages) */}
             {messages.length > 0 && (
-              <div className="flex justify-end mb-4 px-4">
-                <button
-                  onClick={() => {
-                    // Get all explanation segments from the current messages
-                    const allSegments: string[] = [];
-                    messages
-                      .filter(item => item.conversation_id === currentConversationId)
-                      .forEach(item => {
-                        if (item.text) {
-                          // Extract all explanation blocks
-                          const explainBlockRegex = /\[\s*EXPLAIN\s*\]([\s\S]*?)\[\s*\/\s*EXPLAIN\s*\]/g;
-                          let match;
-                          let index = 0;
-                          while ((match = explainBlockRegex.exec(item.text)) !== null) {
-                            allSegments.push(`explain-${item.id}-${index++}`);
-                          }
-                        }
-                      });
-
-                    // Check if any explanations are currently visible
-                    const anyVisible = allSegments.some(id => visibleExplanations[id]);
-
-                    // Toggle all explanations based on current state
-                    const newState = !anyVisible;
-                    const newVisibleExplanations: Record<string, boolean> = {};
-                    allSegments.forEach(id => {
-                      newVisibleExplanations[id] = newState;
-                    });
-
-                    setVisibleExplanations(newVisibleExplanations);
-                  }}
-                  className={`text-xs px-3 py-1.5 rounded-full flex items-center gap-1 transition-colors ${
-                    Object.values(visibleExplanations).some(v => v)
-                      ? 'bg-primary-DEFAULT/20 text-primary-DEFAULT hover:bg-primary-DEFAULT/30 border border-primary-DEFAULT/20'
-                      : 'bg-bg-tertiary/50 text-text-tertiary hover:bg-bg-tertiary/70 border border-bg-tertiary/20'
-                  }`}
-                >
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path>
-                  </svg>
-                  <span>{Object.values(visibleExplanations).some(v => v) ? 'Hide All Explanations' : 'Show All Explanations'}</span>
-                </button>
-              </div>
+              <ExplanationToggleButton
+                messages={messages}
+                currentConversationId={currentConversationId}
+                visibleExplanations={visibleExplanations}
+                setVisibleExplanations={setVisibleExplanations}
+              />
             )}
 
             {/* Mobile Course Navigation is now handled by the CourseUI component */}

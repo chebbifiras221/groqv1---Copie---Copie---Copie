@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 
 import { RoomComponent } from "@/components/room";
 import { ConnectionProvider } from "@/hooks/use-connection";
@@ -28,7 +28,7 @@ export default function Home() {
 
 function AppContent() {
   const { shouldConnect, disconnect } = useConnection();
-  const { isAuthenticated, isLoading, user } = useAuth();
+  const { isAuthenticated, isLoading } = useAuth();
 
   // Listen for user logout events
   useEffect(() => {
@@ -37,7 +37,7 @@ function AppContent() {
       try {
         disconnect();
       } catch (error) {
-        console.error("Error disconnecting on logout:", error);
+        // Silently handle disconnect errors
       }
     };
 

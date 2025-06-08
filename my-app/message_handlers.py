@@ -7,7 +7,6 @@ import json
 import logging
 import config
 import database
-import database
 import auth_api
 
 logger = logging.getLogger("message-handlers")
@@ -75,19 +74,6 @@ async def handle_delete_conversation(message, ctx, current_conversation_id, safe
         success = database.delete_conversation(conversation_id, user_id)
 
         if success:
-            # If we deleted the current conversation, find another one to use
-            if current_conversation_id == conversation_id:
-                # Get remaining conversations
-                remaining_conversations = database.list_conversations(limit=1)
-                if remaining_conversations:
-                    # Use the most recent conversation
-                    new_conversation_id = remaining_conversations[0]["id"]
-                    logger.info(f"Switched to existing conversation with ID: {new_conversation_id}")
-                else:
-                    # Create a new conversation if none exist
-                    new_conversation_id = database.create_conversation(config.DEFAULT_CONVERSATION_TITLE)
-                    logger.info(f"Created new conversation with ID: {new_conversation_id}")
-
             # If we deleted the current conversation, create a new one
             if current_conversation_id == conversation_id:
                 # Create a new conversation with default teaching mode

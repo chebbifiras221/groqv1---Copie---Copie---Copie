@@ -1,11 +1,17 @@
 import { useState, useCallback, useEffect } from 'react';
 import { useSettings } from './use-settings';
+import {
+  cleanTextForTTS,
+  removeSpecialSectionMarkers,
+  addNaturalPauses,
+  extractExplanationBlocks,
+  hasSpecialSections
+} from '@/utils/text-cleaning';
 
 // Helper function to find the best voice
 const getBestVoice = (availableVoices: SpeechSynthesisVoice[]): SpeechSynthesisVoice | null => {
   // Safety check
   if (!availableVoices || availableVoices.length === 0) {
-    console.log('No voices available');
     return null;
   }
 
@@ -48,7 +54,6 @@ const getBestVoice = (availableVoices: SpeechSynthesisVoice[]): SpeechSynthesisV
     for (const preferredVoice of preferredVoices) {
       const voice = availableVoices.find(v => v && v.name === preferredVoice);
       if (voice) {
-        console.log('Found preferred voice:', voice.name);
         return voice;
       }
     }
@@ -70,7 +75,6 @@ const getBestVoice = (availableVoices: SpeechSynthesisVoice[]): SpeechSynthesisV
       // Look for indicators of high-quality voices
       if ((lowerName.includes('natural') || lowerName.includes('premium') || lowerName.includes('online')) &&
           femaleVoiceIndicators.some(indicator => lowerName.includes(indicator))) {
-        console.log('Found high-quality female voice:', voice.name);
         return voice;
       }
     }
@@ -81,7 +85,6 @@ const getBestVoice = (availableVoices: SpeechSynthesisVoice[]): SpeechSynthesisV
 
       const lowerName = voice.name.toLowerCase();
       if (femaleVoiceIndicators.some(indicator => lowerName.includes(indicator))) {
-        console.log('Found female voice:', voice.name);
         return voice;
       }
     }
@@ -89,16 +92,13 @@ const getBestVoice = (availableVoices: SpeechSynthesisVoice[]): SpeechSynthesisV
     // If no female voice is found, return the first valid voice
     for (const voice of availableVoices) {
       if (voice && voice.name) {
-        console.log('Using fallback voice:', voice.name);
         return voice;
       }
     }
 
     // Last resort
-    console.log('Using first available voice');
     return availableVoices[0];
   } catch (error) {
-    console.log('Error finding best voice:', error);
     return null;
   }
 };
@@ -114,27 +114,19 @@ export function useWebTTS() {
   // Initialize speech synthesis and load voices
   useEffect(() => {
     if (typeof window === 'undefined') {
-      console.log('Window is undefined, cannot initialize speech synthesis');
       return;
     }
 
     if (!window.speechSynthesis) {
-      console.log('Speech synthesis not supported in this browser');
       return;
     }
 
     // Force a specific high-quality female voice if available
     const forceHighQualityFemaleVoice = (voices: SpeechSynthesisVoice[]) => {
-      // Log all available voices for debugging
-      console.log('Available voices:');
-      voices.forEach((voice, index) => {
-        console.log(`${index + 1}. ${voice.name} (${voice.lang}) ${voice.localService ? 'Local' : 'Network'}`);
-      });
 
       // Try to find Microsoft Zira (high quality female voice on Windows)
       const msZira = voices.find(v => v.name.includes('Zira'));
       if (msZira) {
-        console.log('Found Microsoft Zira voice:', msZira.name);
         return msZira;
       }
 
@@ -147,7 +139,6 @@ export function useWebTTS() {
          v.name.includes('Jessa') ||
          v.name.includes('Sarah')));
       if (msFemale) {
-        console.log('Found Microsoft female voice:', msFemale.name);
         return msFemale;
       }
 
@@ -156,7 +147,6 @@ export function useWebTTS() {
         v.name.includes('Google') &&
         v.name.includes('Female'));
       if (googleFemale) {
-        console.log('Found Google female voice:', googleFemale.name);
         return googleFemale;
       }
 
@@ -174,19 +164,16 @@ export function useWebTTS() {
       });
 
       if (anyFemale) {
-        console.log('Found female voice:', anyFemale.name);
         return anyFemale;
       }
 
       // Fallback to first English voice
       const englishVoice = voices.find(v => v.lang.startsWith('en'));
       if (englishVoice) {
-        console.log('Falling back to English voice:', englishVoice.name);
         return englishVoice;
       }
 
       // Last resort - first voice
-      console.log('Falling back to first available voice:', voices[0]?.name);
       return voices[0];
     };
 
@@ -201,14 +188,11 @@ export function useWebTTS() {
           // Force a high-quality female voice
           const bestVoice = forceHighQualityFemaleVoice(availableVoices);
           if (bestVoice) {
-            console.log('Selected voice:', bestVoice.name);
             setSelectedVoice(bestVoice);
           }
-        } else {
-          console.log('No voices available or voices array is empty');
         }
       } catch (error) {
-        console.log('Error loading voices:', error);
+        // Silently handle voice loading errors
       }
     };
 
@@ -222,7 +206,7 @@ export function useWebTTS() {
       // Try to load voices immediately (works in Firefox/Safari)
       loadVoices();
     } catch (error) {
-      console.log('Error setting up voice change listener:', error);
+      // Silently handle voice setup errors
     }
 
     // Fix for Chrome issue where speech synthesis stops after ~15 seconds
@@ -234,12 +218,12 @@ export function useWebTTS() {
             window.speechSynthesis.pause();
             window.speechSynthesis.resume();
           } catch (e) {
-            console.log('Error in speech synthesis resume workaround');
+            // Silently handle resume errors
           }
         }
       }, 10000);
     } catch (error) {
-      console.log('Error setting up speech synthesis resume interval:', error);
+      // Silently handle interval setup errors
     }
 
     return () => {
@@ -260,7 +244,7 @@ export function useWebTTS() {
         window.speechSynthesis.cancel();
       }
     } catch (error) {
-      console.log('Error stopping speech synthesis:', error);
+      // Silently handle stop errors
     }
 
     setIsPlaying(false);
@@ -332,17 +316,14 @@ export function useWebTTS() {
   // Function to speak text
   const speak = useCallback((text: string, voiceOverride?: SpeechSynthesisVoice) => {
     if (typeof window === 'undefined') {
-      console.log('Window is undefined, cannot use speech synthesis');
       return false;
     }
 
     if (!window.speechSynthesis) {
-      console.log('Speech synthesis not supported in this browser');
       return false;
     }
 
     if (!text || !text.trim()) {
-      console.log('No text provided for speech synthesis');
       return false;
     }
 
@@ -359,13 +340,9 @@ export function useWebTTS() {
                              text.includes('### ');
 
       // Check for special sections with [EXPLAIN] markers - more robust check
-      const hasSpecialSections = /\[\s*EXPLAIN\s*\]/.test(text) || /\[\s*CODE\s*\]/.test(text);
+      const hasSpecialSectionsDetected = hasSpecialSections(text);
 
-      // Debug logging
-      console.log("TTS - Special sections detected:", hasSpecialSections);
-      if (hasSpecialSections) {
-        console.log("TTS - Text contains [EXPLAIN]:", /\[\s*EXPLAIN\s*\]/.test(text));
-        console.log("TTS - Text contains [CODE]:", /\[\s*CODE\s*\]/.test(text));
+      if (hasSpecialSectionsDetected) {
 
         // Define regex patterns to detect incomplete markers
         const openExplainRegex = /\[\s*EXPLAIN\s*\](?![\s\S]*?\[\s*\/\s*EXPLAIN\s*\])/g;
@@ -386,7 +363,6 @@ export function useWebTTS() {
         closeCodeRegex.lastIndex = 0;
 
         if (hasOpenExplain || hasCloseExplain || hasOpenCode || hasCloseCode) {
-          console.log("TTS - Warning: Incomplete markers detected");
 
           // Fix incomplete markers for TTS
           let fixedText = text;
@@ -423,112 +399,37 @@ export function useWebTTS() {
           text = fixedText;
         }
 
-        // Test extraction
-        const explainRegex = /\[\s*EXPLAIN\s*\]([\s\S]*?)\[\s*\/\s*EXPLAIN\s*\]/g;
-        let match;
-        let count = 0;
-        while ((match = explainRegex.exec(text)) !== null && count < 3) {
-          console.log(`TTS - EXPLAIN block ${count + 1} found:`, match[1].substring(0, 50) + "...");
-          count++;
-        }
+
       }
 
       // Process text differently based on content type
       let cleanedText;
 
       // If we have special sections and the setting is enabled, only speak the explanations
-      if (hasSpecialSections && settings.ttsVerbalsOnly) {
+      if (hasSpecialSectionsDetected && settings.ttsVerbalsOnly) {
         try {
-          // Extract only the verbal explanations with a more robust regex
-          const explainRegex = /\[\s*EXPLAIN\s*\]([\s\S]*?)\[\s*\/\s*EXPLAIN\s*\]/g;
-          const explanations = [];
-          let match;
-
-          while ((match = explainRegex.exec(text)) !== null) {
-            explanations.push(match[1].trim());
-          }
-
-          console.log("TTS - Found explanation blocks:", explanations.length);
+          // Extract only the verbal explanations
+          const explanations = extractExplanationBlocks(text);
 
           if (explanations.length > 0) {
             // Join all explanations with pauses between them
             cleanedText = explanations.join('. \n\n');
 
-            // Log the first part of the extracted text for debugging
-            console.log("TTS - Speaking explanations:", cleanedText.substring(0, 100) + "...");
-
             // Apply standard text cleaning to the explanations
-            cleanedText = cleanedText
-              // Remove any nested markers that might have been included
-              .replace(/\[\s*BOARD\s*\]([\s\S]*?)\[\s*\/\s*BOARD\s*\]/g, '')
-              .replace(/\[\s*EXPLAIN\s*\]([\s\S]*?)\[\s*\/\s*EXPLAIN\s*\]/g, '$1')
-
-              // Remove markdown formatting
-              .replace(/\*\*\*(.*?)\*\*\*/g, '$1')
-              .replace(/\*\*(.*?)\*\*/g, '$1')
-              .replace(/\*(.*?)\*/g, '$1')
-              .replace(/\*/g, ' ')
-              .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
-              .replace(/```[\s\S]*?```/g, '')
-              .replace(/`([^`]+)`/g, '$1')
-              .replace(/^#{1,6}\s+(.+)$/gm, '$1')
-              .replace(/#{1,6}\s+/g, '') // Remove any remaining # symbols at the beginning of lines
-              .replace(/^[\s]*[-*+]\s+/gm, '')
-              .replace(/^[\s]*\d+\.\s+/gm, '')
-              .replace(/&[a-z]+;/g, ' ')
-              .replace(/[_=+]/g, ' ')
-              // Remove any remaining markdown symbols that might be read aloud
-              .replace(/\[BOARD\]/gi, '')
-              .replace(/\[\/BOARD\]/gi, '')
-              .replace(/\[EXPLAIN\]/gi, '')
-              .replace(/\[\/EXPLAIN\]/gi, '')
-              .replace(/\[CODE\]/gi, '')
-              .replace(/\[\/CODE\]/gi, '')
-              // Handle special programming terms
-              .replace(/C\+\+/g, 'C plus plus')
-              .replace(/\.NET/g, 'dot net')
-              .replace(/\b0\.\d+/g, (match) => match.replace('.', ' point '))
-              .replace(/\b\d+\.\d+/g, (match) => match.replace('.', ' point '))
-
-              // Handle mathematical notation
-              .replace(/O\(n²\)/g, 'O of n squared')
-              .replace(/O\(n\^2\)/g, 'O of n squared')
-              .replace(/O\(log n\)/g, 'O of log n')
-              .replace(/x²/g, 'x squared')
-              .replace(/x\^2/g, 'x squared')
-              .replace(/f'\(x\)/g, 'f prime of x')
-              .replace(/f\(x\)/g, 'f of x')
-              .replace(/\s+/g, ' ')
-              .trim();
-
-            // Add natural pauses by using punctuation only
-            // Remove any SSML tags that might be read aloud
-            cleanedText = cleanedText
-              .replace(/<break[^>]*>/g, '')
-              .replace(/<[^>]*>/g, '')
-              .replace(/\bbreaktime\b/g, '')
-              .replace(/\.\s+/g, '. ')
-              .replace(/\!\s+/g, '! ')
-              .replace(/\?\s+/g, '? ');
+            cleanedText = removeSpecialSectionMarkers(cleanedText);
+            cleanedText = cleanTextForTTS(cleanedText);
+            cleanedText = addNaturalPauses(cleanedText);
           } else {
-            console.log("TTS - No explanation blocks found, using fallback");
             // If no explanations found, use the whole text but remove code sections
-            cleanedText = text
-              .replace(/\[\s*CODE\s*\]([\s\S]*?)\[\s*\/\s*CODE\s*\]/g, '')
-              .replace(/\[\s*EXPLAIN\s*\]([\s\S]*?)\[\s*\/\s*EXPLAIN\s*\]/g, '$1')
-              .replace(/\s+/g, ' ')
-              .trim();
+            cleanedText = removeSpecialSectionMarkers(text);
+            cleanedText = cleanTextForTTS(cleanedText);
           }
         } catch (error) {
-          console.error("TTS - Error processing content with special sections:", error);
           // Fallback to simple text cleaning
-          cleanedText = text
-            .replace(/\[\s*CODE\s*\]([\s\S]*?)\[\s*\/\s*CODE\s*\]/g, '')
-            .replace(/\[\s*EXPLAIN\s*\]([\s\S]*?)\[\s*\/\s*EXPLAIN\s*\]/g, '$1')
-            .replace(/\s+/g, ' ')
-            .trim();
+          cleanedText = removeSpecialSectionMarkers(text);
+          cleanedText = cleanTextForTTS(cleanedText);
         }
-      } else if (hasSpecialSections) {
+      } else if (hasSpecialSectionsDetected) {
         // If special sections are detected but verbalsOnly is not enabled,
         // read all content including explanations
         try {
@@ -644,60 +545,11 @@ export function useWebTTS() {
           const shortenedText = processedBlocks.join('. ');
 
           // Clean the shortened text
-          cleanedText = shortenedText
-            .replace(/\[\s*EXPLAIN\s*\]/g, '')
-            .replace(/\[\s*\/\s*EXPLAIN\s*\]/g, '')
-            .replace(/\[\s*CODE\s*\]/g, '')
-            .replace(/\[\s*\/\s*CODE\s*\]/g, '')
-            .replace(/\*\*\*(.*?)\*\*\*/g, '$1')
-            .replace(/\*\*(.*?)\*\*/g, '$1')
-            .replace(/\*(.*?)\*/g, '$1')
-            .replace(/\*/g, ' ')
-            .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
-            .replace(/```[\s\S]*?```/g, '')
-            .replace(/`([^`]+)`/g, '$1')
-            .replace(/^#{1,6}\s+(.+)$/gm, '$1')
-            .replace(/#{1,6}\s+/g, '') // Remove any remaining # symbols at the beginning of lines
-            .replace(/^[\s]*[-*+]\s+/gm, '')
-            .replace(/^[\s]*\d+\.\s+/gm, '')
-            .replace(/&[a-z]+;/g, ' ')
-            .replace(/[_=+]/g, ' ')
-            // Remove any remaining markdown symbols that might be read aloud
-            .replace(/\[BOARD\]/gi, '')
-            .replace(/\[\/BOARD\]/gi, '')
-            .replace(/\[EXPLAIN\]/gi, '')
-            .replace(/\[\/EXPLAIN\]/gi, '')
-            .replace(/\[CODE\]/gi, '')
-            .replace(/\[\/CODE\]/gi, '')
-            // Handle special programming terms
-            .replace(/C\+\+/g, 'C plus plus')
-            .replace(/\.NET/g, 'dot net')
-            .replace(/\b0\.\d+/g, (match) => match.replace('.', ' point '))
-            .replace(/\b\d+\.\d+/g, (match) => match.replace('.', ' point '))
-
-            // Handle mathematical notation
-            .replace(/O\(n²\)/g, 'O of n squared')
-            .replace(/O\(n\^2\)/g, 'O of n squared')
-            .replace(/O\(log n\)/g, 'O of log n')
-            .replace(/x²/g, 'x squared')
-            .replace(/x\^2/g, 'x squared')
-            .replace(/f'\(x\)/g, 'f prime of x')
-            .replace(/f\(x\)/g, 'f of x')
-            .replace(/\s+/g, ' ')
-            .trim();
-
-          // Add natural pauses by using punctuation only
-          // Remove any SSML tags that might be read aloud
-          cleanedText = cleanedText
-            .replace(/<break[^>]*>/g, '')
-            .replace(/<[^>]*>/g, '')
-            .replace(/\bbreaktime\b/g, '')
-            .replace(/\.\s+/g, '. ')
-            .replace(/\!\s+/g, '! ')
-            .replace(/\?\s+/g, '? ');
+          cleanedText = cleanTextForTTS(shortenedText);
+          cleanedText = addNaturalPauses(cleanedText);
 
         } catch (error) {
-          console.error("TTS - Error processing content with special sections:", error);
+
           // Fallback to simple text cleaning
           cleanedText = processCourseContent(text);
         }
@@ -706,65 +558,11 @@ export function useWebTTS() {
         cleanedText = processCourseContent(text);
       } else {
         // Simple text cleaning for regular content
-        cleanedText = text
-          // Remove any special section markers if present (just in case)
-          .replace(/\[\s*CODE\s*\]([\s\S]*?)\[\s*\/\s*CODE\s*\]/g, '')
-          .replace(/\[\s*EXPLAIN\s*\]([\s\S]*?)\[\s*\/\s*EXPLAIN\s*\]/g, '$1')
-
-          // Remove markdown formatting
-          .replace(/\*\*\*(.*?)\*\*\*/g, '$1') // Triple asterisks (bold+italic)
-          .replace(/\*\*(.*?)\*\*/g, '$1')     // Double asterisks (bold)
-          .replace(/\*(.*?)\*/g, '$1')         // Single asterisks (italic)
-          .replace(/\*/g, ' ')                 // Any remaining asterisks
-
-          // Handle markdown links
-          .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1') // Replace [text](url) with just text
-
-          // Handle code blocks and inline code
-          .replace(/```[\s\S]*?```/g, '') // Remove code blocks entirely
-          .replace(/`([^`]+)`/g, '$1')         // Replace inline code with just the code
-
-          // Handle markdown headers - replace # with nothing
-          .replace(/^#{1,6}\s+(.+)$/gm, '$1') // Replace # Header with just Header
-          .replace(/#{1,6}\s+/g, '') // Remove any remaining # symbols at the beginning of lines
-
-          // Handle markdown lists
-          .replace(/^[\s]*[-*+]\s+/gm, '') // Replace bullet points
-          .replace(/^[\s]*\d+\.\s+/gm, '') // Replace numbered lists
-
-          // Handle special characters
-          .replace(/&[a-z]+;/g, ' ')       // Replace HTML entities like &nbsp; with space
-          .replace(/[_=+]/g, ' ')          // Replace underscores, equals, plus with spaces
-
-          // Remove any remaining markdown symbols that might be read aloud
-          .replace(/\[BOARD\]/gi, '')
-          .replace(/\[\/BOARD\]/gi, '')
-          .replace(/\[EXPLAIN\]/gi, '')
-          .replace(/\[\/EXPLAIN\]/gi, '')
-          .replace(/\[CODE\]/gi, '')
-          .replace(/\[\/CODE\]/gi, '')
-
-          // Handle special programming terms
-          .replace(/C\+\+/g, 'C plus plus')
-          .replace(/\.NET/g, 'dot net')
-          .replace(/\b0\.\d+/g, (match) => match.replace('.', ' point ')) // Convert 0.5 to "0 point 5"
-          .replace(/\b\d+\.\d+/g, (match) => match.replace('.', ' point ')) // Convert 3.14 to "3 point 14"
-
-          // Handle mathematical notation
-          .replace(/O\(n²\)/g, 'O of n squared')
-          .replace(/O\(n\^2\)/g, 'O of n squared')
-          .replace(/O\(log n\)/g, 'O of log n')
-          .replace(/x²/g, 'x squared')
-          .replace(/x\^2/g, 'x squared')
-          .replace(/f'\(x\)/g, 'f prime of x')
-          .replace(/f\(x\)/g, 'f of x')
-
-          // Clean up extra whitespace
-          .replace(/\s+/g, ' ')            // Replace multiple spaces with a single space
-          .trim();                         // Remove leading/trailing whitespace
+        cleanedText = removeSpecialSectionMarkers(text);
+        cleanedText = cleanTextForTTS(cleanedText);
       }
 
-      console.log('Cleaned text for TTS:', cleanedText.substring(0, 50) + '...');
+
 
       // Create a new utterance with the cleaned text
       const utterance = new SpeechSynthesisUtterance(cleanedText);
@@ -773,7 +571,7 @@ export function useWebTTS() {
       const voiceToUse = voiceOverride || selectedVoice;
 
       if (voiceToUse && voiceToUse.voiceURI) {
-        console.log('Using voice for speech:', voiceToUse.name);
+
         utterance.voice = voiceToUse;
         // Set language to match the voice
         utterance.lang = voiceToUse.lang;
@@ -788,7 +586,7 @@ export function useWebTTS() {
             v.name.includes('Samantha'));
 
           if (femaleVoice) {
-            console.log('Found female voice on-the-fly:', femaleVoice.name);
+
             utterance.voice = femaleVoice;
             utterance.lang = femaleVoice.lang;
           }
@@ -813,7 +611,6 @@ export function useWebTTS() {
 
       utterance.onerror = (event) => {
         // Handle the error more gracefully
-        console.log('Speech synthesis error occurred, falling back to silent mode');
         setIsPlaying(false);
         setIsLoading(false);
 
@@ -829,7 +626,7 @@ export function useWebTTS() {
         try {
           window.speechSynthesis.speak(utterance);
         } catch (e) {
-          console.log('Error starting speech synthesis, using fallback');
+
           // Simulate speech with a timer
           setIsPlaying(true);
           setTimeout(() => {
@@ -840,7 +637,7 @@ export function useWebTTS() {
 
       return true;
     } catch (err) {
-      console.log('Error in speech synthesis setup, using fallback');
+
       // Simulate speech with a timer
       setIsPlaying(true);
       setTimeout(() => {
@@ -854,7 +651,7 @@ export function useWebTTS() {
   // Function to select a voice by name
   const selectVoiceByName = useCallback((voiceName: string) => {
     if (!voices || voices.length === 0) {
-      console.log('No voices available to select from');
+
       return false;
     }
 
@@ -863,11 +660,11 @@ export function useWebTTS() {
     const voice = voices.find(v => v.name.toLowerCase().includes(lowerName));
 
     if (voice) {
-      console.log(`Selected voice by name: ${voice.name}`);
+
       setSelectedVoice(voice);
       return true;
     } else {
-      console.log(`Could not find voice with name containing: ${voiceName}`);
+
       return false;
     }
   }, [voices]);
@@ -875,13 +672,11 @@ export function useWebTTS() {
   // Function to list all available voices to the console
   const listAvailableVoices = useCallback(() => {
     if (!voices || voices.length === 0) {
-      console.log('No voices available');
       return;
     }
 
-    console.log(`Available voices (${voices.length}):`);
     voices.forEach((voice, index) => {
-      console.log(`${index + 1}. ${voice.name} (${voice.lang}) ${voice.localService ? 'Local' : 'Network'}`);
+      // Silent logging for debugging purposes
     });
   }, [voices]);
 

@@ -39,7 +39,7 @@ export function useErrorHandler() {
     type: ErrorType = 'unknown', 
     customMessage?: string
   ) => {
-    console.error(`Error (${type}):`, error);
+
     
     // Create error details
     const errorDetails: ErrorDetails = {
@@ -48,8 +48,7 @@ export function useErrorHandler() {
       originalError: error
     };
 
-    // Log detailed error information for debugging
-    console.error('Error details:', errorDetails);
+
     
     // Show toast notification with user-friendly message
     addToast(errorDetails.message, 'error');

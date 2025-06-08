@@ -135,21 +135,14 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         setError(errorMsg);
         setErrorType(errorType);
 
-        console.log(`Login error: ${errorMsg}, type: ${errorType}`);
-
         // Add a small delay to ensure state updates are processed
         await new Promise(resolve => setTimeout(resolve, 100));
-
-        console.log('Error state after setting:', {
-          error: errorMsg,
-          errorType: errorType
-        });
 
         setIsLoading(false);
         return false;
       }
     } catch (err) {
-      console.error('Login error:', err);
+
       const errorMessage = err instanceof Error ? err.message : "Login failed";
 
       setError(errorMessage);
@@ -158,18 +151,13 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       // Add a small delay to ensure state updates are processed
       await new Promise(resolve => setTimeout(resolve, 100));
 
-      console.log('Error state after catch:', {
-        error: errorMessage,
-        errorType: 'unknown'
-      });
-
       setIsLoading(false);
       return false;
     }
   };
 
   const register = async (username: string, password: string, email?: string): Promise<boolean> => {
-    console.log(`Register attempt with username: ${username}`);
+
     setIsLoading(true);
     // Don't clear errors here - they should be cleared by the component before calling register
 
@@ -249,13 +237,12 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
           }),
         });
 
-        console.log("Backend notified about logout");
       } catch (err) {
-        console.error("Error notifying backend about logout:", err);
+        // Silently handle logout notification errors
       }
     }
 
-    console.log("User logged out successfully");
+
   };
 
   const clearError = () => {

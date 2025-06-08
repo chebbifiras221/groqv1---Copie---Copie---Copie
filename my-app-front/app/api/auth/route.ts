@@ -89,7 +89,7 @@ export async function POST(request: Request) {
       }
 
       // Load users from file or create an empty object
-      let users: Record<string, any> = {};
+      let users: Record<string, { id: string; username: string; password: string; email?: string; token?: string }> = {};
       try {
         if (existsSync(usersFilePath)) {
           const usersData = readFileSync(usersFilePath, 'utf8');
@@ -107,7 +107,7 @@ export async function POST(request: Request) {
           };
 
           // Save the initial users file
-          fs.writeFileSync(usersFilePath, JSON.stringify(users, null, 2));
+          writeFileSync(usersFilePath, JSON.stringify(users, null, 2));
         }
       } catch (error) {
         console.error("Error loading users file:", error);

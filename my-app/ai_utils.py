@@ -80,10 +80,6 @@ def prepare_conversation_history(messages: List[Dict[str, Any]], teaching_mode: 
 
     return conversation_history
 
-
-
-
-
 def make_ai_request(model_name: str, conversation_history: List[Dict[str, Any]], temperature: float = None, max_retries: int = None) -> Tuple[bool, str]:
     """
     Make a request to the AI API with retry logic and better error handling.
@@ -241,10 +237,6 @@ def generate_ai_response_with_models(conversation_history: List[Dict[str, Any]])
     error_msg = config.ERROR_MESSAGES["all_models_failed"].format(error=error_details)
     logger.error(f"All models failed. Details: {error_details}")
     return error_msg
-
-
-
-
 
 def should_split_response(response: str) -> bool:
     """

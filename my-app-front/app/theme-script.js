@@ -13,7 +13,7 @@
       document.body.style.backgroundColor = '#0d1117';
       document.body.style.color = '#e6edf3';
     }
-  } catch (e) {
-    console.error('Error applying theme:', e);
+  } catch {
+    // Silently handle theme errors
   }
 })();
