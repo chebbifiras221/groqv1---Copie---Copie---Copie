@@ -16,7 +16,6 @@ export function RegisterForm({ onSuccess, onLoginClick }: RegisterFormProps) {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
-  const [email, setEmail] = useState("");
   const [validationError, setValidationError] = useState<string | null>(null);
 
   const validateForm = () => {
@@ -48,7 +47,7 @@ export function RegisterForm({ onSuccess, onLoginClick }: RegisterFormProps) {
 
     if (username.trim() && password) {
       console.log(`Submitting registration form with username: ${username}`);
-      const success = await register(username, password, email || undefined);
+      const success = await register(username, password);
       console.log(`Registration result: ${success}, Error: ${error}, ErrorType: ${errorType}`);
       if (success && onSuccess) {
         onSuccess();
@@ -100,23 +99,6 @@ export function RegisterForm({ onSuccess, onLoginClick }: RegisterFormProps) {
             className={`w-full p-2.5 bg-bg-primary border ${errorType === 'username_exists' ? 'border-danger-DEFAULT' : 'border-bg-tertiary/30'} rounded-md focus:outline-none focus:ring-2 focus:ring-primary-DEFAULT/50`}
             placeholder="Choose a username"
             required
-          />
-        </div>
-
-        <div className="mb-4">
-          <label htmlFor="email" className="block text-sm font-medium text-text-secondary mb-1">
-            Email (optional)
-          </label>
-          <input
-            id="email"
-            type="email"
-            value={email}
-            onChange={(e) => {
-              setEmail(e.target.value);
-              // Don't clear errors on typing
-            }}
-            className="w-full p-2.5 bg-bg-primary border border-bg-tertiary/30 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-DEFAULT/50"
-            placeholder="Enter your email"
           />
         </div>
 

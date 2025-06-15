@@ -4,7 +4,6 @@ export type AuthRequest = {
   type: 'register' | 'login' | 'verify' | 'logout';
   username?: string;
   password?: string;
-  email?: string;
   token?: string;
 };
 
@@ -15,7 +14,6 @@ export type AuthResponse = {
   user?: {
     id: string;
     username: string;
-    email?: string;
   };
   token?: string;
 };
@@ -89,7 +87,7 @@ export async function POST(request: Request) {
       }
 
       // Load users from file or create an empty object
-      let users: Record<string, { id: string; username: string; password: string; email?: string; token?: string }> = {};
+      let users: Record<string, { id: string; username: string; password: string; token?: string }> = {};
       try {
         if (existsSync(usersFilePath)) {
           const usersData = readFileSync(usersFilePath, 'utf8');
@@ -101,8 +99,7 @@ export async function POST(request: Request) {
             "test": {
               id: "user-test-123",
               username: "test",
-              password: "password",
-              email: "test@example.com"
+              password: "password"
             }
           };
 
@@ -115,8 +112,7 @@ export async function POST(request: Request) {
           "test": {
             id: "user-test-123",
             username: "test",
-            password: "password",
-            email: "test@example.com"
+            password: "password"
           }
         };
       }
@@ -156,8 +152,7 @@ export async function POST(request: Request) {
         users[username] = {
           id: userId,
           username: username,
-          password: body.password,
-          email: body.email
+          password: body.password
         };
 
         // Save users to file
@@ -168,8 +163,7 @@ export async function POST(request: Request) {
           message: "User registered successfully",
           user: {
             id: userId,
-            username: username,
-            email: body.email
+            username: username
           }
         });
       }
@@ -211,8 +205,7 @@ export async function POST(request: Request) {
           message: "Login successful",
           user: {
             id: user.id,
-            username: user.username,
-            email: user.email
+            username: user.username
           },
           token
         });
@@ -243,8 +236,7 @@ export async function POST(request: Request) {
           message: "Token verified",
           user: {
             id: foundUser.id,
-            username: foundUser.username,
-            email: foundUser.email
+            username: foundUser.username
           }
         });
       }

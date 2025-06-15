@@ -6,7 +6,6 @@ import { AuthRequest, AuthResponse } from "@/app/api/auth/route";
 type User = {
   id: string;
   username: string;
-  email?: string;
 };
 
 type AuthContextType = {
@@ -17,7 +16,7 @@ type AuthContextType = {
   error: string | null;
   errorType?: 'username' | 'password' | string;
   login: (username: string, password: string) => Promise<boolean>;
-  register: (username: string, password: string, email?: string) => Promise<boolean>;
+  register: (username: string, password: string) => Promise<boolean>;
   logout: () => void;
   clearError: () => void;
 };
@@ -156,7 +155,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     }
   };
 
-  const register = async (username: string, password: string, email?: string): Promise<boolean> => {
+  const register = async (username: string, password: string): Promise<boolean> => {
 
     setIsLoading(true);
     // Don't clear errors here - they should be cleared by the component before calling register
@@ -171,7 +170,6 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
           type: "register",
           username,
           password,
-          email,
         } as AuthRequest),
       });
 

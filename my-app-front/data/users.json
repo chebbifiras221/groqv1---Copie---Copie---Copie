@@ -2,13 +2,12 @@
   "test": {
     "id": "user-test-123",
     "username": "test",
-    "password": "password",
-    "email": "test@example.com"
+    "password": "password"
   },
   "msaadi.moomen@gmail.com": {
-    "id": "user-1749424854668",
+    "id": "user-1749851996645",
     "username": "msaadi.moomen@gmail.com",
     "password": "jolteon123jolteon",
-    "token": "token-1749424864775-l3hkec3oq2"
+    "token": "token-1749856027024-d5g7930a6d4"
   }
 }
