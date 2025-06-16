@@ -9,22 +9,6 @@ export function cn(...inputs: ClassValue[]) {
 }
 
 /**
- * Truncates the middle of a string and adds an ellipsis
- */
-export function ellipsisMiddle(
-  text: string,
-  startLength: number,
-  endLength: number,
-): string {
-  if (text.length <= startLength + endLength) {
-    return text;
-  }
-  const start = text.slice(0, startLength);
-  const end = text.slice(-endLength);
-  return `${start}...${end}`;
-}
-
-/**
  * Formats a date string to a human-readable format
  */
 export function formatDate(date: Date | string): string {
@@ -68,52 +52,4 @@ export function formatDate(date: Date | string): string {
     };
     return `${d.toLocaleDateString(undefined, dateOptions)} at ${timeString}`;
   }
-}
-
-/**
- * Truncates a string to a specified length and adds an ellipsis
- */
-export function truncateString(str: string, maxLength: number): string {
-  if (!str || str.length <= maxLength) return str;
-  return `${str.substring(0, maxLength)}...`;
-}
-
-/**
- * Generates a random ID
- */
-export function generateId(length = 8): string {
-  return Math.random().toString(36).substring(2, 2 + length);
-}
-
-/**
- * Debounces a function
- */
-export function debounce<T extends (...args: any[]) => any>(
-  func: T,
-  wait: number
-): (...args: Parameters<T>) => void {
-  let timeout: NodeJS.Timeout | null = null;
-
-  return function(...args: Parameters<T>) {
-    if (timeout) clearTimeout(timeout);
-    timeout = setTimeout(() => func(...args), wait);
-  };
-}
-
-/**
- * Throttles a function
- */
-export function throttle<T extends (...args: any[]) => any>(
-  func: T,
-  limit: number
-): (...args: Parameters<T>) => void {
-  let inThrottle = false;
-
-  return function(...args: Parameters<T>) {
-    if (!inThrottle) {
-      func(...args);
-      inThrottle = true;
-      setTimeout(() => inThrottle = false, limit);
-    }
-  };
 }

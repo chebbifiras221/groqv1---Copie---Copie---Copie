@@ -10,10 +10,10 @@ importers:
     dependencies:
       '@livekit/components-react':
         specifier: ^2.6.10
-        version: 2.6.10(@livekit/krisp-noise-filter@0.2.13(livekit-client@2.7.5))(livekit-client@2.7.5)(react-dom@19.0.0(react@19.0.0))(react@19.0.0)(tslib@2.8.1)
+        version: 2.6.10(@livekit/krisp-noise-filter@0.2.16(livekit-client@2.7.5))(livekit-client@2.7.5)(react-dom@19.0.0(react@19.0.0))(react@19.0.0)(tslib@2.8.1)
       '@livekit/krisp-noise-filter':
-        specifier: ^0.2.13
-        version: 0.2.13(livekit-client@2.7.5)
+        specifier: ^0.2.16
+        version: 0.2.16(livekit-client@2.7.5)
       class-variance-authority:
         specifier: ^0.7.1
         version: 0.7.1
@@ -26,9 +26,6 @@ importers:
       livekit-client:
         specifier: ^2.7.5
         version: 2.7.5
-      livekit-server-sdk:
-        specifier: ^2.9.3
-        version: 2.13.0
       lucide-react:
         specifier: ^0.469.0
         version: 0.469.0(react@19.0.0)
@@ -63,6 +60,9 @@ importers:
       eslint-config-next:
         specifier: 15.1.2
         version: 15.1.2(eslint@9.17.0(jiti@1.21.7))(typescript@5.7.2)
+      livekit-server-sdk:
+        specifier: ^2.9.3
+        version: 2.13.0
       postcss:
         specifier: ^8
         version: 8.4.49
@@ -298,8 +298,8 @@ packages:
       '@livekit/krisp-noise-filter':
         optional: true
 
-  '@livekit/krisp-noise-filter@0.2.13':
-    resolution: {integrity: sha512-41+NgOIoKsbcIG60f1Hyj4m3zPHIiq7R8HV4pfCUSgr/hnshDIbV0d53Dy/2xqBnXEPCoIbTvFRb8vBllEmYCQ==}
+  '@livekit/krisp-noise-filter@0.2.16':
+    resolution: {integrity: sha512-W7fyNkECDbWLXwBW5CDKQvuW4mxhkKBp9UAvTkTsn6dq1w7ZLTIEdUErrfZiNVuHmbXd22wI1ycjOYvaeNKMvw==}
     peerDependencies:
       livekit-client: ^2.0.8
 
@@ -2028,7 +2028,7 @@ snapshots:
       rxjs: 7.8.1
       tslib: 2.8.1
 
-  '@livekit/components-react@2.6.10(@livekit/krisp-noise-filter@0.2.13(livekit-client@2.7.5))(livekit-client@2.7.5)(react-dom@19.0.0(react@19.0.0))(react@19.0.0)(tslib@2.8.1)':
+  '@livekit/components-react@2.6.10(@livekit/krisp-noise-filter@0.2.16(livekit-client@2.7.5))(livekit-client@2.7.5)(react-dom@19.0.0(react@19.0.0))(react@19.0.0)(tslib@2.8.1)':
     dependencies:
       '@livekit/components-core': 0.11.10(livekit-client@2.7.5)(tslib@2.8.1)
       clsx: 2.1.1
@@ -2038,9 +2038,9 @@ snapshots:
       tslib: 2.8.1
       usehooks-ts: 3.1.0(react@19.0.0)
     optionalDependencies:
-      '@livekit/krisp-noise-filter': 0.2.13(livekit-client@2.7.5)
+      '@livekit/krisp-noise-filter': 0.2.16(livekit-client@2.7.5)
 
-  '@livekit/krisp-noise-filter@0.2.13(livekit-client@2.7.5)':
+  '@livekit/krisp-noise-filter@0.2.16(livekit-client@2.7.5)':
     dependencies:
       livekit-client: 2.7.5
 

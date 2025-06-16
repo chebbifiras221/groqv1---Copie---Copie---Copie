@@ -9,8 +9,6 @@ import signal
 import sys
 from typing import Callable, List
 
-
-
 logger = logging.getLogger("shutdown-handler")
 
 # Global flag to indicate shutdown is in progress
