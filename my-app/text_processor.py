@@ -8,6 +8,7 @@ import logging
 import asyncio
 import config
 import database
+import topic_validator
 
 logger = logging.getLogger("text-processor")
 
@@ -67,6 +68,58 @@ async def handle_text_input(message, ctx, current_conversation_id, safe_publish_
             "conversation_id": current_conversation_id
         }
         await safe_publish_data(ctx.room.local_participant, json.dumps(echo_message).encode())
+
+    # TOPIC VALIDATION: Check if question is CS/programming related
+    logger.info("🔍 Validating question topic...")
+
+    # Get conversation history for context validation
+    conversation_history = []
+    if current_conversation_id:
+        try:
+            # Get recent messages from database for context
+            conversation = await asyncio.get_event_loop().run_in_executor(
+                None, lambda: database.get_conversation(current_conversation_id)
+            )
+            if conversation and 'messages' in conversation:
+                # Get last 6 messages for context (3 user + 3 AI messages)
+                recent_messages = conversation['messages'][-6:]
+                conversation_history = [
+                    {
+                        'type': msg.get('type', 'user'),
+                        'content': msg.get('content', '')
+                    }
+                    for msg in recent_messages
+                ]
+        except Exception as e:
+            logger.warning(f"Could not get conversation history for validation: {e}")
+            conversation_history = []
+
+    # Validate with conversation context
+    is_topic_valid, validation_reason = topic_validator.validate_question_topic(text_input, conversation_history)
+
+    if not is_topic_valid:
+        logger.info(f"❌ Topic validation failed: {validation_reason}")
+
+        # Send rejection message
+        rejection_response = "I'm sorry, but I can only help with computer science, programming, and software development related questions. Please ask me about coding, algorithms, programming languages, software engineering, or other technical topics."
+
+        rejection_message = {
+            "type": "ai_response",
+            "text": rejection_response,
+            "conversation_id": current_conversation_id,
+            "topic_rejected": True
+        }
+        await safe_publish_data(ctx.room.local_participant, json.dumps(rejection_message).encode())
+
+        # Synthesize speech for the rejection
+        await synthesize_speech(rejection_response, ctx.room)
+
+        # Send updated conversation data
+        await send_conversation_data(current_conversation_id, ctx.room.local_participant)
+
+        return current_conversation_id
+
+    logger.info(f"✅ Topic validation passed: {validation_reason}")
 
     # Get the teaching mode from the message
     teaching_mode = message.get('teaching_mode', config.DEFAULT_TEACHING_MODE)

@@ -405,8 +405,29 @@ export function useWebTTS() {
       // Process text differently based on content type
       let cleanedText;
 
-      // If we have special sections and the setting is enabled, only speak the explanations
-      if (hasSpecialSectionsDetected && settings.ttsVerbalsOnly) {
+      // If we have special sections and skip explanations is enabled, remove explanations
+      if (hasSpecialSectionsDetected && settings.ttsSkipExplanations) {
+        try {
+          // Remove explanation blocks from the text
+          let textWithoutExplanations = text;
+
+          // Remove [EXPLAIN]...[/EXPLAIN] blocks
+          const explainBlockRegex = /\[\s*EXPLAIN\s*\][\s\S]*?\[\s*\/\s*EXPLAIN\s*\]/g;
+          textWithoutExplanations = textWithoutExplanations.replace(explainBlockRegex, '');
+
+          // Clean up any extra whitespace left behind
+          textWithoutExplanations = textWithoutExplanations.replace(/\n\s*\n\s*\n/g, '\n\n');
+
+          // Apply standard text cleaning
+          cleanedText = removeSpecialSectionMarkers(textWithoutExplanations);
+          cleanedText = cleanTextForTTS(cleanedText);
+          cleanedText = addNaturalPauses(cleanedText);
+        } catch (error) {
+          // Fallback to simple text cleaning
+          cleanedText = removeSpecialSectionMarkers(text);
+          cleanedText = cleanTextForTTS(cleanedText);
+        }
+      } else if (hasSpecialSectionsDetected && settings.ttsVerbalsOnly) {
         try {
           // Extract only the verbal explanations
           const explanations = extractExplanationBlocks(text);

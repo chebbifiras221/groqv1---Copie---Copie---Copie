@@ -7,7 +7,7 @@ interface Settings {
   autoSpeak: boolean;
   teachingMode: 'teacher' | 'qa'; // 'teacher' for structured teaching, 'qa' for direct Q&A
   ttsVerbalsOnly: boolean; // When true, TTS will only read verbal explanations
-  showExplanations: boolean; // When true, show verbal explanations alongside board content
+  ttsSkipExplanations: boolean; // When true, TTS will skip explanation content
   sidebarVisible: boolean; // Controls visibility of the conversation history sidebar
   // Add more settings as needed
 }
@@ -24,7 +24,7 @@ const defaultSettings: Settings = {
   autoSpeak: true, // Auto-speak AI responses by default
   teachingMode: 'teacher', // Default to structured teaching mode
   ttsVerbalsOnly: false, // Default to reading all content
-  showExplanations: false, // Hide explanations by default
+  ttsSkipExplanations: false, // Default to reading explanations
   sidebarVisible: true, // Show sidebar by default
 };
 

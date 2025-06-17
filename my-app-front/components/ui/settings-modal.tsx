@@ -14,7 +14,7 @@ const defaultSettings = {
   autoSpeak: true, // Auto-speak AI responses by default
   teachingMode: 'teacher', // Default to structured teaching mode
   ttsVerbalsOnly: false, // Default to reading all content
-  showExplanations: false, // Hide explanations by default
+  ttsSkipExplanations: false, // Default to reading explanations
 };
 
 interface SettingsModalProps {
@@ -125,7 +125,10 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
             <div className="flex items-center justify-between">
               <label className="flex items-center gap-2 text-text-primary">
                 <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z"></path>
+                  <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path>
+                  <path d="m19 10-1.5-1.5M5 10l1.5-1.5"></path>
+                  <path d="M12 16v5"></path>
+                  <path d="M8 21h8"></path>
                 </svg>
                 <span>TTS Verbal Focus</span>
               </label>
@@ -153,37 +156,38 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
             </p>
           </div>
 
-          {/* Show Explanations Toggle */}
+          {/* TTS Skip Explanations Toggle */}
           <div className="space-y-2">
             <div className="flex items-center justify-between">
               <label className="flex items-center gap-2 text-text-primary">
                 <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                   <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
                   <circle cx="12" cy="12" r="3"></circle>
+                  <path d="M12 1v6m0 10v6"></path>
                 </svg>
-                <span>Show Explanations</span>
+                <span>TTS Skip Explanations</span>
               </label>
               <div className="relative inline-block w-10 align-middle select-none">
                 <input
                   type="checkbox"
-                  id="show-explanations"
-                  name="show-explanations"
+                  id="tts-skip-explanations"
+                  name="tts-skip-explanations"
                   className="sr-only"
-                  checked={settings.showExplanations}
-                  onChange={() => updateSettings({ showExplanations: !settings.showExplanations })}
+                  checked={settings.ttsSkipExplanations}
+                  onChange={() => updateSettings({ ttsSkipExplanations: !settings.ttsSkipExplanations })}
                 />
                 <label
-                  htmlFor="show-explanations"
-                  className={`block overflow-hidden h-6 rounded-full cursor-pointer transition-colors duration-200 ease-in-out ${settings.showExplanations ? 'bg-primary-DEFAULT' : 'bg-bg-tertiary'}`}
+                  htmlFor="tts-skip-explanations"
+                  className={`block overflow-hidden h-6 rounded-full cursor-pointer transition-colors duration-200 ease-in-out ${settings.ttsSkipExplanations ? 'bg-primary-DEFAULT' : 'bg-bg-tertiary'}`}
                 >
                   <span
-                    className={`block h-4 w-4 rounded-full bg-white transform transition-transform duration-200 ease-in-out ${settings.showExplanations ? 'translate-x-5' : 'translate-x-1'} mt-1`}
+                    className={`block h-4 w-4 rounded-full bg-white transform transition-transform duration-200 ease-in-out ${settings.ttsSkipExplanations ? 'translate-x-5' : 'translate-x-1'} mt-1`}
                   ></span>
                 </label>
               </div>
             </div>
             <p className="text-text-tertiary text-xs mt-1">
-              When enabled, detailed explanations will be shown alongside board content
+              When enabled, TTS will skip reading explanation content (content in [EXPLAIN] blocks)
             </p>
           </div>
 
