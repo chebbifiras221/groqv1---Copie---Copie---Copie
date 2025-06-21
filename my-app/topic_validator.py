@@ -1,160 +1,23 @@
 """
 Topic Validator Module
 This module validates if user questions are related to computer science, programming, or coding.
-Uses a two-tier approach: keyword filtering first, then API validation if needed.
+Uses API-based validation with conversation context support.
 """
 
 import logging
-import re
 import requests
-import json
-from typing import Tuple, List, Set
+from typing import Tuple, List
 import config
 
 logger = logging.getLogger("topic_validator")
 
-# Comprehensive keyword lists for computer science and programming topics
-CS_KEYWORDS = {
-    # Programming Languages
-    'python', 'javascript', 'java', 'c++', 'c#', 'php', 'ruby', 'go', 'rust', 'swift',
-    'kotlin', 'typescript', 'scala', 'perl', 'r', 'matlab', 'sql', 'html', 'css',
-    
-    # Programming Concepts
-    'algorithm', 'algorithms', 'data structure', 'data structures', 'function', 'functions',
-    'variable', 'variables', 'loop', 'loops', 'array', 'arrays', 'object', 'objects',
-    'class', 'classes', 'method', 'methods', 'inheritance', 'polymorphism', 'encapsulation',
-    'recursion', 'iteration', 'conditional', 'conditionals', 'boolean', 'string', 'integer',
-    
-    # Software Development
-    'programming', 'coding', 'development', 'software', 'application', 'app', 'website',
-    'web development', 'mobile development', 'frontend', 'backend', 'fullstack', 'api',
-    'rest api', 'graphql', 'database', 'sql', 'nosql', 'mongodb', 'mysql', 'postgresql',
-    
-    # Computer Science Fields
-    'computer science', 'artificial intelligence', 'machine learning', 'deep learning',
-    'neural network', 'data science', 'cybersecurity', 'networking', 'operating system',
-    'compiler', 'interpreter', 'virtual machine', 'cloud computing', 'devops',
-    
-    # Development Tools & Frameworks
-    'git', 'github', 'docker', 'kubernetes', 'react', 'angular', 'vue', 'node.js',
-    'express', 'django', 'flask', 'spring', 'laravel', 'rails', 'bootstrap', 'jquery',
-    
-    # Technical Concepts
-    'debugging', 'testing', 'unit test', 'integration test', 'version control', 'agile',
-    'scrum', 'mvc', 'oop', 'functional programming', 'design pattern', 'architecture',
-    'microservices', 'monolith', 'scalability', 'performance', 'optimization',
-    
-    # Data & Algorithms
-    'big o', 'complexity', 'sorting', 'searching', 'tree', 'graph', 'linked list',
-    'stack', 'queue', 'hash table', 'binary search', 'merge sort', 'quick sort',
-    
-    # Web Technologies
-    'http', 'https', 'json', 'xml', 'ajax', 'websocket', 'cors', 'authentication',
-    'authorization', 'jwt', 'oauth', 'session', 'cookie', 'cache', 'cdn'
-}
-
-# Common non-CS keywords that might appear in mixed questions
-NON_CS_INDICATORS = {
-    'recipe', 'cooking', 'food', 'restaurant', 'medicine', 'doctor', 'health',
-    'history', 'geography', 'literature', 'poetry', 'music', 'art', 'painting',
-    'sports', 'football', 'basketball', 'weather', 'climate', 'biology', 'chemistry',
-    'physics', 'mathematics', 'calculus', 'algebra', 'geometry'
-}
-
-def preprocess_text(text: str) -> str:
-    """
-    Preprocess text for keyword matching.
-    
-    Args:
-        text: Input text to preprocess
-        
-    Returns:
-        Cleaned and normalized text
-    """
-    # Convert to lowercase
-    text = text.lower()
-    
-    # Remove special characters but keep spaces and alphanumeric
-    text = re.sub(r'[^\w\s]', ' ', text)
-    
-    # Replace multiple spaces with single space
-    text = re.sub(r'\s+', ' ', text)
-    
-    return text.strip()
-
-def extract_keywords(text: str) -> Set[str]:
-    """
-    Extract potential keywords from text.
-    
-    Args:
-        text: Input text
-        
-    Returns:
-        Set of extracted keywords and phrases
-    """
-    processed_text = preprocess_text(text)
-    keywords = set()
-    
-    # Add individual words
-    words = processed_text.split()
-    keywords.update(words)
-    
-    # Add common programming phrases (2-3 words)
-    for i in range(len(words) - 1):
-        two_word = f"{words[i]} {words[i+1]}"
-        keywords.add(two_word)
-        
-        if i < len(words) - 2:
-            three_word = f"{words[i]} {words[i+1]} {words[i+2]}"
-            keywords.add(three_word)
-    
-    return keywords
-
-def keyword_based_validation(text: str) -> Tuple[bool, str, List[str]]:
-    """
-    Fast keyword-based validation to filter obvious CS/programming questions.
-    
-    Args:
-        text: User's question text
-        
-    Returns:
-        Tuple of (is_cs_related, confidence_reason, matched_keywords)
-    """
-    if not text or len(text.strip()) < 3:
-        return False, "Question too short", []
-    
-    # Extract keywords from the question
-    question_keywords = extract_keywords(text)
-    
-    # Find matches with CS keywords
-    cs_matches = question_keywords.intersection(CS_KEYWORDS)
-    non_cs_matches = question_keywords.intersection(NON_CS_INDICATORS)
-    
-    # Log for debugging
-    logger.debug(f"Question keywords: {list(question_keywords)[:10]}...")  # Show first 10
-    logger.debug(f"CS matches: {list(cs_matches)}")
-    logger.debug(f"Non-CS matches: {list(non_cs_matches)}")
-    
-    # Decision logic
-    if len(cs_matches) >= 2:
-        return True, f"Strong CS indicators: {list(cs_matches)[:3]}", list(cs_matches)
-    elif len(cs_matches) == 1 and len(non_cs_matches) == 0:
-        return True, f"CS indicator found: {list(cs_matches)[0]}", list(cs_matches)
-    elif len(non_cs_matches) > len(cs_matches):
-        return False, f"Non-CS topic detected: {list(non_cs_matches)[:2]}", []
-    elif len(cs_matches) == 0:
-        return None, "Unclear - needs API validation", []  # None means uncertain
-    else:
-        return None, "Mixed indicators - needs API validation", list(cs_matches)
-
 def api_based_validation(text: str) -> Tuple[bool, str]:
     """
     Use AI API to validate if question is CS/programming related.
-    Only called when keyword validation is uncertain.
-    
+
     Args:
         text: User's question text
-        
+
     Returns:
         Tuple of (is_cs_related, reason)
     """
@@ -371,6 +234,7 @@ def api_context_validation(current_question: str, conversation_history: List[dic
 def validate_question_topic(text: str, conversation_history: List[dict] = None) -> Tuple[bool, str]:
     """
     Main validation function with conversation context support.
+    Uses API-based validation with conversation context when available.
 
     Args:
         text: User's question text
@@ -381,19 +245,14 @@ def validate_question_topic(text: str, conversation_history: List[dict] = None) 
     """
     logger.info(f"Validating question topic: {text[:100]}...")
 
-    # Step 1: Fast keyword-based validation
-    keyword_result, keyword_reason, matched_keywords = keyword_based_validation(text)
+    # Basic input validation
+    if not text or len(text.strip()) < 3:
+        logger.info("❌ Question too short")
+        return False, "Question too short"
 
-    if keyword_result is True:
-        logger.info(f"✅ Keyword validation PASSED: {keyword_reason}")
-        return True, f"Keyword match: {keyword_reason}"
-    elif keyword_result is False:
-        logger.info(f"❌ Keyword validation FAILED: {keyword_reason}")
-        return False, f"Non-CS topic: {keyword_reason}"
-
-    # Step 2: Check if we have conversation context for uncertain cases
+    # Step 1: Check if we have conversation context
     if conversation_history and len(conversation_history) >= 2:
-        logger.info("🔍 Keyword validation uncertain, using conversation context...")
+        logger.info("🔍 Using conversation context validation...")
         context_result, context_reason = api_context_validation(text, conversation_history)
 
         if context_result:
@@ -403,8 +262,8 @@ def validate_question_topic(text: str, conversation_history: List[dict] = None) 
             logger.info(f"❌ Context validation FAILED: {context_reason}")
             return False, f"Context validation: {context_reason}"
 
-    # Step 3: Fall back to single-question API validation
-    logger.info("🔍 No conversation context, using single-question API validation...")
+    # Step 2: Fall back to single-question API validation
+    logger.info("🔍 Using single-question API validation...")
     api_result, api_reason = api_based_validation(text)
 
     if api_result:

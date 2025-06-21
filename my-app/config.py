@@ -12,31 +12,23 @@ GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 
 # Database Configuration
 DB_FILE_NAME = "conversations.db"
-DEFAULT_CONVERSATION_TITLE = "New Conversation"
 
 # Message Processing Configuration
-MAX_MESSAGE_LENGTH = 50000  # Increased significantly to prevent truncation
+MAX_MESSAGE_LENGTH = 50000  
 MAX_CONVERSATION_HISTORY = 15  # Keep last 15 messages + system prompt
 CONVERSATION_LIST_LIMIT = 20
 
 # AI Model Configuration
-# Models are tried in order - put best/preferred models first
+# Simplified 3-model fallback chain for reliability and speed
 AI_MODELS = [
-    # Primary models (70B - highest quality)
+    # Primary model (70B - highest quality)
     {"name": "llama-3.3-70b-versatile", "temperature": 0.6, "description": "Llama 3.3 70B Versatile"},
-    {"name": "llama3-70b-8192", "temperature": 0.6, "description": "Llama 3 70B"},
 
-    # Secondary models (8B - good balance of speed and quality)
+    # Secondary model (8B - good balance of speed and quality)
     {"name": "llama-3.1-8b-instant", "temperature": 0.6, "description": "Llama 3.1 8B Instant"},
-    {"name": "llama3-8b-8192", "temperature": 0.6, "description": "Llama 3 8B"},
 
-    # Fallback models (7B - faster, still capable)
-    {"name": "llama-3.2-7b-preview", "temperature": 0.6, "description": "Llama 3.2 7B Preview"},
-    {"name": "llama-3.1-7b-versatile", "temperature": 0.6, "description": "Llama 3.1 7B Versatile"},
-
-    # Emergency fallback (smaller but very fast)
-    {"name": "llama-3.2-3b-preview", "temperature": 0.7, "description": "Llama 3.2 3B Preview"},
-    {"name": "llama-3.2-1b-preview", "temperature": 0.7, "description": "Llama 3.2 1B Preview"}
+    # Fallback model (3B - fast and reliable)
+    {"name": "llama-3.2-3b-preview", "temperature": 0.7, "description": "Llama 3.2 3B Preview"}
 ]
 
 # AI Request Parameters
@@ -62,8 +54,7 @@ AI_MODEL_SWITCH_DELAY = 1.0  # Delay between trying different models
 # Temperature Strategy Explanation:
 # - 70B models: 0.6 (balanced, high quality responses)
 # - 8B models: 0.6 (maintain consistency with primary models)
-# - 7B models: 0.6 (good balance for educational content)
-# - 3B/1B models: 0.7 (slightly higher to compensate for smaller model limitations)
+# - 3B models: 0.7 (slightly higher to compensate for smaller model limitations)
 
 # Speech-to-Text Configuration
 STT_CONFIG = {
@@ -96,22 +87,6 @@ ERROR_MESSAGES = {
     "database_init_error": "Error during database initialization: {error}"
 }
 
-def get_model_description(model_name: str) -> str:
-    """Get human-readable description for a model name."""
-    for model in AI_MODELS:
-        if model["name"] == model_name:
-            return model["description"]
-    return model_name
-
-def get_model_info(model_name: str) -> Dict[str, Any]:
-    """Get complete model information."""
-    for model in AI_MODELS:
-        if model["name"] == model_name:
-            return model
-    return {"name": model_name, "temperature": 0.6, "description": model_name}
-
-
-
 def get_ai_request_data(model_name: str, conversation_history: List[Dict[str, Any]], temperature: float = None) -> Dict[str, Any]:
     """Build AI request data with consistent parameters."""
     model_temp = temperature
@@ -123,7 +98,7 @@ def get_ai_request_data(model_name: str, conversation_history: List[Dict[str, An
                 break
         if model_temp is None:
             model_temp = 0.6  # Default fallback
-    
+
     return {
         "model": model_name,
         "messages": conversation_history,

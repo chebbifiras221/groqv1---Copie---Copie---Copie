@@ -73,9 +73,7 @@ def init_db():
             id TEXT PRIMARY KEY,
             username TEXT UNIQUE NOT NULL,
             password_hash TEXT NOT NULL,
-            email TEXT UNIQUE,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            last_login TIMESTAMP
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
         ''')
 
@@ -277,8 +275,6 @@ def add_message(conversation_id: str, message_type: str, content: str) -> str:
         logger.error(f"Error adding message to conversation {conversation_id}: {e}")
         raise
 
-
-
 def delete_conversation(conversation_id: str, user_id: str = None) -> bool:
     """
     Delete a conversation and all its messages with optional user_id check
@@ -343,15 +339,9 @@ def update_conversation_title(conversation_id: str, title: str) -> bool:
             (title, now, conversation_id),
             commit=True
         )
-        success = True
 
-        # Log the result
-        if success:
-            logger.info(f"Updated title for conversation {conversation_id}")
-            return True
-        else:
-            logger.warning(f"No conversation found with ID {conversation_id}")
-            return False
+        logger.info(f"Updated title for conversation {conversation_id}")
+        return True
     except Exception as e:
         logger.error(f"Error updating conversation title for {conversation_id}: {e}")
         raise
@@ -448,7 +438,6 @@ def reuse_empty_conversation(conversation_id: str, teaching_mode: str = None, li
     except Exception as e:
         logger.error(f"Error reusing empty conversation {conversation_id}: {e}")
         raise
-
 
 def clear_conversations_by_mode(teaching_mode: str, user_id: str = None) -> Dict[str, Any]:
     """

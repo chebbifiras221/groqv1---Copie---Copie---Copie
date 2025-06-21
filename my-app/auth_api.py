@@ -69,7 +69,6 @@ def handle_register(request: Dict[str, Any]) -> Tuple[Dict[str, Any], int]:
     """
     username = request.get('username')
     password = request.get('password')
-    email = request.get('email')
 
     logger.info(f"Registration request for username: {username}")
 
@@ -82,7 +81,7 @@ def handle_register(request: Dict[str, Any]) -> Tuple[Dict[str, Any], int]:
         }, 400
 
     # Register the user
-    success, message, user = auth_db.register_user(username, password, email)
+    success, message, user = auth_db.register_user(username, password)
 
     if success:
         logger.info(f"User registered successfully: {username}")
@@ -138,7 +137,12 @@ def handle_login(request: Dict[str, Any]) -> Tuple[Dict[str, Any], int]:
         }, 200
     else:
         # Determine the specific error type
-        error_type = 'username' if 'user does not exist' in token_or_message.lower() else 'password' if 'password is incorrect' in token_or_message.lower() else 'server_error'
+        if 'user does not exist' in token_or_message.lower():
+            error_type = 'username'
+        elif 'password is incorrect' in token_or_message.lower():
+            error_type = 'password'
+        else:
+            error_type = 'server_error'
 
         logger.warning(f"Login failed for {username}: {token_or_message}")
 
@@ -210,12 +214,6 @@ def handle_logout(request: Dict[str, Any]) -> Tuple[Dict[str, Any], int]:
             'message': 'Token is required',
             'errorType': 'validation'
         }, 400
-
-    # First, try to identify the user before logging them out
-    verify_success, user = auth_db.verify_token(token)
-    if verify_success and user:
-        username = user.get('username', 'unknown')
-        logger.info(f"Logging out user: {username}")
 
     # Logout the user
     success = auth_db.logout_user(token)

@@ -15,7 +15,6 @@ async def handle_clear_conversations(message, ctx, current_conversation_id, safe
     """Handle clearing all conversations for a specific teaching mode."""
     teaching_mode = message.get('teaching_mode', config.DEFAULT_TEACHING_MODE)
     user_id = message.get('user_id')
-    # Note: current_conversation_id parameter is kept for API consistency but not used in this function
 
     # Clear conversations for the specified teaching mode with user_id
     result = database.clear_conversations_by_mode(teaching_mode, user_id)
@@ -23,7 +22,6 @@ async def handle_clear_conversations(message, ctx, current_conversation_id, safe
     new_conversation_id = result["new_conversation_id"]
 
     logger.info(f"Cleared {deleted_count} conversations with teaching mode: {teaching_mode} for user: {user_id}")
-    logger.info(f"Created new conversation with ID: {new_conversation_id} and teaching mode: {teaching_mode}")
 
     # Send the response with the new conversation
     response_message = {
@@ -97,7 +95,6 @@ async def handle_list_conversations(message, ctx, safe_publish_data):
     """Handle listing conversations for a specific user."""
     user_id = message.get('user_id')
 
-    # Always require user_id for data isolation
     if not user_id:
         logger.warning("List conversations request without user_id - using legacy mode")
 
@@ -125,27 +122,19 @@ async def handle_auth_request(message, ctx, safe_publish_data):
     # Send the response back to the client
     await safe_publish_data(ctx.room.local_participant, json.dumps(response_message).encode())
 
-    # Log the authentication request (without sensitive data)
-    auth_type = auth_data.get('type', 'unknown')
-    username = auth_data.get('username', 'unknown')
-    logger.info(f"Processed {auth_type} request for user: {username}, status: {status_code}")
-
-    # If this was a successful login, update the current user context
-    if auth_type == 'login' and response_data.get('success'):
-        user_id = response_data.get('user', {}).get('id')
-        if user_id:
-            logger.info(f"User {username} (ID: {user_id}) logged in successfully")
-
-            # Send the conversation list for this user
-            try:
-                conversations = database.list_conversations(limit=config.CONVERSATION_LIST_LIMIT, user_id=user_id)
-                list_response = {
-                    "type": "conversations_list",
-                    "conversations": conversations
-                }
-                await safe_publish_data(ctx.room.local_participant, json.dumps(list_response).encode())
-            except Exception as e:
-                logger.error(f"Error getting conversation list after login: {e}")
+    # If this was a successful login, send the conversation list
+    if (auth_data.get('type') == 'login' and response_data.get('success') and
+        response_data.get('user', {}).get('id')):
+        user_id = response_data['user']['id']
+        try:
+            conversations = database.list_conversations(limit=config.CONVERSATION_LIST_LIMIT, user_id=user_id)
+            list_response = {
+                "type": "conversations_list",
+                "conversations": conversations
+            }
+            await safe_publish_data(ctx.room.local_participant, json.dumps(list_response).encode())
+        except Exception as e:
+            logger.error(f"Error getting conversation list after login: {e}")
 
     return response_data
 

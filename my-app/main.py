@@ -31,21 +31,18 @@ logging.basicConfig(
 
 logger = logging.getLogger("groq-whisper-stt-transcriber")
 
-# Initialize shutdown handling with the '9' key
+# Initialize shutdown handling
 shutdown.initialize_shutdown_handling()
-print("\n=== Press the '9' key to gracefully shutdown the application ===\n")
+print("\n=== Press Ctrl+C or send SIGTERM to gracefully shutdown the application ===\n")
 
 # Initialize database - consolidated initialization
-from db_utils import enable_wal_mode, ensure_db_file_exists
+from db_utils import ensure_db_file_exists
 
 try:
     # Ensure the database file exists
     ensure_db_file_exists()
 
-    # Enable WAL mode for better crash recovery
-    enable_wal_mode()
-
-    # Initialize the database and run migrations
+    # Initialize the database and run migrations (WAL mode is enabled automatically per connection)
     database.init_db()
 
     # Initialize the authentication database
@@ -209,10 +206,6 @@ async def synthesize_speech(text, room, voice_name=None):
     def get_provider_name():
         return "fallback" if hasattr(tts_engine, 'use_fallback') and tts_engine.use_fallback else "web"
 
-    # Helper function to get voice name
-    def get_voice_name():
-        return voice_name or (tts_engine.default_voice_name if hasattr(tts_engine, 'default_voice_name') else config.TTS_DEFAULT_VOICE)
-
     # Helper function to send error message
     async def send_error(message):
         try:
@@ -235,13 +228,9 @@ async def synthesize_speech(text, room, voice_name=None):
             return await send_error("Failed to initialize TTS engine")
 
     try:
-        # Use the default voice from the TTS engine if none provided
-        if not voice_name and hasattr(tts_engine, 'default_voice_name'):
-            voice_name = tts_engine.default_voice_name
-
         # Get provider and voice information
         provider = get_provider_name()
-        voice = get_voice_name()
+        voice = voice_name or (tts_engine.default_voice_name if hasattr(tts_engine, 'default_voice_name') else config.TTS_DEFAULT_VOICE)
 
         # Create a data message to notify clients that TTS is starting
         tts_start_message = {
@@ -287,11 +276,12 @@ async def synthesize_speech(text, room, voice_name=None):
                 else:
                     # Otherwise, publish as binary data
                     await safe_publish_data(room.local_participant, audio_data)
-                    logger.info(f"Published audio data, size: {len(audio_data)} bytes")
             except (UnicodeDecodeError, json.JSONDecodeError):
                 # If it's not valid UTF-8 or JSON, it's binary audio data
                 await safe_publish_data(room.local_participant, audio_data)
-                logger.info(f"Published binary audio data, size: {len(audio_data)} bytes")
+
+            # Log successful audio data publishing
+            logger.info(f"Published audio data, size: {len(audio_data)} bytes")
         except Exception as e:
             logger.error(f"Error publishing audio data: {e}")
             return await send_error(f"Error publishing audio: {str(e)}")
@@ -338,8 +328,8 @@ def generate_ai_response(text, conversation_id=None):
 
     # Generate a title for the conversation based on the first message
     if len(conversation.get("messages", [])) <= 1:
-        title = database.generate_conversation_title(actual_conversation_id)
-        logger.info(f"Generated title for conversation {actual_conversation_id}: {title}")
+        database.generate_conversation_title(actual_conversation_id)
+        logger.info(f"Generated title for conversation {actual_conversation_id}")
 
     # Prepare conversation history for the AI model
     conversation_history = ai_utils.prepare_conversation_history(conversation["messages"], teaching_mode)
@@ -400,7 +390,7 @@ async def _forward_transcription(
                 }
                 # Use our safe publish method with retry logic
                 await safe_publish_data(room.local_participant, json.dumps(data_message).encode())
-            elif not current_conversation_id:
+            else:
                 # Log an error if we don't have a valid conversation ID
                 logger.error(config.ERROR_MESSAGES["no_conversation_id"])
 
@@ -448,9 +438,8 @@ async def safe_publish_data(participant, data, max_retries=config.DEFAULT_MAX_RE
 async def entrypoint(ctx: JobContext):
     logger.info(f"starting transcriber (speech to text) example, room: {ctx.room.name}")
 
-    # Initialize the current conversation ID as None - we'll create one when needed
+    # Use the global current_conversation_id - it's already initialized as None
     global current_conversation_id
-    current_conversation_id = None
 
     # Initialize TTS engine
     if initialize_tts():
@@ -466,7 +455,6 @@ async def entrypoint(ctx: JobContext):
         logger.info(f"Using existing conversation with ID: {current_conversation_id}")
     else:
         # Don't create a new conversation automatically - let the frontend handle this
-        current_conversation_id = None
         logger.info("No existing conversations found. Waiting for frontend to create one.")
 
     # Check if Groq API key is available

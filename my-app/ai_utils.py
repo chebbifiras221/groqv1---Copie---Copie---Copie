@@ -15,6 +15,21 @@ from ai_prompts import get_system_prompt
 logger = logging.getLogger("ai-utils")
 
 
+def validate_teaching_mode(teaching_mode: str) -> str:
+    """
+    Validate and return a valid teaching mode.
+
+    Args:
+        teaching_mode: The teaching mode to validate
+
+    Returns:
+        Valid teaching mode ('teacher' or 'qa')
+    """
+    if teaching_mode in config.TEACHING_MODES:
+        return teaching_mode
+    return config.DEFAULT_TEACHING_MODE
+
+
 def extract_conversation_context(conversation_id) -> Tuple[str, str, bool]:
     """
     Extract conversation context from the conversation_id parameter.
@@ -32,21 +47,12 @@ def extract_conversation_context(conversation_id) -> Tuple[str, str, bool]:
 
     # Check if conversation_id is a dictionary with additional context
     if isinstance(conversation_id, dict):
-        # Extract teaching mode if provided
-        if "teaching_mode" in conversation_id:
-            teaching_mode = conversation_id["teaching_mode"]
-
-        # Extract actual conversation ID
-        if "conversation_id" in conversation_id:
-            actual_conversation_id = conversation_id["conversation_id"]
-
-        # Check if this is a hidden instruction
-        if "is_hidden" in conversation_id:
-            is_hidden = conversation_id["is_hidden"]
+        teaching_mode = conversation_id.get("teaching_mode", teaching_mode)
+        actual_conversation_id = conversation_id.get("conversation_id", actual_conversation_id)
+        is_hidden = conversation_id.get("is_hidden", is_hidden)
 
     # Validate teaching mode
-    if teaching_mode not in config.TEACHING_MODES:
-        teaching_mode = config.DEFAULT_TEACHING_MODE
+    teaching_mode = validate_teaching_mode(teaching_mode)
 
     return actual_conversation_id, teaching_mode, is_hidden
 
@@ -69,9 +75,10 @@ def prepare_conversation_history(messages: List[Dict[str, Any]], teaching_mode: 
     conversation_history = [system_prompt]
 
     # Add the conversation history
-    for msg in messages:
-        role = "user" if msg["type"] == "user" else "assistant"
-        conversation_history.append({"role": role, "content": msg["content"]})
+    conversation_history.extend([
+        {"role": "user" if msg["type"] == "user" else "assistant", "content": msg["content"]}
+        for msg in messages
+    ])
 
     # Keep only the last N messages to avoid token limits, but always keep the system prompt
     max_messages = config.MAX_CONVERSATION_HISTORY + 1  # +1 for system prompt
@@ -96,9 +103,7 @@ def make_ai_request(model_name: str, conversation_history: List[Dict[str, Any]],
     if not config.GROQ_API_KEY:
         return False, config.ERROR_MESSAGES["api_key_missing"]
 
-    # Use config default if max_retries not specified
-    if max_retries is None:
-        max_retries = config.AI_MODEL_RETRY_COUNT
+    max_retries = max_retries or config.AI_MODEL_RETRY_COUNT
 
     headers = {
         "Authorization": f"Bearer {config.GROQ_API_KEY}",
@@ -122,14 +127,12 @@ def make_ai_request(model_name: str, conversation_history: List[Dict[str, Any]],
             result = response.json()
 
             # Validate response structure
-            if "choices" not in result or not result["choices"]:
+            if not result.get("choices"):
                 raise ValueError("Invalid API response: missing choices")
 
-            if "message" not in result["choices"][0] or "content" not in result["choices"][0]["message"]:
-                raise ValueError("Invalid API response: missing message content")
-
-            ai_response = result["choices"][0]["message"]["content"]
-            if not ai_response or not ai_response.strip():
+            message = result["choices"][0].get("message", {})
+            ai_response = message.get("content", "").strip()
+            if not ai_response:
                 raise ValueError("Empty response from API")
 
             logger.info(f"Successfully generated response with model: {model_name}")
@@ -137,33 +140,33 @@ def make_ai_request(model_name: str, conversation_history: List[Dict[str, Any]],
 
         except requests.exceptions.Timeout as e:
             error_msg = f"Request timeout for model {model_name}: {e}"
-            logger.warning(error_msg)
             if attempt < max_retries:
                 wait_time = 2 ** attempt  # Exponential backoff: 1s, 2s, 4s
-                logger.info(f"Retrying in {wait_time} seconds...")
+                logger.warning(f"{error_msg}. Retrying in {wait_time} seconds...")
                 time.sleep(wait_time)
                 continue
+            logger.warning(error_msg)
             return False, error_msg
 
         except requests.exceptions.HTTPError as e:
             # Check for specific HTTP status codes
             if e.response.status_code == 429:  # Rate limit
                 error_msg = f"Rate limit exceeded for model {model_name}"
-                logger.warning(error_msg)
                 if attempt < max_retries:
                     wait_time = 5 * (2 ** attempt)  # Longer wait for rate limits: 5s, 10s, 20s
-                    logger.info(f"Rate limited. Retrying in {wait_time} seconds...")
+                    logger.warning(f"{error_msg}. Retrying in {wait_time} seconds...")
                     time.sleep(wait_time)
                     continue
+                logger.warning(error_msg)
                 return False, error_msg
             elif e.response.status_code == 503:  # Service unavailable
                 error_msg = f"Service unavailable for model {model_name}"
-                logger.warning(error_msg)
                 if attempt < max_retries:
                     wait_time = 3 * (2 ** attempt)  # Wait for service: 3s, 6s, 12s
-                    logger.info(f"Service unavailable. Retrying in {wait_time} seconds...")
+                    logger.warning(f"{error_msg}. Retrying in {wait_time} seconds...")
                     time.sleep(wait_time)
                     continue
+                logger.warning(error_msg)
                 return False, error_msg
             else:
                 error_msg = f"HTTP error {e.response.status_code} for model {model_name}: {e}"
@@ -172,12 +175,12 @@ def make_ai_request(model_name: str, conversation_history: List[Dict[str, Any]],
 
         except requests.exceptions.ConnectionError as e:
             error_msg = f"Connection error for model {model_name}: {e}"
-            logger.warning(error_msg)
             if attempt < max_retries:
                 wait_time = 2 ** attempt
-                logger.info(f"Connection failed. Retrying in {wait_time} seconds...")
+                logger.warning(f"{error_msg}. Retrying in {wait_time} seconds...")
                 time.sleep(wait_time)
                 continue
+            logger.warning(error_msg)
             return False, error_msg
 
         except ValueError as e:
@@ -188,12 +191,12 @@ def make_ai_request(model_name: str, conversation_history: List[Dict[str, Any]],
 
         except Exception as e:
             error_msg = f"Unexpected error with model {model_name}: {e}"
-            logger.warning(error_msg)
             if attempt < max_retries:
                 wait_time = 2 ** attempt
-                logger.info(f"Unexpected error. Retrying in {wait_time} seconds...")
+                logger.warning(f"{error_msg}. Retrying in {wait_time} seconds...")
                 time.sleep(wait_time)
                 continue
+            logger.warning(error_msg)
             return False, error_msg
 
     return False, f"All retry attempts failed for model {model_name}"
@@ -269,17 +272,13 @@ def get_teaching_mode_from_db(conversation_id: str) -> str:
         conversation = database.get_conversation(conversation_id)
 
         # If the conversation exists and has a teaching_mode, use it
-        if conversation and "teaching_mode" in conversation and conversation["teaching_mode"]:
+        if conversation and conversation.get("teaching_mode"):
             teaching_mode = conversation["teaching_mode"]
             logger.info(f"Retrieved teaching mode from database: {teaching_mode}")
-            # Validate teaching mode
-            if teaching_mode in config.TEACHING_MODES:
-                return teaching_mode
-            else:
-                return config.DEFAULT_TEACHING_MODE
+            return validate_teaching_mode(teaching_mode)
         else:
             logger.warning(f"No teaching mode found for conversation {conversation_id}, using default mode")
-            return config.DEFAULT_TEACHING_MODE
     except Exception as e:
         logger.error(f"Error getting teaching mode from database: {e}")
-        return config.DEFAULT_TEACHING_MODE
+
+    return config.DEFAULT_TEACHING_MODE

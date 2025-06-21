@@ -10,7 +10,7 @@ import hashlib
 import secrets
 import os
 import jwt
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Dict, Any, Optional, Tuple
 
 from db_utils import (
@@ -21,7 +21,6 @@ from db_utils import (
 )
 
 # Get logger for this module
-
 logger = logging.getLogger("auth-db")
 
 # JWT configuration
@@ -72,9 +71,7 @@ def init_auth_db():
             id TEXT PRIMARY KEY,
             username TEXT UNIQUE NOT NULL,
             password_hash TEXT NOT NULL,
-            email TEXT UNIQUE,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            last_login TIMESTAMP
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
         ''')
 
@@ -83,8 +80,6 @@ def init_auth_db():
         CREATE TABLE IF NOT EXISTS tokens (
             token TEXT PRIMARY KEY,
             user_id TEXT NOT NULL,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            expires_at TIMESTAMP NOT NULL,
             FOREIGN KEY (user_id) REFERENCES users(id)
         )
         ''')
@@ -119,14 +114,13 @@ def verify_password(stored_password: str, provided_password: str) -> bool:
         logger.error(f"Error verifying password: {e}")
         return False
 
-def register_user(username: str, password: str, email: str = None) -> Tuple[bool, str, Optional[Dict[str, Any]]]:
+def register_user(username: str, password: str) -> Tuple[bool, str, Optional[Dict[str, Any]]]:
     """
     Register a new user.
 
     Args:
         username: Username for the new user
         password: Password for the new user
-        email: Optional email address
 
     Returns:
         Tuple containing:
@@ -145,17 +139,6 @@ def register_user(username: str, password: str, email: str = None) -> Tuple[bool
         if existing_user:
             return False, "Username already exists", None
 
-        # Check if email already exists (if provided)
-        if email:
-            existing_email = execute_query(
-                "SELECT id FROM users WHERE email = ?",
-                (email,),
-                fetch_one=True
-            )
-
-            if existing_email:
-                return False, "Email already exists", None
-
         # Create new user
         user_id = str(uuid.uuid4())
         password_hash = hash_password(password)
@@ -163,17 +146,19 @@ def register_user(username: str, password: str, email: str = None) -> Tuple[bool
 
         # Insert user into database
         execute_query(
-            "INSERT INTO users (id, username, password_hash, email, created_at) VALUES (?, ?, ?, ?, ?)",
-            (user_id, username, password_hash, email, now),
+            "INSERT INTO users (id, username, password_hash, created_at) VALUES (?, ?, ?, ?)",
+            (user_id, username, password_hash, now),
             commit=True
         )
 
-        # Get the created user
-        user = get_record_by_id("users", user_id)
-        if user and "password_hash" in user:
-            del user["password_hash"]  # Don't return the password hash
+        # Return user data without password hash
+        user_data = {
+            "id": user_id,
+            "username": username,
+            "created_at": now
+        }
 
-        return True, "User registered successfully", user
+        return True, "User registered successfully", user_data
     except Exception as e:
         logger.error(f"Error registering user: {e}")
         return False, f"Registration error: {str(e)}", None
@@ -207,17 +192,9 @@ def login_user(username: str, password: str) -> Tuple[bool, str, Optional[Dict[s
         if not verify_password(user["password_hash"], password):
             return False, "Password is incorrect", None
 
-        # Update last login timestamp
-        now = datetime.now().isoformat()
-        execute_query(
-            "UPDATE users SET last_login = ? WHERE id = ?",
-            (now, user["id"]),
-            commit=True
-        )
-
         # Generate JWT token
         # Use timezone-aware objects for UTC time
-        now = datetime.now(datetime.timezone.utc)
+        now = datetime.now(timezone.utc)
         expiration = now + timedelta(hours=JWT_EXPIRATION)
 
         token_data = {
@@ -228,10 +205,9 @@ def login_user(username: str, password: str) -> Tuple[bool, str, Optional[Dict[s
         token = jwt.encode(token_data, JWT_SECRET, algorithm=JWT_ALGORITHM)
 
         # Store token in database
-        expires_at = expiration.isoformat()
         execute_query(
-            "INSERT INTO tokens (token, user_id, expires_at) VALUES (?, ?, ?)",
-            (token, user["id"], expires_at),
+            "INSERT INTO tokens (token, user_id) VALUES (?, ?)",
+            (token, user["id"]),
             commit=True
         )
 
@@ -257,17 +233,6 @@ def verify_token(token: str) -> Tuple[bool, Optional[Dict[str, Any]]]:
         - User data if successful, None otherwise
     """
     try:
-        # Check if token exists in database
-        token_record = execute_query(
-            "SELECT * FROM tokens WHERE token = ?",
-            (token,),
-            fetch_one=True
-        )
-
-        if not token_record:
-            logger.warning("Token not found in database")
-            return False, None
-
         # Decode and verify the token
         payload = jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALGORITHM])
 

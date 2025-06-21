@@ -7,7 +7,12 @@
   "msaadi.moomen@gmail.com": {
     "id": "user-1749851996645",
     "username": "msaadi.moomen@gmail.com",
-    "password": "jolteon123jolteon",
-    "token": "token-1750178096941-xjfdg1gw3ul"
+    "password": "jolteon123jolteon"
+  },
+  "qwerty": {
+    "id": "user-1750529689944",
+    "username": "qwerty",
+    "password": "123456789",
+    "token": "token-1750534822781-vv3na6vjkwo"
   }
 }

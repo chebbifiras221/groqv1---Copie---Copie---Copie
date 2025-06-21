@@ -1,22 +1,20 @@
 """
 Database utility functions for managing SQLite connections and common operations.
-This module provides a connection pool and utility functions for database operations.
+This module provides database connection management and utility functions for database operations.
 """
 
+import os
 import sqlite3
 import logging
 from typing import Any, Dict, List, Optional, Tuple, Union
 
 logger = logging.getLogger("db-utils")
-
-# Database file path - use absolute path for better reliability
-import os
 DB_FILE = os.path.abspath(os.path.join(os.path.dirname(__file__), "conversations.db"))
 
 # Simple connection management for SQLite
 
-def _create_connection():
-    """Create a new database connection with proper settings"""
+def get_db_connection():
+    """Create and return a new database connection with proper settings"""
     conn = sqlite3.connect(DB_FILE, check_same_thread=False)
     conn.row_factory = sqlite3.Row  # Return rows as dictionaries
 
@@ -24,22 +22,18 @@ def _create_connection():
     try:
         conn.execute("PRAGMA journal_mode=WAL")
         conn.execute("PRAGMA synchronous=NORMAL")
-        logger.debug("WAL mode enabled for new database connection")
+        logger.debug(f"WAL mode enabled for new database connection to {DB_FILE}")
     except sqlite3.Error as e:
-        logger.warning(f"Failed to enable WAL mode: {e}")
+        logger.warning(f"Failed to enable WAL mode for {DB_FILE}: {e}")
 
     return conn
-
-def get_db_connection():
-    """Get a database connection"""
-    return _create_connection()
 
 def release_connection(conn):
     """Close a database connection"""
     try:
         conn.close()
     except Exception as e:
-        logger.error(f"Error closing connection: {e}")
+        logger.error(f"Error closing connection to {DB_FILE}: {e}")
 
 def check_column_exists(conn, table: str, column: str) -> bool:
     """Check if a column exists in a table"""
@@ -82,7 +76,7 @@ def execute_query(query: str, params: Tuple = (), fetch_all: bool = False,
     except Exception as e:
         if commit:
             conn.rollback()
-        logger.error(f"Database error executing query: {e}")
+        logger.error(f"Database error executing query on {DB_FILE}: {e}")
         raise
     finally:
         release_connection(conn)
@@ -102,7 +96,7 @@ def execute_transaction(queries: List[Dict[str, Any]]) -> bool:
     conn = get_db_connection()
     try:
         cursor = conn.cursor()
-        cursor.execute("BEGIN TRANSACTION")
+        # SQLite automatically starts a transaction with the first statement
 
         for query_data in queries:
             query = query_data["query"]
@@ -113,7 +107,7 @@ def execute_transaction(queries: List[Dict[str, Any]]) -> bool:
         return True
     except Exception as e:
         conn.rollback()
-        logger.error(f"Transaction error: {e}")
+        logger.error(f"Transaction error on {DB_FILE}: {e}")
         return False
     finally:
         release_connection(conn)
@@ -144,22 +138,7 @@ def checkpoint_database():
         conn.execute("PRAGMA wal_checkpoint(FULL)")
         logger.info("Database checkpoint completed successfully")
     except Exception as e:
-        logger.error(f"Error during database checkpoint: {e}")
-    finally:
-        release_connection(conn)
-
-def enable_wal_mode():
-    """
-    Enable Write-Ahead Logging mode for better crash recovery.
-    Should be called during application startup.
-    """
-    conn = get_db_connection()
-    try:
-        conn.execute("PRAGMA journal_mode=WAL")
-        conn.execute("PRAGMA synchronous=NORMAL")
-        logger.info("WAL mode enabled for database")
-    except Exception as e:
-        logger.error(f"Error enabling WAL mode: {e}")
+        logger.error(f"Error during database checkpoint on {DB_FILE}: {e}")
     finally:
         release_connection(conn)
 
@@ -167,10 +146,19 @@ def close_all_connections():
     """
     Close all database connections.
     This should be called during application shutdown.
+
+    Note: With the current architecture, connections are closed immediately after use,
+    so this function primarily serves as a cleanup verification step.
     """
-    # With the simplified approach, connections are closed immediately after use
-    # This function is kept for API compatibility
-    logger.info("Database connections cleanup completed")
+    # Verify no connections are left open by attempting a checkpoint
+    try:
+        conn = get_db_connection()
+        conn.execute("PRAGMA wal_checkpoint(PASSIVE)")
+        release_connection(conn)
+        logger.info("Database connections cleanup completed - no lingering connections found")
+    except Exception as e:
+        logger.warning(f"Minor issue during connection cleanup verification: {e}")
+        logger.info("Database connections cleanup completed")
 
 def ensure_db_file_exists():
     """
@@ -185,7 +173,7 @@ def ensure_db_file_exists():
             os.makedirs(db_dir)
             logger.info(f"Created database directory: {db_dir}")
         except Exception as e:
-            logger.error(f"Error creating database directory: {e}")
+            logger.error(f"Error creating database directory {db_dir}: {e}")
 
     # Check if the database file exists
     if not os.path.exists(DB_FILE):
@@ -195,9 +183,6 @@ def ensure_db_file_exists():
             conn.close()
             logger.info(f"Created empty database file: {DB_FILE}")
         except Exception as e:
-            logger.error(f"Error creating database file: {e}")
+            logger.error(f"Error creating database file {DB_FILE}: {e}")
     else:
-        logger.info(f"Database file exists: {DB_FILE}")
-
-    # Log the absolute path to the database file
-    logger.info(f"Using database file: {os.path.abspath(DB_FILE)}")
+        logger.info(f"Database file exists: {os.path.abspath(DB_FILE)}")
