@@ -4,25 +4,29 @@ import { useState, useEffect } from 'react';
  * Hook to detect and track theme changes
  * @returns {boolean} Whether the current theme is dark
  */
+const checkIsDarkTheme = (): boolean => {
+  if (typeof document === 'undefined') return true;
+  return !document.documentElement.classList.contains('light-theme');
+};
+
 export const useThemeDetector = (): boolean => {
   const [isDarkTheme, setIsDarkTheme] = useState(true);
 
   useEffect(() => {
+    if (typeof window === 'undefined') return;
+
     // Initial theme check
-    if (typeof window !== 'undefined') {
-      setIsDarkTheme(!document.documentElement.classList.contains('light-theme'));
-    }
+    setIsDarkTheme(checkIsDarkTheme());
 
     // Listen for theme changes
     const observer = new MutationObserver((mutations) => {
-      mutations.forEach((mutation) => {
-        if (mutation.attributeName === 'class') {
-          setIsDarkTheme(!document.documentElement.classList.contains('light-theme'));
-        }
-      });
+      const hasClassChange = mutations.some(mutation => mutation.attributeName === 'class');
+      if (hasClassChange) {
+        setIsDarkTheme(checkIsDarkTheme());
+      }
     });
 
-    if (typeof window !== 'undefined') {
+    if (typeof document !== 'undefined') {
       observer.observe(document.documentElement, { attributes: true });
     }
 

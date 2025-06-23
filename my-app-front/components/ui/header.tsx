@@ -77,7 +77,6 @@ export function Header({ title = "Programming Teacher" }: HeaderProps) {
           window.location.reload();
         }, 300);
       } catch (error) {
-        console.error("Error during disconnect:", error);
         // If there's an error, still try to reload the page
         window.location.reload();
       }

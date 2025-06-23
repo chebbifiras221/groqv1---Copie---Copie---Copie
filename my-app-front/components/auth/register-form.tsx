@@ -19,7 +19,6 @@ export function RegisterForm({ onSuccess, onLoginClick }: RegisterFormProps) {
   const [validationError, setValidationError] = useState<string | null>(null);
 
   const validateForm = () => {
-    // Only set validation errors, don't clear them
     if (password !== confirmPassword) {
       setValidationError("Passwords do not match");
       return false;
@@ -30,7 +29,6 @@ export function RegisterForm({ onSuccess, onLoginClick }: RegisterFormProps) {
       return false;
     }
 
-    // If we get here, validation passed
     return true;
   };
 
@@ -46,9 +44,7 @@ export function RegisterForm({ onSuccess, onLoginClick }: RegisterFormProps) {
     }
 
     if (username.trim() && password) {
-      console.log(`Submitting registration form with username: ${username}`);
       const success = await register(username, password);
-      console.log(`Registration result: ${success}, Error: ${error}, ErrorType: ${errorType}`);
       if (success && onSuccess) {
         onSuccess();
       }
@@ -79,10 +75,7 @@ export function RegisterForm({ onSuccess, onLoginClick }: RegisterFormProps) {
           </div>
         )}
 
-        {/* Add debug info */}
-        <div className="mb-4 p-2 bg-bg-tertiary/10 text-xs text-text-tertiary rounded">
-          <p>Debug info - try username: "test", password: "password"</p>
-        </div>
+
 
         <div className="mb-4">
           <label htmlFor="username" className="block text-sm font-medium text-text-secondary mb-1">
@@ -92,10 +85,7 @@ export function RegisterForm({ onSuccess, onLoginClick }: RegisterFormProps) {
             id="username"
             type="text"
             value={username}
-            onChange={(e) => {
-              setUsername(e.target.value);
-              // Don't clear errors on typing
-            }}
+            onChange={(e) => setUsername(e.target.value)}
             className={`w-full p-2.5 bg-bg-primary border ${errorType === 'username_exists' ? 'border-danger-DEFAULT' : 'border-bg-tertiary/30'} rounded-md focus:outline-none focus:ring-2 focus:ring-primary-DEFAULT/50`}
             placeholder="Choose a username"
             required
@@ -110,10 +100,7 @@ export function RegisterForm({ onSuccess, onLoginClick }: RegisterFormProps) {
             id="password"
             type="password"
             value={password}
-            onChange={(e) => {
-              setPassword(e.target.value);
-              // Don't clear errors on typing
-            }}
+            onChange={(e) => setPassword(e.target.value)}
             className="w-full p-2.5 bg-bg-primary border border-bg-tertiary/30 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-DEFAULT/50"
             placeholder="Create a password"
             required
@@ -128,10 +115,7 @@ export function RegisterForm({ onSuccess, onLoginClick }: RegisterFormProps) {
             id="confirmPassword"
             type="password"
             value={confirmPassword}
-            onChange={(e) => {
-              setConfirmPassword(e.target.value);
-              // Don't clear errors on typing
-            }}
+            onChange={(e) => setConfirmPassword(e.target.value)}
             className="w-full p-2.5 bg-bg-primary border border-bg-tertiary/30 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-DEFAULT/50"
             placeholder="Confirm your password"
             required

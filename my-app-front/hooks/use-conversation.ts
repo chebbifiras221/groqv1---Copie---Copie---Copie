@@ -7,8 +7,8 @@ import { useAIResponses } from './use-ai-responses';
 import { useTranscriber } from './use-transcriber';
 import { useAuth } from './use-auth';
 
-// Import isRoomConnected from conversation-utils to avoid duplication
-import { isRoomConnected } from '@/utils/conversation-utils';
+// Import utilities from conversation-utils to avoid duplication
+import { isRoomConnected, publishDataWithRetry } from '@/utils/conversation-utils';
 
 export type MessageType = 'user' | 'ai';
 
@@ -126,16 +126,7 @@ export function useConversation() {
   const { responses } = useAIResponses();
   const { transcriptions } = useTranscriber();
 
-  /**
-   * We don't need to trigger conversation loading here anymore
-   * The conversation-manager component handles this now
-   * This hook just listens for changes to the current conversation ID
-   */
-  useEffect(() => {
-    // This effect is intentionally empty
-    // The conversation-manager component handles loading conversations
-    // and creating a new conversation on initial connection
-  }, [room]);
+
 
   // Track the last processed transcription and response
   const [lastProcessedTranscription, setLastProcessedTranscription] = useState<string>('');
@@ -187,22 +178,20 @@ export function useConversation() {
   useEffect(() => {
     if (!room) return;
 
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    const handleDataReceived = (payload: any, _participant?: any, _kind?: any, topic?: any) => {
+    const handleDataReceived = (payload: any, participant?: any, kind?: any, topic?: any) => {
+      // Parameters are provided by the event but not all are used in this handler
+      void participant;
+      void kind;
       try {
         // Handle binary audio data with specific topic
         if (topic === "binary_audio") {
-          // Received binary audio data with topic 'binary_audio'
-          // We'll let the use-ai-responses hook handle the audio playback
+          // Let the use-ai-responses hook handle the audio playback
           return;
         }
 
         // Handle audio info with specific topic
         if (topic === "audio_info") {
-          // Just decode the data but don't process it further
-          // We're just acknowledging we received it
-          new TextDecoder().decode(payload);
-          // Received audio info
+          // Just acknowledge receipt - no processing needed
           return;
         }
 
@@ -213,33 +202,19 @@ export function useConversation() {
         try {
           data = JSON.parse(dataString);
 
-          // Handle audio data info message
-          if (data.type === "audio_data_info") {
-            // Received audio data info
-            return;
-          }
-
-          // Handle audio data message
-          if (data.type === "audio_data") {
-            // Received audio data info
-            return;
-          }
-
-          // Handle audio URL message
-          if (data.type === "tts_audio_url") {
-            // Received TTS audio URL for text
+          // Handle audio-related messages - just acknowledge receipt
+          if (data.type === "audio_data_info" ||
+              data.type === "audio_data" ||
+              data.type === "tts_audio_url") {
             return;
           }
         } catch (e) {
-          // If it's not valid JSON, it might be binary audio data without a topic
-          // Received possible binary audio data without topic
-          // We'll let the use-ai-responses hook handle the audio playback
+          // If it's not valid JSON, it might be binary audio data
+          // Let the use-ai-responses hook handle it
           return;
         }
 
         if (data.type === "conversation_data") {
-          // Received conversation data from server
-
           // Clear existing messages and load the conversation messages
           const conversationMessages: Message[] = data.conversation.messages.map((msg: any) => ({
             id: msg.id,
@@ -262,8 +237,6 @@ export function useConversation() {
           // Store the current conversation ID
           localStorage.setItem('current-conversation-id', data.conversation.id);
         } else if (data.type === "user_message_echo") {
-          // Received user message echo from server
-
           // Get the current conversation ID
           const currentConversationId = localStorage.getItem('current-conversation-id') || data.conversation_id;
 
@@ -283,8 +256,6 @@ export function useConversation() {
             return newMessages;
           });
         } else if (data.type === "ai_response") {
-          // Received AI response from server
-
           // Get the current conversation ID
           const currentConversationId = localStorage.getItem('current-conversation-id') || data.conversation_id;
 
@@ -412,8 +383,6 @@ export function useConversation() {
           storedConversationId === 'undefined' ||
           (storedConversationId && teachingMode !== currentMode);
 
-
-
         const message = {
           type: "text_input",
           text: text.trim(),
@@ -441,27 +410,8 @@ export function useConversation() {
         }
 
         // We'll wait for the echo from the server to add the message to the conversation
-        // Use a try-catch with retry logic for more robust publishing
-        let retryCount = 0;
-        const maxRetries = 3;
-
-        while (retryCount < maxRetries) {
-          try {
-            await room.localParticipant.publishData(new TextEncoder().encode(JSON.stringify(message)));
-            break; // Success, exit the loop
-          } catch (publishError) {
-            retryCount++;
-            // Publish attempt failed, will retry
-
-            if (retryCount >= maxRetries) {
-              throw publishError; // Rethrow after max retries
-            }
-
-            // Wait with exponential backoff before retrying
-            const delay = 300 * Math.pow(2, retryCount - 1);
-            await new Promise(resolve => setTimeout(resolve, delay));
-          }
-        }
+        // Use utility function for robust publishing with retry logic
+        await publishDataWithRetry(room, message);
 
         // Get the current conversation ID
         const currentConversationId = localStorage.getItem('current-conversation-id');
@@ -537,27 +487,8 @@ export function useConversation() {
             return;
           }
 
-          // Use a try-catch with retry logic for more robust publishing
-          let retryCount = 0;
-          const maxRetries = 3;
-
-          while (retryCount < maxRetries) {
-            try {
-              await room.localParticipant.publishData(new TextEncoder().encode(JSON.stringify(message)));
-              break; // Success, exit the loop
-            } catch (publishError) {
-              retryCount++;
-              // Publish attempt failed, will retry
-
-              if (retryCount >= maxRetries) {
-                throw publishError; // Rethrow after max retries
-              }
-
-              // Wait with exponential backoff before retrying
-              const delay = 300 * Math.pow(2, retryCount - 1);
-              await new Promise(resolve => setTimeout(resolve, delay));
-            }
-          }
+          // Use utility function for robust publishing with retry logic
+          await publishDataWithRetry(room, message);
         } catch (error) {
           // Silently handle conversation creation errors
         }
@@ -598,8 +529,6 @@ export function useConversation() {
         storedConversationId === 'null' ||
         storedConversationId === 'undefined' ||
         (storedConversationId && teachingMode !== currentMode);
-
-
 
       // Create a message with a special flag indicating it's a hidden instruction
       const message = {

@@ -121,61 +121,7 @@ export function useWebTTS() {
       return;
     }
 
-    // Force a specific high-quality female voice if available
-    const forceHighQualityFemaleVoice = (voices: SpeechSynthesisVoice[]) => {
 
-      // Try to find Microsoft Zira (high quality female voice on Windows)
-      const msZira = voices.find(v => v.name.includes('Zira'));
-      if (msZira) {
-        return msZira;
-      }
-
-      // Try to find any Microsoft female voice
-      const msFemale = voices.find(v =>
-        v.name.includes('Microsoft') &&
-        (v.name.includes('Female') ||
-         v.name.includes('Aria') ||
-         v.name.includes('Jenny') ||
-         v.name.includes('Jessa') ||
-         v.name.includes('Sarah')));
-      if (msFemale) {
-        return msFemale;
-      }
-
-      // Try to find Google female voice
-      const googleFemale = voices.find(v =>
-        v.name.includes('Google') &&
-        v.name.includes('Female'));
-      if (googleFemale) {
-        return googleFemale;
-      }
-
-      // Try to find any female voice
-      const femaleVoiceIndicators = [
-        'female', 'woman', 'girl', 'feminine', 'femenin', 'femenino',
-        'samantha', 'karen', 'zira', 'victoria', 'moira', 'jenny', 'sarah',
-        'aria', 'jessa', 'allison', 'ava', 'hazel', 'heera', 'tessa', 'fiona'
-      ];
-
-      const anyFemale = voices.find(v => {
-        if (!v || !v.name) return false;
-        const lowerName = v.name.toLowerCase();
-        return femaleVoiceIndicators.some(indicator => lowerName.includes(indicator));
-      });
-
-      if (anyFemale) {
-        return anyFemale;
-      }
-
-      // Fallback to first English voice
-      const englishVoice = voices.find(v => v.lang.startsWith('en'));
-      if (englishVoice) {
-        return englishVoice;
-      }
-
-      // Last resort - first voice
-      return voices[0];
-    };
 
     // Load available voices
     const loadVoices = () => {
@@ -185,14 +131,14 @@ export function useWebTTS() {
         if (availableVoices && availableVoices.length > 0) {
           setVoices(availableVoices);
 
-          // Force a high-quality female voice
-          const bestVoice = forceHighQualityFemaleVoice(availableVoices);
+          // Use the getBestVoice function to select optimal voice
+          const bestVoice = getBestVoice(availableVoices);
           if (bestVoice) {
             setSelectedVoice(bestVoice);
           }
         }
       } catch (error) {
-        // Silently handle voice loading errors
+        console.error('Error loading voices:', error);
       }
     };
 
@@ -206,7 +152,7 @@ export function useWebTTS() {
       // Try to load voices immediately (works in Firefox/Safari)
       loadVoices();
     } catch (error) {
-      // Silently handle voice setup errors
+      console.error('Error setting up voice listener:', error);
     }
 
     // Fix for Chrome issue where speech synthesis stops after ~15 seconds
@@ -223,7 +169,7 @@ export function useWebTTS() {
         }
       }, 10000);
     } catch (error) {
-      // Silently handle interval setup errors
+      console.error('Error setting up speech synthesis interval:', error);
     }
 
     return () => {
@@ -232,8 +178,6 @@ export function useWebTTS() {
       }
     };
   }, [selectedVoice]);
-
-
 
   // Function to stop speaking
   const stopSpeaking = useCallback(() => {
@@ -244,7 +188,7 @@ export function useWebTTS() {
         window.speechSynthesis.cancel();
       }
     } catch (error) {
-      // Silently handle stop errors
+      console.error('Error stopping speech synthesis:', error);
     }
 
     setIsPlaying(false);
@@ -398,8 +342,6 @@ export function useWebTTS() {
           // Use the fixed text
           text = fixedText;
         }
-
-
       }
 
       // Process text differently based on content type
@@ -570,7 +512,7 @@ export function useWebTTS() {
           cleanedText = addNaturalPauses(cleanedText);
 
         } catch (error) {
-
+          console.error('Error processing special sections:', error);
           // Fallback to simple text cleaning
           cleanedText = processCourseContent(text);
         }
@@ -583,8 +525,6 @@ export function useWebTTS() {
         cleanedText = cleanTextForTTS(cleanedText);
       }
 
-
-
       // Create a new utterance with the cleaned text
       const utterance = new SpeechSynthesisUtterance(cleanedText);
 
@@ -592,7 +532,6 @@ export function useWebTTS() {
       const voiceToUse = voiceOverride || selectedVoice;
 
       if (voiceToUse && voiceToUse.voiceURI) {
-
         utterance.voice = voiceToUse;
         // Set language to match the voice
         utterance.lang = voiceToUse.lang;
@@ -607,7 +546,6 @@ export function useWebTTS() {
             v.name.includes('Samantha'));
 
           if (femaleVoice) {
-
             utterance.voice = femaleVoice;
             utterance.lang = femaleVoice.lang;
           }
@@ -647,7 +585,7 @@ export function useWebTTS() {
         try {
           window.speechSynthesis.speak(utterance);
         } catch (e) {
-
+          console.error('Error starting speech synthesis:', e);
           // Simulate speech with a timer
           setIsPlaying(true);
           setTimeout(() => {
@@ -658,7 +596,7 @@ export function useWebTTS() {
 
       return true;
     } catch (err) {
-
+      console.error('Error in speak function:', err);
       // Simulate speech with a timer
       setIsPlaying(true);
       setTimeout(() => {
@@ -672,7 +610,6 @@ export function useWebTTS() {
   // Function to select a voice by name
   const selectVoiceByName = useCallback((voiceName: string) => {
     if (!voices || voices.length === 0) {
-
       return false;
     }
 
@@ -681,11 +618,9 @@ export function useWebTTS() {
     const voice = voices.find(v => v.name.toLowerCase().includes(lowerName));
 
     if (voice) {
-
       setSelectedVoice(voice);
       return true;
     } else {
-
       return false;
     }
   }, [voices]);
@@ -693,11 +628,13 @@ export function useWebTTS() {
   // Function to list all available voices to the console
   const listAvailableVoices = useCallback(() => {
     if (!voices || voices.length === 0) {
+      console.log('No voices available');
       return;
     }
 
+    console.log('Available voices:');
     voices.forEach((voice, index) => {
-      // Silent logging for debugging purposes
+      console.log(`${index}: ${voice.name} (${voice.lang})`);
     });
   }, [voices]);
 

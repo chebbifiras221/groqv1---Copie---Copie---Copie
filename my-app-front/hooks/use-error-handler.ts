@@ -39,8 +39,6 @@ export function useErrorHandler() {
     type: ErrorType = 'unknown', 
     customMessage?: string
   ) => {
-
-    
     // Create error details
     const errorDetails: ErrorDetails = {
       type,
@@ -48,8 +46,6 @@ export function useErrorHandler() {
       originalError: error
     };
 
-
-    
     // Show toast notification with user-friendly message
     addToast(errorDetails.message, 'error');
     

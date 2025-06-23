@@ -1,7 +1,7 @@
 "use client";
 
-import React, { useState, useEffect } from 'react';
-import { ChevronDown, ChevronRight, Target, Code, FileText, CheckCircle, Clock, ListChecks, BookOpen } from 'lucide-react';
+import React, { useEffect } from 'react';
+import { Target, Code, FileText, CheckCircle, BookOpen } from 'lucide-react';
 import { CourseChapterSidebar } from './course-chapter-sidebar';
 
 interface CourseChapter {
@@ -17,7 +17,7 @@ interface CourseUIProps {
   toggleChapter: (chapterId: string) => void;
   navigateToChapter: (chapterId: string) => void;
   navigateToSection: (chapterId: string, sectionName: string) => void;
-  isTeacherMode: boolean;
+
   isFirstConversationLayout?: boolean; // New prop to indicate special layout
 }
 
@@ -26,12 +26,12 @@ export function CourseUI({
   toggleChapter,
   navigateToChapter,
   navigateToSection,
-  isTeacherMode,
+
   isFirstConversationLayout = false
 }: CourseUIProps) {
   // Listen for course UI reset events
   useEffect(() => {
-    const handleCourseReset = (event: Event) => {
+    const handleCourseReset = () => {
       // The course chapters state is managed in the parent component (typewriter),
       // so we don't need to do anything here
     };

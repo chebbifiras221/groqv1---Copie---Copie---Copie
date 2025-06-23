@@ -2,11 +2,27 @@
  * Utility functions for handling HTML entities
  */
 
+const HTML_ENTITY_REPLACEMENTS: ReadonlyArray<[RegExp, string]> = [
+  [/&quot;/g, '"'],
+  [/&#039;/g, "'"],
+  [/&#x27;/g, "'"],
+  [/&lt;/g, '<'],
+  [/&gt;/g, '>'],
+  [/&amp;/g, '&'],
+  [/&nbsp;/g, ' ']
+] as const;
+
+const applyEntityReplacements = (text: string): string => {
+  return HTML_ENTITY_REPLACEMENTS.reduce((result: string, [regex, replacement]) =>
+    result.replace(regex, replacement), text);
+};
+
 /**
  * Decodes HTML entities in a string
  * @param text The text containing HTML entities to decode
  * @returns The decoded text
  */
+
 export function decodeHtmlEntities(text: string): string {
   if (!text) return '';
 
@@ -19,32 +35,13 @@ export function decodeHtmlEntities(text: string): string {
       const decoded = textarea.value;
 
       // Additional manual replacements for common entities that might be missed
-      return decoded
-        .replace(/&quot;/g, '"')
-        .replace(/&#039;/g, "'")
-        .replace(/&#x27;/g, "'")
-        .replace(/&lt;/g, '<')
-        .replace(/&gt;/g, '>')
-        .replace(/&amp;/g, '&')
-        .replace(/&nbsp;/g, ' ');
+      return applyEntityReplacements(decoded);
     } catch (e) {
-      console.error("Error decoding HTML entities:", e);
+      console.warn("Error decoding HTML entities, using fallback:", e);
+      // Fall through to manual replacement
     }
   }
 
   // Fallback for non-browser environments or if the browser method fails
-  return text
-    .replace(/&quot;/g, '"')
-    .replace(/&#039;/g, "'")
-    .replace(/&#x27;/g, "'")
-    .replace(/&lt;/g, '<')
-    .replace(/&gt;/g, '>')
-    .replace(/&amp;/g, '&')
-    .replace(/&nbsp;/g, ' ');
+  return applyEntityReplacements(text);
 }
-
-// Note: encodeHtmlEntities, safeDecodeHtmlEntities, and getAllTextNodes functions
-// have been removed as they were not being used anywhere in the codebase.
-// If you need HTML entity encoding in the future, you can add back:
-// - encodeHtmlEntities() for encoding text to HTML entities
-// - safeDecodeHtmlEntities() for safely decoding entities while preserving HTML tags

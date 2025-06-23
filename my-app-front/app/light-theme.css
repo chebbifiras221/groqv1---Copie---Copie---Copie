@@ -42,10 +42,6 @@
 }
 
 /* Main background in light theme */
-.light-theme .bg-bg-secondary {
-  background-color: #f8fafc !important;
-}
-
 .light-theme .bg-bg-primary {
   background-color: var(--bg-primary) !important;
 }

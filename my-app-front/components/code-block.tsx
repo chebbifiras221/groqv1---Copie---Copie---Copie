@@ -7,7 +7,6 @@ import {
   getLanguageColors,
   tokenizeCode
 } from '@/utils/code-highlighting';
-import { useThemeDetector } from '@/utils/theme-utils';
 
 interface CodeBlockProps {
   code: string;
@@ -16,7 +15,6 @@ interface CodeBlockProps {
 
 export function CodeBlock({ code, language = 'javascript' }: CodeBlockProps) {
   const [copied, setCopied] = useState(false);
-  const isDarkTheme = useThemeDetector();
 
   const copyToClipboard = () => {
     navigator.clipboard.writeText(code);

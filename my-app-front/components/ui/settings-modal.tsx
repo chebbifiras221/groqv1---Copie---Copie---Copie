@@ -33,10 +33,8 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
 
     // Apply volume change to any active speech synthesis
     if (window.speechSynthesis) {
-      // This will affect any future utterances
-      window.speechSynthesis.getVoices().forEach(voice => {
-        // Just accessing the voices to ensure they're loaded
-      });
+      // Accessing voices to ensure they're loaded for future utterances
+      window.speechSynthesis.getVoices();
     }
   };
 

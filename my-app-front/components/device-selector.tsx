@@ -17,11 +17,10 @@ export const DeviceSelector = ({ kind }: DeviceSelectorProps) => {
         setSelectedDeviceName(device.label);
       }
     });
-  }, [deviceSelect.activeDeviceId, deviceSelect.devices, selectedDeviceName]);
+  }, [deviceSelect.activeDeviceId, deviceSelect.devices]);
 
   useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      void event;
+    const handleClickOutside = () => {
       if (showMenu) {
         setShowMenu(false);
       }
@@ -32,12 +31,12 @@ export const DeviceSelector = ({ kind }: DeviceSelectorProps) => {
     };
   }, [showMenu]);
 
-  const activeClassName = showMenu ? "rotate-180" : "rotate-0";
+
 
   return (
     <div className="relative">
       <button
-        className={`flex items-center gap-1 px-2 py-1 rounded hover:bg-bg-tertiary/50 ${activeClassName} transition-all duration-100`}
+        className={`flex items-center gap-1 px-2 py-1 rounded hover:bg-bg-tertiary/50 transition-all duration-100`}
         onClick={(e) => {
           setShowMenu(!showMenu);
           e.stopPropagation();
@@ -46,13 +45,12 @@ export const DeviceSelector = ({ kind }: DeviceSelectorProps) => {
         <span className="text-xs text-text-primary truncate max-w-[120px]">
           {selectedDeviceName || "Select device"}
         </span>
-        <ChevronDown className="w-4 h-4 text-text-secondary flex-shrink-0" />
+        <ChevronDown className={`w-4 h-4 text-text-secondary flex-shrink-0 transition-transform duration-100 ${showMenu ? "rotate-180" : "rotate-0"}`} />
       </button>
       <div
         className="absolute bg-bg-secondary right-0 top-auto bottom-8 text-text-primary text-left border border-border-DEFAULT box-border rounded-md z-10 w-[280px] shadow-md"
         style={{
-          display: showMenu ? "block" : "none",
-          transform: "none"
+          display: showMenu ? "block" : "none"
         }}
       >
         {deviceSelect.devices.map((device, index) => {
@@ -77,8 +75,7 @@ export const DeviceSelector = ({ kind }: DeviceSelectorProps) => {
                 ? "bg-bg-tertiary font-medium"
                 : ""
                 } text-text-primary text-xs py-2 px-2 cursor-pointer hover:bg-bg-tertiary ${roundedStyles}`}
-              style={{ transform: "none" }}
-              key={index}
+              key={device.deviceId}
             >
               {device.label}
             </div>

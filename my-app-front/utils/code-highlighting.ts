@@ -1,5 +1,7 @@
 import { decodeHtmlEntities } from "./html-entities";
 
+const MAX_DECODE_ITERATIONS = 3;
+
 /**
  * Detects the language from code if not provided
  */
@@ -19,7 +21,7 @@ export const detectLanguage = (code: string, defaultLanguage: string = 'javascri
   if (code.includes('.class') || code.includes('#id') || code.includes('@media')) {
     return 'css';
   }
-  if (code.includes('def ') || code.includes('import ') && !code.includes('from ')) {
+  if (code.includes('def ') || (code.includes('import ') && !code.includes('from '))) {
     return 'python';
   }
   return defaultLanguage;
@@ -53,10 +55,59 @@ export type Token = {
 };
 
 /**
+ * Generic tokenizer function to reduce code duplication
+ */
+const tokenizeWithPatterns = (code: string, patterns: Array<{ type: string; regex: RegExp }>): Token[] => {
+  const tokens: Token[] = [];
+  let remainingCode = code;
+
+  while (remainingCode.length > 0) {
+    let earliestMatch = { index: Infinity, length: 0, type: '' };
+
+    // Find the earliest match among all patterns
+    for (const pattern of patterns) {
+      pattern.regex.lastIndex = 0;
+      const match = pattern.regex.exec(remainingCode);
+      if (match && match.index < earliestMatch.index) {
+        earliestMatch = {
+          index: match.index,
+          length: match[0].length,
+          type: pattern.type
+        };
+      }
+    }
+
+    if (earliestMatch.index < Infinity) {
+      // Add any text before the match as plain text
+      if (earliestMatch.index > 0) {
+        tokens.push({
+          text: remainingCode.substring(0, earliestMatch.index),
+          type: 'plain'
+        });
+      }
+
+      // Add the matched token
+      tokens.push({
+        text: remainingCode.substring(earliestMatch.index, earliestMatch.index + earliestMatch.length),
+        type: earliestMatch.type
+      });
+
+      // Update the remaining code
+      remainingCode = remainingCode.substring(earliestMatch.index + earliestMatch.length);
+    } else {
+      // No more matches, add the rest as plain text
+      tokens.push({ text: remainingCode, type: 'plain' });
+      break;
+    }
+  }
+
+  return tokens;
+};
+
+/**
  * Tokenizes JavaScript/TypeScript code for syntax highlighting
  */
 export const tokenizeJavaScript = (code: string): Token[] => {
-  const tokens: Token[] = [];
   const patterns = [
     { type: 'keyword', regex: /\b(const|let|var|function|return|if|else|for|while|class|import|export|from|default|async|await)\b/g },
     { type: 'boolean', regex: /\b(true|false|null|undefined)\b/g },
@@ -65,56 +116,13 @@ export const tokenizeJavaScript = (code: string): Token[] => {
     { type: 'comment', regex: /(\/\/.*|\/\*[\s\S]*?\*\/)/g }
   ];
 
-  let remainingCode = code;
-
-  while (remainingCode.length > 0) {
-    let earliestMatch = { index: Infinity, length: 0, type: '' };
-
-    // Find the earliest match among all patterns
-    for (const pattern of patterns) {
-      pattern.regex.lastIndex = 0;
-      const match = pattern.regex.exec(remainingCode);
-      if (match && match.index < earliestMatch.index) {
-        earliestMatch = {
-          index: match.index,
-          length: match[0].length,
-          type: pattern.type
-        };
-      }
-    }
-
-    if (earliestMatch.index < Infinity) {
-      // Add any text before the match as plain text
-      if (earliestMatch.index > 0) {
-        tokens.push({
-          text: remainingCode.substring(0, earliestMatch.index),
-          type: 'plain'
-        });
-      }
-
-      // Add the matched token
-      tokens.push({
-        text: remainingCode.substring(earliestMatch.index, earliestMatch.index + earliestMatch.length),
-        type: earliestMatch.type
-      });
-
-      // Update the remaining code
-      remainingCode = remainingCode.substring(earliestMatch.index + earliestMatch.length);
-    } else {
-      // No more matches, add the rest as plain text
-      tokens.push({ text: remainingCode, type: 'plain' });
-      break;
-    }
-  }
-
-  return tokens;
+  return tokenizeWithPatterns(code, patterns);
 };
 
 /**
  * Tokenizes Python code for syntax highlighting
  */
 export const tokenizePython = (code: string): Token[] => {
-  const tokens: Token[] = [];
   const patterns = [
     { type: 'keyword', regex: /\b(def|class|import|from|return|if|elif|else|for|while|try|except|finally|with|as|lambda|None|True|False)\b/g },
     { type: 'string', regex: /(".*?"|'.*?'|"""[\s\S]*?"""|'''[\s\S]*?''')/g },
@@ -122,105 +130,20 @@ export const tokenizePython = (code: string): Token[] => {
     { type: 'comment', regex: /(#.*)/g }
   ];
 
-  let remainingCode = code;
-
-  while (remainingCode.length > 0) {
-    let earliestMatch = { index: Infinity, length: 0, type: '' };
-
-    // Find the earliest match among all patterns
-    for (const pattern of patterns) {
-      pattern.regex.lastIndex = 0;
-      const match = pattern.regex.exec(remainingCode);
-      if (match && match.index < earliestMatch.index) {
-        earliestMatch = {
-          index: match.index,
-          length: match[0].length,
-          type: pattern.type
-        };
-      }
-    }
-
-    if (earliestMatch.index < Infinity) {
-      // Add any text before the match as plain text
-      if (earliestMatch.index > 0) {
-        tokens.push({
-          text: remainingCode.substring(0, earliestMatch.index),
-          type: 'plain'
-        });
-      }
-
-      // Add the matched token
-      tokens.push({
-        text: remainingCode.substring(earliestMatch.index, earliestMatch.index + earliestMatch.length),
-        type: earliestMatch.type
-      });
-
-      // Update the remaining code
-      remainingCode = remainingCode.substring(earliestMatch.index + earliestMatch.length);
-    } else {
-      // No more matches, add the rest as plain text
-      tokens.push({ text: remainingCode, type: 'plain' });
-      break;
-    }
-  }
-
-  return tokens;
+  return tokenizeWithPatterns(code, patterns);
 };
 
 /**
  * Tokenizes HTML code for syntax highlighting
  */
 export const tokenizeHTML = (code: string): Token[] => {
-  const tokens: Token[] = [];
   const patterns = [
     { type: 'keyword', regex: /(&lt;[\/]?[a-zA-Z0-9]+(&gt;)?)/g },
     { type: 'string', regex: /("[^"]*")/g },
     { type: 'comment', regex: /(&lt;!--[\s\S]*?--&gt;)/g }
   ];
 
-  let remainingCode = code;
-
-  while (remainingCode.length > 0) {
-    let earliestMatch = { index: Infinity, length: 0, type: '' };
-
-    // Find the earliest match among all patterns
-    for (const pattern of patterns) {
-      pattern.regex.lastIndex = 0;
-      const match = pattern.regex.exec(remainingCode);
-      if (match && match.index < earliestMatch.index) {
-        earliestMatch = {
-          index: match.index,
-          length: match[0].length,
-          type: pattern.type
-        };
-      }
-    }
-
-    if (earliestMatch.index < Infinity) {
-      // Add any text before the match as plain text
-      if (earliestMatch.index > 0) {
-        tokens.push({
-          text: remainingCode.substring(0, earliestMatch.index),
-          type: 'plain'
-        });
-      }
-
-      // Add the matched token
-      tokens.push({
-        text: remainingCode.substring(earliestMatch.index, earliestMatch.index + earliestMatch.length),
-        type: earliestMatch.type
-      });
-
-      // Update the remaining code
-      remainingCode = remainingCode.substring(earliestMatch.index + earliestMatch.length);
-    } else {
-      // No more matches, add the rest as plain text
-      tokens.push({ text: remainingCode, type: 'plain' });
-      break;
-    }
-  }
-
-  return tokens;
+  return tokenizeWithPatterns(code, patterns);
 };
 
 /**
@@ -234,7 +157,7 @@ export const tokenizeCSS = (code: string): Token[] => {
     { type: 'bracket', regex: /(\{|\})/g },
     { type: 'property', regex: /([a-zA-Z-]+)(?=\s*:)/g },
     { type: 'colon', regex: /(:)/g },
-    { type: 'semicolon', regex: /(;)/g },
+    { type: 'semicolon', regex: /(;)/g }
   ];
 
   let remainingCode = code;
@@ -297,7 +220,7 @@ export const tokenizeCSS = (code: string): Token[] => {
 export const tokenizeCode = (code: string, language: string): Token[] => {
   // First decode HTML entities in the code
   let decodedCode = code;
-  for (let i = 0; i < 3; i++) {
+  for (let i = 0; i < MAX_DECODE_ITERATIONS; i++) {
     decodedCode = decodeHtmlEntities(decodedCode);
   }
 

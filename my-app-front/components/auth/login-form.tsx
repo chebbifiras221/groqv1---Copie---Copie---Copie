@@ -29,29 +29,23 @@ export function LoginForm({ onSuccess, onRegisterClick }: LoginFormProps) {
     clearError();
 
     if (username.trim() && password) {
-      console.log(`Submitting login form with username: ${username}`);
       const success = await login(username, password);
-      console.log(`Login result: ${success}, Error: ${error}, ErrorType: ${errorType}`);
       if (success && onSuccess) {
         onSuccess();
       }
     }
   };
 
-  // Log current state for debugging
-  console.log('Current auth state:', { error, errorType, isLoading });
+
 
   // Sync local error state with auth error state
   useEffect(() => {
-    console.log('Auth state changed:', { error, errorType, isLoading });
-
     // Update local error state when auth error state changes
     if (error) {
-      console.log('Error state set to:', { error, errorType });
       setLocalError(error);
       setLocalErrorType(errorType);
     }
-  }, [error, errorType, isLoading]);
+  }, [error, errorType]);
 
   return (
     <motion.div
@@ -84,10 +78,7 @@ export function LoginForm({ onSuccess, onRegisterClick }: LoginFormProps) {
           </span>
         </div>
 
-        {/* Add debug info */}
-        <div className="mb-4 p-2 bg-bg-tertiary/10 text-xs text-text-tertiary rounded">
-          <p>Debug info - try username: "test", password: "password"</p>
-        </div>
+
 
         <div className="mb-4">
           <label htmlFor="username" className="block text-sm font-medium text-text-secondary mb-1">
@@ -97,15 +88,12 @@ export function LoginForm({ onSuccess, onRegisterClick }: LoginFormProps) {
             id="username"
             type="text"
             value={username}
-            onChange={(e) => {
-              setUsername(e.target.value);
-              // Don't clear error on typing
-            }}
+            onChange={(e) => setUsername(e.target.value)}
             className={`w-full p-2.5 bg-bg-primary border ${localErrorType === 'username' ? 'border-danger-DEFAULT' : 'border-bg-tertiary/30'} rounded-md focus:outline-none focus:ring-2 focus:ring-primary-DEFAULT/50`}
             placeholder="Enter your username"
             required
           />
-          {/* Field-specific error is now shown in the general error message */}
+
         </div>
 
         <div className="mb-6">
@@ -116,15 +104,12 @@ export function LoginForm({ onSuccess, onRegisterClick }: LoginFormProps) {
             id="password"
             type="password"
             value={password}
-            onChange={(e) => {
-              setPassword(e.target.value);
-              // Don't clear error on typing
-            }}
+            onChange={(e) => setPassword(e.target.value)}
             className={`w-full p-2.5 bg-bg-primary border ${localErrorType === 'password' ? 'border-danger-DEFAULT' : 'border-bg-tertiary/30'} rounded-md focus:outline-none focus:ring-2 focus:ring-primary-DEFAULT/50`}
             placeholder="Enter your password"
             required
           />
-          {/* Field-specific error is now shown in the general error message */}
+
         </div>
 
         <Button

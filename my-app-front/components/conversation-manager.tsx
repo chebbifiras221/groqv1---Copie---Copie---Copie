@@ -88,7 +88,6 @@ export function ConversationManager() {
 
       // Use our utility to publish data with retry logic
       await publishDataWithRetry(room, message);
-      console.log('Successfully requested conversation list');
 
       // Wait for the conversations_list event
       await waitForEvent("conversations_list");
@@ -103,7 +102,6 @@ export function ConversationManager() {
       // This ensures the progress bar completes its animation
       setTimeout(() => {
         setIsLoadingHistory(false);
-        console.log("History loading complete");
       }, 500);
     }
   };
@@ -140,7 +138,6 @@ export function ConversationManager() {
 
       // Use our utility to publish data with retry logic
       await publishDataWithRetry(room, message);
-      console.log(`Successfully requested conversation: ${conversationId}`);
 
       // Store the current conversation ID in memory for better state tracking
       // This helps with UI updates and prevents loading issues
@@ -168,7 +165,6 @@ export function ConversationManager() {
 
     // Prevent creating multiple empty conversations
     if (isCreatingNewConversation) {
-      console.log("Already creating a new conversation, ignoring request");
       return;
     }
 
@@ -180,8 +176,6 @@ export function ConversationManager() {
     );
 
     if (hasEmptyConversation) {
-      console.log("An empty conversation already exists, not creating a new one");
-
       // Find the empty conversation and switch to it instead of creating a new one
       const emptyConversation = conversations.find(conv =>
         isConversationEmpty(currentConversation && currentConversation.id === conv.id
@@ -190,7 +184,6 @@ export function ConversationManager() {
       );
 
       if (emptyConversation && (!currentConversation || currentConversation.id !== emptyConversation.id)) {
-        console.log("Switching to existing empty conversation:", emptyConversation.id);
         fetchConversation(emptyConversation.id);
       }
 
@@ -199,7 +192,6 @@ export function ConversationManager() {
 
     // Check if current conversation is empty and we're trying to create another one
     if (currentConversation && isConversationEmpty(currentConversation)) {
-      console.log("Current conversation is empty (no user messages), not creating a new one");
       return;
     }
 
@@ -232,8 +224,6 @@ export function ConversationManager() {
         user_id: user?.id
       };
 
-      console.log("Creating new conversation...");
-
       // Use our utility to publish data with retry logic
       await publishDataWithRetry(room, message);
     } catch (error) {
@@ -255,8 +245,6 @@ export function ConversationManager() {
   useEffect(() => {
     // Only run this effect when we first connect
     if (isConnected && room && !initialLoadDone) {
-      console.log("Initial connection detected, IMMEDIATELY loading conversations");
-
       // Mark initial load as done to prevent this from running again
       setInitialLoadDone(true);
 
@@ -276,7 +264,6 @@ export function ConversationManager() {
 
       // Send the request directly
       try {
-        console.log("Directly requesting conversation list");
         room.localParticipant.publishData(
           new TextEncoder().encode(JSON.stringify(message))
         );
@@ -287,22 +274,17 @@ export function ConversationManager() {
       // Also start a more robust loading process with retries as a backup
       const loadConversationsWithRetry = async (retryCount = 0) => {
         try {
-          console.log(`Attempting to load conversation history (attempt ${retryCount + 1})`);
-
           // Wait for the conversations to be fetched
           await fetchConversations();
 
           // Check if we already have conversations
           if (conversations.length > 0) {
-            console.log("Conversations loaded, checking for empty conversations");
-
             // Check if there's already an empty conversation
             const emptyConversation = conversations.find(conv =>
               !conv.message_count || conv.message_count === 0
             );
 
             if (emptyConversation) {
-              console.log("Found existing empty conversation, loading it:", emptyConversation.id);
               // Load the empty conversation instead of creating a new one
               localStorage.setItem('current-conversation-id', emptyConversation.id);
               fetchConversation(emptyConversation.id);
@@ -314,7 +296,6 @@ export function ConversationManager() {
             if (currentId) {
               const conversationExists = conversations.some(c => c.id === currentId);
               if (conversationExists) {
-                console.log("Loading existing conversation from localStorage:", currentId);
                 fetchConversation(currentId);
                 return;
               }
@@ -324,8 +305,6 @@ export function ConversationManager() {
 
 
           // Only create a new conversation if we don't have any or don't have an empty one
-          console.log("No empty conversations found, creating a new one");
-
           // Clear any existing conversation ID from localStorage
           localStorage.removeItem('current-conversation-id');
 
@@ -338,11 +317,9 @@ export function ConversationManager() {
           if (retryCount < 3) {
             // Retry with exponential backoff
             const delay = 1000 * Math.pow(2, retryCount);
-            console.log(`Retrying in ${delay}ms...`);
             setTimeout(() => loadConversationsWithRetry(retryCount + 1), delay);
           } else {
             // After several retries, just create a new conversation
-            console.log("Failed to load conversations after retries, creating a new conversation");
             localStorage.removeItem('current-conversation-id');
             createNewConversation();
           }
@@ -370,11 +347,8 @@ export function ConversationManager() {
     // Don't auto-select if there's already a conversation ID in localStorage
     const currentId = localStorage.getItem('current-conversation-id');
     if (currentId) {
-      console.log("Skipping auto-selection: conversation ID already exists in localStorage");
       return;
     }
-
-    console.log("Auto-selecting latest empty conversation for current mode:", settings.teachingMode);
 
     // Find the latest empty conversation for the current mode - be strict about mode matching
     const emptyConversation = conversations.find(conv => {
@@ -385,11 +359,9 @@ export function ConversationManager() {
     });
 
     if (emptyConversation) {
-      console.log("Auto-selecting latest empty conversation:", emptyConversation.id);
       localStorage.setItem('current-conversation-id', emptyConversation.id);
       fetchConversation(emptyConversation.id);
     } else {
-      console.log("No empty conversations found for current mode, creating new one");
       createNewConversation();
     }
   };
@@ -401,8 +373,6 @@ export function ConversationManager() {
     const handleCreateNewConversationForModeSwitch = async (event: Event) => {
       const customEvent = event as CustomEvent;
       const teachingMode = customEvent.detail?.teachingMode;
-
-      console.log(`Handling mode switch to: ${teachingMode} - will force switch to new mode conversation`);
 
       // Clear the current conversation ID in localStorage
       localStorage.removeItem('current-conversation-id');
@@ -425,8 +395,6 @@ export function ConversationManager() {
 
         // Always create a new conversation when switching modes
         // This ensures clean separation between teaching modes
-        console.log(`Creating new conversation for ${teachingMode} mode switch`);
-
         // Create a message to request a new conversation with the specified teaching mode
         const message = {
           type: "new_conversation",
@@ -442,8 +410,6 @@ export function ConversationManager() {
         await room.localParticipant.publishData(
           new TextEncoder().encode(JSON.stringify(message))
         );
-
-        console.log(`Successfully requested new conversation for ${teachingMode} mode`);
 
       } catch (error) {
         console.error("Error handling mode switch:", error);
@@ -486,14 +452,11 @@ export function ConversationManager() {
         try {
           data = JSON.parse(dataString);
         } catch (e) {
-          // If it's not valid JSON and not already identified as binary audio, log and return
-          console.log("Received non-JSON data in ConversationManager");
+          // If it's not valid JSON and not already identified as binary audio, return
           return;
         }
 
         if (data.type === "conversations_list") {
-          console.log(`Received conversation list with ${data.conversations.length} conversations`);
-
           // Sort conversations by updated_at (most recent first)
           const sortedConversations = [...data.conversations].sort(
             (a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime()
@@ -518,20 +481,17 @@ export function ConversationManager() {
             const requestedConversation = sortedConversations.find((c: Conversation) => c.id === currentId);
 
             if (requestedConversation) {
-              console.log(`Loading existing conversation: ${currentId}`);
               // If the current conversation exists but isn't loaded, load it
               if (!currentConversation || currentConversation.id !== currentId) {
                 fetchConversation(currentId);
               }
             } else {
-              console.log(`Conversation ${currentId} not found in history`);
               // Clear the invalid conversation ID
               localStorage.removeItem('current-conversation-id');
               setCurrentConversation(null);
             }
           } else if (!initialLoadDone && sortedConversations.length > 0 && !isManuallySelecting && !currentConversation) {
             // Only auto-select if we're in the initial loading phase AND don't have a current conversation
-            console.log("Conversation list loaded, checking for empty conversations");
             selectLatestEmptyConversation();
           }
         } else if (data.type === "conversation_data") {
@@ -543,10 +503,16 @@ export function ConversationManager() {
 
           // Reset manual selection flag when conversation data is received
           setIsManuallySelecting(false);
+
+          // Dispatch event for other hooks to listen to (like TTS)
+          if (typeof window !== 'undefined') {
+            const event = new CustomEvent('data-message-received', {
+              detail: JSON.stringify(data)
+            });
+            window.dispatchEvent(event);
+          }
         } else if (data.type === "new_conversation_created") {
           // Handle new conversation creation
-          console.log("New conversation created with ID:", data.conversation_id);
-
           // Check if we already have an empty conversation in the list
           const hasEmptyConversation = conversations.some(conv => {
             // Skip the newly created conversation
@@ -566,7 +532,6 @@ export function ConversationManager() {
           });
 
           if (hasEmptyConversation && !isCreatingNewConversation) {
-            console.log("Ignoring new conversation creation as we already have an empty one");
             // Don't update localStorage or load the new conversation
             // This prevents having multiple empty conversations
 
@@ -590,7 +555,6 @@ export function ConversationManager() {
           // This ensures the sidebar is up-to-date
           fetchConversations().then(() => {
             // Then load the new conversation
-            console.log("Loading newly created conversation");
             fetchConversation(data.conversation_id);
           });
         } else if (data.type === "conversation_renamed") {
@@ -638,8 +602,6 @@ export function ConversationManager() {
 
           // Only update UI if the response matches our current mode
           if (responseMode === currentMode) {
-            console.log(`Cleared ${data.deleted_count} conversations in ${responseMode} mode`);
-
             // Filter out conversations with the cleared mode
             setConversations(prev =>
               prev.filter(conv => conv.teaching_mode && conv.teaching_mode !== responseMode)
@@ -654,7 +616,6 @@ export function ConversationManager() {
             if (data.new_conversation_id) {
               // Store the new conversation ID in localStorage first
               localStorage.setItem('current-conversation-id', data.new_conversation_id);
-              console.log(`Stored new conversation ID after clearing: ${data.new_conversation_id}`);
 
               // The backend already sent an updated conversation list, so we just need to load the conversation
               // Use a small delay to ensure all state updates are processed
@@ -668,7 +629,6 @@ export function ConversationManager() {
               );
             }
           } else {
-            console.log(`Received clear confirmation for ${responseMode} mode, but we're in ${currentMode} mode. Ignoring.`);
             // Still refresh the list to get the updated state
             fetchConversations().catch(err =>
               console.error("Error refreshing conversation list:", err)

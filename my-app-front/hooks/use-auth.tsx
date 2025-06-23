@@ -94,7 +94,6 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   };
 
   const login = async (username: string, password: string): Promise<boolean> => {
-    console.log(`Login attempt with username: ${username}`);
     setIsLoading(true);
     // Don't clear errors here - they should be cleared by the component before calling login
 
@@ -112,8 +111,6 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       });
 
       const data: AuthResponse = await response.json();
-      console.log('Auth API response:', data);
-      console.log('Response status:', response.status);
 
       if (data.success && data.token && data.user) {
         setToken(data.token);
@@ -141,9 +138,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         return false;
       }
     } catch (err) {
-
       const errorMessage = err instanceof Error ? err.message : "Login failed";
-
       setError(errorMessage);
       setErrorType('unknown');
 
@@ -156,7 +151,6 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   };
 
   const register = async (username: string, password: string): Promise<boolean> => {
-
     setIsLoading(true);
     // Don't clear errors here - they should be cleared by the component before calling register
 
@@ -234,13 +228,10 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
             token: currentToken,
           }),
         });
-
       } catch (err) {
         // Silently handle logout notification errors
       }
     }
-
-
   };
 
   const clearError = () => {

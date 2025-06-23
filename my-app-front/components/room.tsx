@@ -6,20 +6,12 @@ import { LiveKitRoom, RoomAudioRenderer } from "@livekit/components-react";
 
 import { Playground } from "@/components/playground";
 import { useConnection } from "@/hooks/use-connection";
-import { useSettings } from "@/hooks/use-settings";
 
 export function RoomComponent() {
   const { shouldConnect, wsUrl, token, disconnect } = useConnection();
-  const { settings } = useSettings();
   const [connectionAttempts, setConnectionAttempts] = useState(0);
   const [isReconnecting, setIsReconnecting] = useState(false);
   const maxReconnectAttempts = 3;
-
-  const handleDisconnect = () => {
-    if (confirm('Are you sure you want to disconnect?')) {
-      disconnect();
-    }
-  };
 
   const room = useMemo(() => {
     const r = new Room({
@@ -51,16 +43,14 @@ export function RoomComponent() {
         }
         try {
           await trackPublication.track?.setProcessor(KrispNoiseFilter());
-        } catch (e) {
-          void e;
-          console.warn("Background noise reduction could not be enabled");
+        } catch (error) {
+          console.warn("Background noise reduction could not be enabled", error);
         }
       }
     });
 
     // Enhanced connection event handling
     r.on(RoomEvent.Connected, () => {
-      console.log('Room connected successfully');
       setConnectionAttempts(0);
       setIsReconnecting(false);
 
@@ -70,47 +60,33 @@ export function RoomComponent() {
     });
 
     r.on(RoomEvent.Disconnected, () => {
-      console.log('Room disconnected');
       if (shouldConnect && connectionAttempts < maxReconnectAttempts) {
         setIsReconnecting(true);
         setConnectionAttempts(prev => prev + 1);
-        console.info('Connection lost. Attempting to reconnect...');
-      } else if (connectionAttempts >= maxReconnectAttempts) {
-        console.error('Failed to connect after multiple attempts. Please refresh the page.');
       }
     });
 
     r.on(RoomEvent.ConnectionStateChanged, (state: ConnectionState) => {
-      console.log('Connection state changed:', state);
       if (state === ConnectionState.Reconnecting) {
         setIsReconnecting(true);
-        console.info('Connection unstable. Attempting to reconnect...');
       }
     });
 
     r.on(RoomEvent.ConnectionQualityChanged, (quality: ConnectionQuality) => {
-      console.log('Connection quality changed:', quality);
-      if (quality === ConnectionQuality.Poor) {
-        console.info('Connection quality is poor. Some features may be affected.');
-      }
+      // Handle poor connection quality if needed
     });
 
     return r;
   }, [shouldConnect, connectionAttempts]);
-
-  // We'll use a different approach to send the teaching mode
-  // Instead of using metadata, we'll send it with each message
 
   // Add a useEffect to handle reconnection attempts
   useEffect(() => {
     if (isReconnecting) {
       const reconnectTimeout = setTimeout(() => {
         if (shouldConnect && connectionAttempts < maxReconnectAttempts) {
-          console.log(`Reconnection attempt ${connectionAttempts + 1}/${maxReconnectAttempts}`);
           // Force room reconnection by disconnecting and reconnecting
           if (room.state === ConnectionState.Disconnected) {
             room.connect(wsUrl, token).catch(error => {
-              console.error('Reconnection failed:', error);
               setConnectionAttempts(prev => prev + 1);
             });
           }
@@ -135,8 +111,7 @@ export function RoomComponent() {
         room={room}
         connect={shouldConnect}
         onError={(error) => {
-          console.error('LiveKit error:', error);
-          console.error('Connection error. Please try refreshing the page.');
+          // Handle LiveKit errors silently or show user-friendly message
         }}
       >
         <Playground />

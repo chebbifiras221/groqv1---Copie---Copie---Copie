@@ -64,12 +64,15 @@ export function TextInput({ isConnected }: TextInputProps) {
       }
     };
 
-    window.addEventListener('keydown', handleKeyDown as any);
-    window.addEventListener('keyup', handleKeyUp as any);
+    const keyDownHandler = handleKeyDown as any;
+    const keyUpHandler = handleKeyUp as any;
+
+    window.addEventListener('keydown', keyDownHandler);
+    window.addEventListener('keyup', keyUpHandler);
 
     return () => {
-      window.removeEventListener('keydown', handleKeyDown as any);
-      window.removeEventListener('keyup', handleKeyUp as any);
+      window.removeEventListener('keydown', keyDownHandler);
+      window.removeEventListener('keyup', keyUpHandler);
     };
   }, []);
 
@@ -79,9 +82,7 @@ export function TextInput({ isConnected }: TextInputProps) {
     setIsSubmitting(true);
 
     try {
-      console.log('Sending text input:', inputText.trim());
       await addUserMessage(inputText.trim());
-
       // Clear the input field immediately for better UX
       setInputText("");
     } catch (error) {
@@ -98,7 +99,6 @@ export function TextInput({ isConnected }: TextInputProps) {
 
     try {
       const messageToSend = `\`\`\`${language}\n${code}\n\`\`\``;
-      console.log('Sending code:', messageToSend);
       await addUserMessage(messageToSend);
     } catch (error) {
       console.error("Error sending code:", error);
@@ -130,8 +130,6 @@ export function TextInput({ isConnected }: TextInputProps) {
       localParticipant.setMicrophoneEnabled(!currentState);
     }
   };
-
-  // Removed createNewConversation function as it's already in ConversationManager
 
   return (
     <div className="flex flex-col w-full px-6 py-4 gap-2 relative">

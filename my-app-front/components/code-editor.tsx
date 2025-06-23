@@ -67,10 +67,7 @@ export function CodeEditor({
           <div className="language-dot" style={{ backgroundColor: langColors.primary }}></div>
           <div className="language-tag">{language}</div>
         </div>
-        {/* Format button removed */}
-        <div className="editor-actions">
-          {/* Empty div kept for layout consistency */}
-        </div>
+
       </div>
       <div className="code-editor-content">
         <div className="line-numbers" style={{ contain: 'content' }}>
@@ -160,10 +157,7 @@ export function CodeEditor({
           color: #57606a;
         }
 
-        .editor-actions {
-          display: flex;
-          gap: 8px;
-        }
+
 
         .code-editor-content {
           display: flex;

@@ -1,16 +1,13 @@
-// Regular expressions to detect chapter titles
+// Regular expressions to detect chapter titles (simplified and consolidated)
 const chapterRegex = /^## Chapter (\d+): (.+)$/;
-// Clean course outline format (preferred): "1. Chapter Title" or "1. Introduction to Topic"
-const cleanOutlineRegex = /^\s*(\d+)\.\s+([A-Z][^#\n]*?)(?:\s*$|\s*\n)/;
-// New regex to match the format in the image (numbered list with asterisks)
-// This captures the number before the dot as the chapter number
-const outlineChapterRegex = /^\s*(\d+)\.\s+\*\*([^*]+)\*\*$/;
-// More comprehensive regex patterns for different chapter formats
 const boldChapterRegex = /^\s*\*\*Chapter (\d+):\s*([^*]+)\*\*$/;
 const numberedBoldRegex = /^\s*(\d+)\.\s*\*\*([^*]+)\*\*.*$/;
-const simpleNumberedRegex = /^\s*(\d+)\.\s+([A-Z][^.\n]*?)(?:\s*$|\s*\n)/;
-// Fallback regex for other formats (but exclude lines with hashtags)
-const altOutlineRegex = /^\s*(\d+)\.\s+([^#\n]+?)(?:\s*$|\s*\n)/;
+const cleanOutlineRegex = /^\s*(\d+)\.\s+([A-Z][^#\n]*?)(?:\s*$|\s*\n)/;
+const subtopicRegex = /^### \d+\.\d+:/;
+
+// Constants for validation
+const MIN_CHAPTER_TITLE_LENGTH = 3;
+const MAX_CHAPTER_TITLE_LENGTH = 100;
 
 export interface ChapterData {
   id: string;
@@ -24,12 +21,8 @@ export interface ChapterData {
  * Extracts course structure from text
  */
 export const extractCourseStructure = (text: string): ChapterData[] => {
-  // Reset regex lastIndex
-  chapterRegex.lastIndex = 0;
-
   // Find all chapter headings
   const chapters: ChapterData[] = [];
-
   const lines = text.split('\n');
 
   // Keep track of chapters we've already processed to avoid duplicates
@@ -69,7 +62,7 @@ export const extractCourseStructure = (text: string): ChapterData[] => {
 
   lines.forEach((line, index) => {
     // Skip subtopic lines (### X.Y: format) - these should not be treated as chapters
-    if (line.match(/^### \d+\.\d+:/)) {
+    if (line.match(subtopicRegex)) {
       return;
     }
 
@@ -86,13 +79,12 @@ export const extractCourseStructure = (text: string): ChapterData[] => {
   if (!foundTraditionalFormat) {
     lines.forEach((line, index) => {
       // Skip subtopic lines (### X.Y: format) - these should not be treated as chapters
-      if (line.match(/^### \d+\.\d+:/)) {
+      if (line.match(subtopicRegex)) {
         return;
       }
 
       const match = line.match(boldChapterRegex);
       if (match) {
-        foundTraditionalFormat = true;
         const chapterNumber = parseInt(match[1]);
         const chapterTitle = match[2];
         addChapter(chapterNumber, chapterTitle, index);
@@ -102,88 +94,27 @@ export const extractCourseStructure = (text: string): ChapterData[] => {
 
   // If no traditional format found, look for outline format
   if (!foundTraditionalFormat) {
-    // Reset used chapter numbers for the outline format
-    usedChapterNumbers.clear();
-    processedChapters.clear();
+    // Simplified outline format detection - try patterns in order of preference
+    const outlinePatterns = [
+      cleanOutlineRegex,      // 1. Chapter Title
+      numberedBoldRegex       // 1. **Title**
+    ];
 
-    // Try clean outline format first (1. Chapter Title)
-    lines.forEach((line, index) => {
-      // Skip subtopic lines (### X.Y: format) - these should not be treated as chapters
-      if (line.match(/^### \d+\.\d+:/)) {
-        return;
-      }
+    for (const pattern of outlinePatterns) {
+      if (chapters.length > 0) break; // Stop if we found chapters
 
-      const match = line.match(cleanOutlineRegex);
-      if (match) {
-        const chapterNumber = parseInt(match[1]);
-        const chapterTitle = match[2];
-        addChapter(chapterNumber, chapterTitle, index);
-      }
-    });
-
-    // If no clean format found, try numbered bold format (1. **Title**)
-    if (chapters.length === 0) {
       lines.forEach((line, index) => {
         // Skip subtopic lines (### X.Y: format) - these should not be treated as chapters
-        if (line.match(/^### \d+\.\d+:/)) {
+        if (line.match(subtopicRegex)) {
           return;
         }
 
-        const match = line.match(numberedBoldRegex);
+        const match = line.match(pattern);
         if (match) {
           const chapterNumber = parseInt(match[1]);
           const chapterTitle = match[2];
-          addChapter(chapterNumber, chapterTitle, index);
-        }
-      });
-    }
-
-    // If no numbered bold found, try the primary outline regex (with asterisks)
-    if (chapters.length === 0) {
-      lines.forEach((line, index) => {
-        // Skip subtopic lines (### X.Y: format) - these should not be treated as chapters
-        if (line.match(/^### \d+\.\d+:/)) {
-          return;
-        }
-
-        const match = line.match(outlineChapterRegex);
-        if (match) {
-          const chapterNumber = parseInt(match[1]);
-          const chapterTitle = match[2];
-          addChapter(chapterNumber, chapterTitle, index);
-        }
-      });
-    }
-
-    // If still no chapters found, try simple numbered format
-    if (chapters.length === 0) {
-      lines.forEach((line, index) => {
-        // Skip subtopic lines (### X.Y: format) - these should not be treated as chapters
-        if (line.match(/^### \d+\.\d+:/)) {
-          return;
-        }
-
-        const match = line.match(simpleNumberedRegex);
-        if (match) {
-          const chapterNumber = parseInt(match[1]);
-          const chapterTitle = match[2];
-          // Only add if it looks like a chapter title (reasonable length, starts with capital)
-          if (chapterTitle.length > 3 && chapterTitle.length < 100 && /^[A-Z]/.test(chapterTitle)) {
-            addChapter(chapterNumber, chapterTitle, index);
-          }
-        }
-      });
-    }
-
-    // If still no chapters found, try the alternative outline regex
-    if (chapters.length === 0) {
-      lines.forEach((line, index) => {
-        const match = line.match(altOutlineRegex);
-        if (match) {
-          const chapterNumber = parseInt(match[1]);
-          const chapterTitle = match[2];
-          // Only add if it looks like a chapter title
-          if (chapterTitle.length > 3 && chapterTitle.length < 100) {
+          // Basic validation for chapter titles
+          if (chapterTitle.length > MIN_CHAPTER_TITLE_LENGTH && chapterTitle.length < MAX_CHAPTER_TITLE_LENGTH) {
             addChapter(chapterNumber, chapterTitle, index);
           }
         }
@@ -192,7 +123,5 @@ export const extractCourseStructure = (text: string): ChapterData[] => {
   }
 
   // Sort chapters by number before returning
-  const sortedChapters = chapters.sort((a, b) => a.number - b.number);
-
-  return sortedChapters;
+  return chapters.sort((a, b) => a.number - b.number);
 };

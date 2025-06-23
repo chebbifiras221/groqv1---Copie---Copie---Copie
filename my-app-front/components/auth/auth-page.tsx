@@ -45,7 +45,7 @@ export function AuthPage({ onAuthSuccess }: AuthPageProps) {
         onAuthSuccess();
       }
     } catch (error) {
-      console.error("Error connecting after authentication:", error);
+      // Handle connection error silently or show user-friendly message
     }
   };
 

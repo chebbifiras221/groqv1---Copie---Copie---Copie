@@ -1,11 +1,11 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { useConnection } from "@/hooks/use-connection";
 import { useAuth } from "@/hooks/use-auth";
-import { Code, MessageSquare, Github, Mic, LogOut } from "lucide-react";
+import { Github, LogOut } from "lucide-react";
 import { SimpleBotFace } from "@/components/ui/simple-bot-face";
 
 export function ConnectionPage() {
@@ -13,7 +13,6 @@ export function ConnectionPage() {
   const { user, logout } = useAuth();
   const [isLoading, setIsLoading] = useState(false);
   const [connectionStep, setConnectionStep] = useState(0);
-  const [showFeatures, setShowFeatures] = useState(false);
 
   // Simulate connection steps for better UX
   useEffect(() => {
@@ -29,14 +28,6 @@ export function ConnectionPage() {
     }
   }, [isLoading, connectionStep]);
 
-  // Show features after a delay
-  useEffect(() => {
-    const featuresTimer = setTimeout(() => {
-      setShowFeatures(true);
-    }, 500);
-    return () => clearTimeout(featuresTimer);
-  }, []);
-
   const handleConnect = async () => {
     setIsLoading(true);
     try {
@@ -45,13 +36,11 @@ export function ConnectionPage() {
         try {
           await connect();
         } catch (error) {
-          console.error('Connection error:', error);
           setIsLoading(false);
           setConnectionStep(0);
         }
       }, 2400); // Wait for the steps to complete
     } catch (error) {
-      console.error('Connection error:', error);
       setIsLoading(false);
       setConnectionStep(0);
     }
@@ -64,7 +53,7 @@ export function ConnectionPage() {
         // Disconnect if connected
         disconnect();
       } catch (error) {
-        console.error("Error disconnecting:", error);
+        // Silently handle disconnection errors
       }
 
       // Then log out the user
@@ -82,24 +71,6 @@ export function ConnectionPage() {
     "Establishing secure channel...",
     "Connecting to AI assistant...",
     "Almost ready..."
-  ];
-
-  const features = [
-    {
-      icon: <Mic className="w-6 h-6 text-primary-DEFAULT" />,
-      title: "Voice Interaction",
-      description: "Speak naturally with the AI assistant using your microphone."
-    },
-    {
-      icon: <Code className="w-6 h-6 text-secondary-DEFAULT" />,
-      title: "Code Highlighting",
-      description: "View and write code with syntax highlighting in a VS Code-like interface."
-    },
-    {
-      icon: <MessageSquare className="w-6 h-6 text-success-DEFAULT" />,
-      title: "Conversation History",
-      description: "Access and manage your past conversations with the AI assistant."
-    }
   ];
 
   return (
@@ -176,35 +147,6 @@ export function ConnectionPage() {
             {isLoading ? connectionSteps[connectionStep] : "Connect to Assistant"}
           </Button>
         </motion.div>
-
-        <AnimatePresence>
-          {showFeatures && (
-            <motion.div
-              className="grid grid-cols-1 md:grid-cols-3 gap-6 w-full mt-4"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              transition={{ delay: 0.3, duration: 0.2 }}
-              style={{ willChange: 'opacity' }}
-            >
-              {features.map((feature, index) => (
-                <motion.div
-                  key={index}
-                  className="bg-bg-primary border border-bg-tertiary/30 rounded-lg p-6 flex flex-col items-center text-center gap-3 transition-all duration-300 hover:translate-y-[-2px] hover:shadow-md"
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  transition={{ delay: 0.3 + (index * 0.05), duration: 0.2 }}
-                  style={{ willChange: 'opacity, transform' }}
-                >
-                  <div className="p-3 rounded-full bg-bg-tertiary/30">
-                    {feature.icon}
-                  </div>
-                  <h3 className="text-lg font-medium text-text-primary">{feature.title}</h3>
-                  <p className="text-text-secondary text-sm">{feature.description}</p>
-                </motion.div>
-              ))}
-            </motion.div>
-          )}
-        </AnimatePresence>
 
         <motion.div
           className="text-text-tertiary text-sm flex items-center gap-2 mt-4"

@@ -1,7 +1,7 @@
 "use client";
 
 import React from 'react';
-import { HelpCircle, Mic, Keyboard, Code, MessageSquare, BookOpen, HelpCircle as HelpIcon } from 'lucide-react';
+import { HelpCircle, Mic, Keyboard, Code, MessageSquare, BookOpen } from 'lucide-react';
 import { Modal } from './modal';
 
 interface HelpModalProps {

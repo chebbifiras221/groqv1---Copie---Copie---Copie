@@ -33,25 +33,17 @@ export function cleanTextForTTS(text: string): string {
     .replace(/[_=+]/g, ' ')          // Replace underscores, equals, plus with spaces
 
     // Remove any remaining markdown symbols that might be read aloud
-    .replace(/\[BOARD\]/gi, '')
-    .replace(/\[\/BOARD\]/gi, '')
-    .replace(/\[EXPLAIN\]/gi, '')
-    .replace(/\[\/EXPLAIN\]/gi, '')
-    .replace(/\[CODE\]/gi, '')
-    .replace(/\[\/CODE\]/gi, '')
+    .replace(/\[(\/?)(?:EXPLAIN|CODE)\]/gi, '')
 
     // Handle special programming terms
     .replace(/C\+\+/g, 'C plus plus')
     .replace(/\.NET/g, 'dot net')
-    .replace(/\b0\.\d+/g, (match) => match.replace('.', ' point ')) // Convert 0.5 to "0 point 5"
-    .replace(/\b\d+\.\d+/g, (match) => match.replace('.', ' point ')) // Convert 3.14 to "3 point 14"
+    .replace(/\b\d+\.\d+/g, (match) => match.replace('.', ' point ')) // Convert decimals to "X point Y"
 
     // Handle mathematical notation
-    .replace(/O\(n²\)/g, 'O of n squared')
-    .replace(/O\(n\^2\)/g, 'O of n squared')
+    .replace(/O\(n[²^2]\)/g, 'O of n squared')
     .replace(/O\(log n\)/g, 'O of log n')
-    .replace(/x²/g, 'x squared')
-    .replace(/x\^2/g, 'x squared')
+    .replace(/x[²^2]/g, 'x squared')
     .replace(/f'\(x\)/g, 'f prime of x')
     .replace(/f\(x\)/g, 'f of x')
 
@@ -67,7 +59,7 @@ export function removeSpecialSectionMarkers(text: string): string {
   return text
     .replace(/\[\s*CODE\s*\]([\s\S]*?)\[\s*\/\s*CODE\s*\]/g, '')
     .replace(/\[\s*EXPLAIN\s*\]([\s\S]*?)\[\s*\/\s*EXPLAIN\s*\]/g, '$1')
-    .replace(/\[\s*BOARD\s*\]([\s\S]*?)\[\s*\/\s*BOARD\s*\]/g, '$1');
+    .replace(/\[\s*BOARD\s*\]([\s\S]*?)\[\s*\/\s*BOARD\s*\]/g, '$1'); // Keep content, remove markers
 }
 
 /**
@@ -88,7 +80,7 @@ export function addNaturalPauses(text: string): string {
  */
 export function extractExplanationBlocks(text: string): string[] {
   const explainRegex = /\[\s*EXPLAIN\s*\]([\s\S]*?)\[\s*\/\s*EXPLAIN\s*\]/g;
-  const explanations = [];
+  const explanations: string[] = [];
   let match;
 
   while ((match = explainRegex.exec(text)) !== null) {
@@ -102,5 +94,5 @@ export function extractExplanationBlocks(text: string): string[] {
  * Check if text contains special sections
  */
 export function hasSpecialSections(text: string): boolean {
-  return /\[\s*EXPLAIN\s*\]/.test(text) || /\[\s*CODE\s*\]/.test(text);
+  return /\[\s*(?:EXPLAIN|CODE)\s*\]/.test(text);
 }

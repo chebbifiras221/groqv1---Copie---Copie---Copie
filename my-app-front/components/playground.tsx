@@ -18,11 +18,7 @@ import { ConnectionToast } from "./ui/status-indicator";
 import { MobileConversationDrawer } from "./ui/mobile-conversation-drawer";
 import { useSettings } from "@/hooks/use-settings";
 
-export interface PlaygroundProps {
-  onConnect?: (connect: boolean) => void;
-}
-
-export function Playground({ onConnect: _ }: PlaygroundProps) {
+export function Playground() {
   const { localParticipant } = useLocalParticipant();
   const roomState = useConnectionState();
   const { settings } = useSettings();
@@ -112,7 +108,6 @@ export function Playground({ onConnect: _ }: PlaygroundProps) {
       // Silently handle microphone muting effect errors
     }
   }, [localParticipant, roomState]);
-  // to the text input component
 
   const isConnected = roomState === ConnectionState.Connected;
 

@@ -12,6 +12,7 @@ export interface AIResponse {
   id: string;
   text: string;
   receivedTime: number;
+  conversationId?: string; // Track which conversation this response belongs to
 }
 
 // Track the last response to prevent duplicates
@@ -39,11 +40,8 @@ export function useAIResponses() {
   const { settings } = useSettings(); // Access settings for TTS configuration
   const [responses, setResponses] = useState<AIResponse[]>([]);
   const [isTtsSpeaking, setIsTtsSpeaking] = useState(false);
-  const [isProcessingTTS] = useState(false); // For future use with loading states
   const webTTS = useWebTTS();
   const { handleError } = useErrorHandler();
-
-
 
   // Sync isTtsSpeaking state with webTTS.isPlaying
   useEffect(() => {
@@ -83,49 +81,58 @@ export function useAIResponses() {
     }
   }, [webTTS.voices, webTTS.listAvailableVoices, webTTS.selectVoiceByName]);
 
-
-
   /**
    * Function to manually speak the last AI response using text-to-speech
    *
    * This function is triggered when the user clicks the 'Speak' button for an AI response.
    * It includes logic to prevent duplicate speech requests and manages the TTS state.
+   * Now conversation-aware to only speak responses from the current conversation.
    */
   const speakLastResponse = useCallback(() => {
     if (responses.length > 0) {
-      // Get the most recent response
-      const lastResponse = responses[responses.length - 1];
+      // Get the current conversation ID
+      const currentConversationId = localStorage.getItem('current-conversation-id');
 
-      // Create a hash of the message for tracking
-      const messageHash = createMessageHash(lastResponse.text);
-      const currentTime = Date.now();
+      // Filter responses to only include those from the current conversation
+      const currentConversationResponses = responses.filter(response =>
+        response.conversationId === currentConversationId
+      );
 
-      // For manual speaking, we'll allow it even if it was recently spoken automatically
-      // But we'll still check for rapid duplicate clicks (within 1 second)
-      const isDuplicate =
-        lastResponse.text === lastResponseText &&
-        (currentTime - lastResponseTime) < 1000;
+      if (currentConversationResponses.length > 0) {
+        // Get the most recent response from the current conversation
+        const lastResponse = currentConversationResponses[currentConversationResponses.length - 1];
 
-      if (!isDuplicate) {
-        // Update last response tracking
-        lastResponseText = lastResponse.text;
-        lastResponseTime = currentTime;
+        // Create a hash of the message for tracking
+        const messageHash = createMessageHash(lastResponse.text);
+        const currentTime = Date.now();
 
-        // Clear any existing speech
-        webTTS.stopSpeaking();
+        // For manual speaking, we'll allow it even if it was recently spoken automatically
+        // But we'll still check for rapid duplicate clicks (within 1 second)
+        const isDuplicate =
+          lastResponse.text === lastResponseText &&
+          (currentTime - lastResponseTime) < 1000;
 
-        // Update the spoken messages map with this message and timestamp
-        spokenMessages.set(messageHash, currentTime);
+        if (!isDuplicate) {
+          // Update last response tracking
+          lastResponseText = lastResponse.text;
+          lastResponseTime = currentTime;
 
-        // Add a small delay to ensure any other audio has stopped
-        setTimeout(() => {
-          try {
-            // Use web speech to speak the response
-            webTTS.speak(lastResponse.text);
-          } catch (error) {
-            handleError(error, 'audio', 'Failed to play text-to-speech');
-          }
-        }, 100);
+          // Clear any existing speech
+          webTTS.stopSpeaking();
+
+          // Update the spoken messages map with this message and timestamp
+          spokenMessages.set(messageHash, currentTime);
+
+          // Add a small delay to ensure any other audio has stopped
+          setTimeout(() => {
+            try {
+              // Use web speech to speak the response
+              webTTS.speak(lastResponse.text);
+            } catch (error) {
+              handleError(error, 'audio', 'Failed to play text-to-speech');
+            }
+          }, 100);
+        }
       }
     }
   }, [responses, webTTS, handleError]);
@@ -149,19 +156,22 @@ export function useAIResponses() {
 
   // Helper function to handle binary audio data
   const handleBinaryAudio = useCallback((payload: Uint8Array) => {
-    // Only play audio if it's not a web TTS message (which is handled separately)
-    if (payload.length > 100) { // Assuming web TTS messages are small JSON
-      // Create a blob from the binary data
-      const audioBlob = new Blob([payload], { type: "audio/mp3" });
-      // Create a URL for the audio blob
-      const audioUrl = URL.createObjectURL(audioBlob);
-      // Play the audio
-      const audio = new Audio(audioUrl);
-      audio.play();
-      // Clean up the URL when done
-      audio.onended = () => URL.revokeObjectURL(audioUrl);
+    // Only play audio if it's a substantial payload (not a small JSON message)
+    if (payload.length > 100) {
+      try {
+        const audioBlob = new Blob([payload], { type: "audio/mp3" });
+        const audioUrl = URL.createObjectURL(audioBlob);
+        const audio = new Audio(audioUrl);
+        audio.play().catch(() => {
+          // Silently handle audio play errors
+          URL.revokeObjectURL(audioUrl);
+        });
+        audio.onended = () => URL.revokeObjectURL(audioUrl);
+      } catch (error) {
+        handleError(error, 'audio', 'Failed to play binary audio');
+      }
     }
-  }, []);
+  }, [handleError]);
 
   useEffect(() => {
     if (!room) {
@@ -176,10 +186,8 @@ export function useAIResponses() {
           return;
         }
 
-        // Handle audio info with specific topic
+        // Handle audio info with specific topic - just acknowledge receipt
         if (topic === "audio_info") {
-          const dataString = new TextDecoder().decode(payload);
-          const data = JSON.parse(dataString);
           return;
         }
 
@@ -237,6 +245,7 @@ export function useAIResponses() {
                 id: data.id || currentTime.toString(), // Use provided ID or fallback to timestamp
                 text: data.text,
                 receivedTime: currentTime,
+                conversationId: data.conversation_id || localStorage.getItem('current-conversation-id'), // Track conversation context
               };
 
               setResponses((prev) => [...prev, newResponse]);
@@ -292,11 +301,78 @@ export function useAIResponses() {
     }
   }, [room, clearSpokenMessages]);
 
+  // Clear responses when conversation changes and populate with loaded conversation data
+  useEffect(() => {
+    const handleConversationChange = () => {
+      // Clear responses when switching conversations
+      setResponses([]);
+      clearSpokenMessages();
+    };
+
+    // Listen for conversation data being loaded
+    const handleConversationDataLoaded = (event: Event) => {
+      const customEvent = event as CustomEvent;
+      try {
+        const data = JSON.parse(customEvent.detail);
+        if (data.type === "conversation_data" && data.conversation && data.conversation.messages) {
+          // Extract AI messages from the loaded conversation and add them to responses
+          const aiMessages = data.conversation.messages.filter((msg: any) => msg.type === 'ai');
+          const aiResponses = aiMessages.map((msg: any, index: number) => ({
+            id: msg.id || `loaded-${index}`,
+            text: msg.content,
+            receivedTime: new Date(msg.timestamp).getTime(),
+            conversationId: data.conversation.id
+          }));
+
+          // Set the responses for this conversation
+          setResponses(aiResponses);
+        }
+      } catch (error) {
+        console.error('Error processing conversation data for TTS:', error);
+      }
+    };
+
+    // Listen for storage changes to detect conversation switches
+    const handleStorageChange = (e: StorageEvent) => {
+      if (e.key === 'current-conversation-id') {
+        handleConversationChange();
+      }
+    };
+
+    // Also check periodically for conversation changes
+    let lastConversationId = localStorage.getItem('current-conversation-id');
+    const checkForConversationChanges = () => {
+      const currentId = localStorage.getItem('current-conversation-id');
+      if (currentId !== lastConversationId) {
+        lastConversationId = currentId;
+        handleConversationChange();
+      }
+    };
+
+    // Add event listeners
+    window.addEventListener('storage', handleStorageChange);
+    window.addEventListener('data-message-received', handleConversationDataLoaded);
+    const interval = setInterval(checkForConversationChanges, 300);
+
+    // Listen for mode switch events
+    const handleModeSwitch = () => {
+      handleConversationChange();
+    };
+
+    window.addEventListener('teaching-mode-changed', handleModeSwitch);
+
+    return () => {
+      window.removeEventListener('storage', handleStorageChange);
+      window.removeEventListener('data-message-received', handleConversationDataLoaded);
+      window.removeEventListener('teaching-mode-changed', handleModeSwitch);
+      clearInterval(interval);
+    };
+  }, [clearSpokenMessages]);
+
   return {
     state,
     responses,
     isTtsSpeaking,
-    isProcessingTTS,
     stopSpeaking,
     speakLastResponse,
     clearSpokenMessages

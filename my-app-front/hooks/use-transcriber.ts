@@ -34,6 +34,7 @@ export function useTranscriber() {
       participant?: Participant,
       publication?: TrackPublication
     ) => {
+      // Parameters provided by event but not used in this implementation
       void participant;
       void publication;
 

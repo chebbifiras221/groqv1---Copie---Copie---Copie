@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect } from "react";
-
 import { RoomComponent } from "@/components/room";
 import { ConnectionProvider } from "@/hooks/use-connection";
 import { ConnectionPage } from "@/components/connection-page";

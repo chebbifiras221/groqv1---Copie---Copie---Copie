@@ -8,32 +8,35 @@ export function isRoomConnected(room: Room): boolean {
   return room.state === ConnectionState.Connected;
 }
 
-// Note: formatDate function moved to lib/utils.ts to avoid duplication
-// Import it from there: import { formatDate } from '@/lib/utils';
-
 /**
  * Publishes data to a room with retry logic
  */
+const RECONNECT_TIMEOUT_SECONDS = 5;
+const RECONNECT_WAIT_MS = 1000;
+const RETRY_BASE_DELAY_MS = 300;
+const DEFAULT_EVENT_TIMEOUT_MS = 3000;
+const DATA_MESSAGE_EVENT = 'data-message-received';
+
 export async function publishDataWithRetry(
-  room: Room, 
-  message: any, 
+  room: Room,
+  message: any,
   maxRetries: number = 3
 ): Promise<void> {
   if (!isRoomConnected(room)) {
     console.warn('Room not connected, attempting to reconnect...');
 
     // Wait for the room to reconnect (up to 5 seconds)
-    for (let i = 0; i < 5; i++) {
-      await new Promise(resolve => setTimeout(resolve, 1000));
+    for (let i = 0; i < RECONNECT_TIMEOUT_SECONDS; i++) {
+      await new Promise(resolve => setTimeout(resolve, RECONNECT_WAIT_MS));
 
       if (isRoomConnected(room)) {
         console.log('Room reconnected successfully');
         break;
       }
 
-      // If we've waited 5 seconds and still not connected, throw an error
-      if (i === 4) {
-        throw new Error('Room failed to reconnect after 5 seconds');
+      // If we've waited the full timeout and still not connected, throw an error
+      if (i === RECONNECT_TIMEOUT_SECONDS - 1) {
+        throw new Error(`Room failed to reconnect after ${RECONNECT_TIMEOUT_SECONDS} seconds`);
       }
     }
   }
@@ -46,7 +49,7 @@ export async function publishDataWithRetry(
       await room.localParticipant.publishData(
         new TextEncoder().encode(JSON.stringify(message))
       );
-      console.log('Successfully published data:', message.type);
+      console.log('Successfully published data:', message?.type || 'unknown');
       return; // Success, exit the function
     } catch (publishError) {
       retryCount++;
@@ -57,7 +60,7 @@ export async function publishDataWithRetry(
       }
 
       // Wait with exponential backoff before retrying
-      const delay = 300 * Math.pow(2, retryCount - 1);
+      const delay = RETRY_BASE_DELAY_MS * Math.pow(2, retryCount - 1);
       await new Promise(resolve => setTimeout(resolve, delay));
     }
   }
@@ -83,7 +86,7 @@ export function isConversationEmpty(conversation: any): boolean {
 /**
  * Waits for a specific event to be dispatched
  */
-export function waitForEvent(eventName: string, timeout: number = 3000): Promise<void> {
+export function waitForEvent(eventName: string, timeout: number = DEFAULT_EVENT_TIMEOUT_MS): Promise<void> {
   return new Promise<void>((resolve) => {
     // Create a one-time event listener
     const handleEvent = (event: any) => {
@@ -92,7 +95,7 @@ export function waitForEvent(eventName: string, timeout: number = 3000): Promise
         if (data.type === eventName) {
           console.log(`Received ${eventName} event, resolving promise`);
           // Remove the event listener
-          window.removeEventListener('data-message-received', handleEvent);
+          window.removeEventListener(DATA_MESSAGE_EVENT, handleEvent);
           resolve();
         }
       } catch (e) {
@@ -101,12 +104,12 @@ export function waitForEvent(eventName: string, timeout: number = 3000): Promise
     };
 
     // Add the event listener
-    window.addEventListener('data-message-received', handleEvent);
+    window.addEventListener(DATA_MESSAGE_EVENT, handleEvent);
 
     // Also set a timeout as a fallback
     setTimeout(() => {
       console.log(`Timed out waiting for ${eventName} event, resolving anyway`);
-      window.removeEventListener('data-message-received', handleEvent);
+      window.removeEventListener(DATA_MESSAGE_EVENT, handleEvent);
       resolve();
     }, timeout);
   });
