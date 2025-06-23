@@ -2,78 +2,129 @@
 
 import React, { createContext, useContext, useEffect, useState } from "react";
 
+/**
+ * App settings interface
+ */
 interface Settings {
-  volume: number;
-  autoSpeak: boolean;
-  teachingMode: 'teacher' | 'qa'; // 'teacher' for structured teaching, 'qa' for direct Q&A
-  ttsVerbalsOnly: boolean; // When true, TTS will only read verbal explanations
-  ttsSkipExplanations: boolean; // When true, TTS will skip explanation content
-  sidebarVisible: boolean; // Controls visibility of the conversation history sidebar
-  // Add more settings as needed
+  volume: number;                    // Audio volume (0.0 to 1.0)
+  autoSpeak: boolean;               // Auto-speak AI responses
+  teachingMode: 'teacher' | 'qa';   // Teaching style
+  ttsVerbalsOnly: boolean;          // TTS reads only verbal content
+  ttsSkipExplanations: boolean;     // TTS skips explanations
+  sidebarVisible: boolean;          // Show conversation sidebar
 }
 
+/**
+ * Settings context interface
+ */
 interface SettingsContextType {
-  settings: Settings;
-  updateSettings: (newSettings: Partial<Settings>) => void;
-  resetSettings: () => void;
-  toggleSidebar: () => void;
+  settings: Settings;                                    // Current settings
+  updateSettings: (newSettings: Partial<Settings>) => void; // Update function
+  resetSettings: () => void;                            // Reset to defaults
+  toggleSidebar: () => void;                           // Toggle sidebar
 }
 
+/**
+ * Default settings values
+ */
 const defaultSettings: Settings = {
-  volume: 0.5, // Default volume is 50%
-  autoSpeak: true, // Auto-speak AI responses by default
-  teachingMode: 'teacher', // Default to structured teaching mode
-  ttsVerbalsOnly: false, // Default to reading all content
-  ttsSkipExplanations: false, // Default to reading explanations
-  sidebarVisible: true, // Show sidebar by default
+  volume: 0.5,              // 50% volume
+  autoSpeak: true,          // Auto-speak enabled
+  teachingMode: 'teacher',  // Structured teaching mode
+  ttsVerbalsOnly: false,    // Read all content
+  ttsSkipExplanations: false, // Read explanations
+  sidebarVisible: true,     // Show sidebar
 };
 
+// React context for settings state
 const SettingsContext = createContext<SettingsContextType | undefined>(undefined);
 
+/**
+ * Settings Provider component that manages application settings state and persistence.
+ * Provides settings context to all child components with localStorage synchronization.
+ *
+ * Features:
+ * - Persistent settings storage using localStorage
+ * - Graceful error handling for corrupted settings data
+ * - Partial settings updates while preserving other values
+ * - Settings reset functionality
+ * - Convenience functions for common operations
+ *
+ * @param {Object} props - Component props
+ * @param {React.ReactNode} props.children - Child components that will have access to settings context
+ * @returns {JSX.Element} Provider component wrapping children with settings context
+ */
 export function SettingsProvider({ children }: { children: React.ReactNode }) {
+  // Settings state initialized with default values
   const [settings, setSettings] = useState<Settings>(defaultSettings);
 
-  // Load settings from localStorage on mount
+  /**
+   * Effect hook that runs on component mount to load saved settings from localStorage.
+   * Handles JSON parsing errors gracefully by falling back to default settings.
+   */
   useEffect(() => {
+    // Retrieve stored settings from browser localStorage
     const storedSettings = localStorage.getItem("app-settings");
+
     if (storedSettings) {
       try {
+        // Parse JSON settings data
         const parsedSettings = JSON.parse(storedSettings);
+
+        // Merge with defaults to ensure all required properties exist
         setSettings({ ...defaultSettings, ...parsedSettings });
       } catch (error) {
+        // Handle corrupted or invalid JSON data
         console.error("Failed to parse stored settings:", error);
-        setSettings(defaultSettings);
+        setSettings(defaultSettings); // Fall back to defaults
       }
     }
-  }, []);
+  }, []); // Empty dependency array - run only once on mount
 
-  // Update settings and save to localStorage
+  /**
+   * Updates specific settings while preserving existing values.
+   * Automatically saves updated settings to localStorage for persistence.
+   *
+   * @param {Partial<Settings>} newSettings - Object containing settings to update
+   */
   const updateSettings = (newSettings: Partial<Settings>) => {
     setSettings((prevSettings) => {
+      // Merge new settings with existing settings
       const updatedSettings = { ...prevSettings, ...newSettings };
+
+      // Persist updated settings to localStorage
       localStorage.setItem("app-settings", JSON.stringify(updatedSettings));
+
+      // Return updated settings for state update
       return updatedSettings;
     });
   };
 
-  // Reset settings to defaults
+  /**
+   * Resets all settings to their default values.
+   * Clears any customizations and restores original configuration.
+   */
   const resetSettings = () => {
-    setSettings(defaultSettings);
-    localStorage.setItem("app-settings", JSON.stringify(defaultSettings));
+    setSettings(defaultSettings); // Reset state to defaults
+    localStorage.setItem("app-settings", JSON.stringify(defaultSettings)); // Persist reset
   };
 
-  // Toggle sidebar visibility
+  /**
+   * Convenience function to toggle sidebar visibility.
+   * Uses updateSettings to ensure proper persistence and state management.
+   */
   const toggleSidebar = () => {
-    updateSettings({ sidebarVisible: !settings.sidebarVisible });
+    updateSettings({ sidebarVisible: !settings.sidebarVisible }); // Toggle current state
   };
 
+  // Return the SettingsContext.Provider with all settings state and functions
   return (
     <SettingsContext.Provider
       value={{
-        settings,
-        updateSettings,
-        resetSettings,
-        toggleSidebar,
+        settings, // Current settings object with all user preferences
+        updateSettings, // Function to update specific settings
+        resetSettings, // Function to reset all settings to defaults
+        toggleSidebar, // Convenience function to toggle sidebar visibility
       }}
     >
       {children}
@@ -81,10 +132,25 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
   );
 }
 
+/**
+ * Custom hook to access settings context from any component.
+ * Must be used within a SettingsProvider component tree.
+ *
+ * @returns {SettingsContextType} Settings context containing current settings and management functions
+ * @throws {Error} Throws error if used outside of SettingsProvider
+ *
+ * Usage:
+ * const { settings, updateSettings, resetSettings, toggleSidebar } = useSettings();
+ */
 export function useSettings() {
+  // Get the settings context from React context
   const context = useContext(SettingsContext);
+
+  // Ensure hook is used within SettingsProvider
   if (context === undefined) {
     throw new Error("useSettings must be used within a SettingsProvider");
   }
+
+  // Return the settings context
   return context;
 }

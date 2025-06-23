@@ -7,127 +7,204 @@ import { useConversation } from "@/hooks/use-conversation";
 import { CodeEditorModal } from "./code-editor-modal";
 import { useLocalParticipant } from "@livekit/components-react";
 
+/**
+ * Text input component props
+ */
 export interface TextInputProps {
-  isConnected: boolean;
+  isConnected: boolean; // WebRTC connection status
 }
 
+/**
+ * Text Input Component - handles text/voice input with microphone controls
+ */
 export function TextInput({ isConnected }: TextInputProps) {
-  const [inputText, setInputText] = useState("");
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [isCodeEditorOpen, setIsCodeEditorOpen] = useState(false);
-  const [isMicMuted, setIsMicMuted] = useState(true);
-  const [isSpacePressed, setIsSpacePressed] = useState(false);
-  const { addUserMessage, clearMessages } = useConversation();
-  const { localParticipant } = useLocalParticipant();
+  const [inputText, setInputText] = useState("");              // Current input text
+  const [isSubmitting, setIsSubmitting] = useState(false);    // Submission loading state
+  const [isCodeEditorOpen, setIsCodeEditorOpen] = useState(false); // Code editor modal state
+  const [isMicMuted, setIsMicMuted] = useState(true);          // Microphone mute state
+  const [isSpacePressed, setIsSpacePressed] = useState(false); // Spacebar press state
 
-  // Keep track of microphone state
+  const { addUserMessage, clearMessages } = useConversation(); // Conversation functions
+  const { localParticipant } = useLocalParticipant();          // LiveKit participant
+
+  /**
+   * Sync microphone state with LiveKit hardware
+   */
   useEffect(() => {
     if (localParticipant && typeof localParticipant.isMicrophoneEnabled !== 'undefined') {
+      // Set initial state (inverted because we track "muted" not "enabled")
       setIsMicMuted(!localParticipant.isMicrophoneEnabled);
 
-      // Add event listener for microphone state changes
+      // Update state when microphone changes
       const handleMicrophoneUpdate = () => {
         setIsMicMuted(!localParticipant.isMicrophoneEnabled);
       };
 
-      // Listen for track mute/unmute events
+      // Listen for mute/unmute events
       localParticipant.on('trackMuted', handleMicrophoneUpdate);
       localParticipant.on('trackUnmuted', handleMicrophoneUpdate);
 
+      // Cleanup listeners
       return () => {
-        // Clean up event listeners
         localParticipant.off('trackMuted', handleMicrophoneUpdate);
         localParticipant.off('trackUnmuted', handleMicrophoneUpdate);
       };
     }
   }, [localParticipant]);
 
-  // Track spacebar press for animation
+  /**
+   * Effect hook to track spacebar press for voice input visual feedback.
+   * Provides global spacebar detection while avoiding interference with text input.
+   */
   useEffect(() => {
+    /**
+     * Event handler for keydown events to detect spacebar press.
+     * Only triggers when not typing in input fields to avoid conflicts.
+     *
+     * @param {KeyboardEvent} e - Keyboard event from window
+     */
     const handleKeyDown = (e: KeyboardEvent) => {
+      // Only handle spacebar key
       if (e.code === 'Space') {
         const target = e.target as HTMLElement;
+
+        // Check if user is currently typing in an input field
         const isInputElement =
           target.tagName === 'INPUT' ||
           target.tagName === 'TEXTAREA' ||
           target.isContentEditable;
 
+        // Only set pressed state if not typing in input field
         if (!isInputElement) {
-          setIsSpacePressed(true);
+          setIsSpacePressed(true); // Trigger visual feedback for voice input
         }
       }
     };
 
+    /**
+     * Event handler for keyup events to detect spacebar release.
+     * Always resets the pressed state regardless of target element.
+     *
+     * @param {KeyboardEvent} e - Keyboard event from window
+     */
     const handleKeyUp = (e: KeyboardEvent) => {
+      // Reset pressed state when spacebar is released
       if (e.code === 'Space') {
-        setIsSpacePressed(false);
+        setIsSpacePressed(false); // Remove visual feedback
       }
     };
 
+    // Type cast for addEventListener compatibility
     const keyDownHandler = handleKeyDown as any;
     const keyUpHandler = handleKeyUp as any;
 
+    // Add global event listeners for spacebar detection
     window.addEventListener('keydown', keyDownHandler);
     window.addEventListener('keyup', keyUpHandler);
 
+    // Cleanup event listeners to prevent memory leaks
     return () => {
       window.removeEventListener('keydown', keyDownHandler);
       window.removeEventListener('keyup', keyUpHandler);
     };
-  }, []);
+  }, []); // Empty dependency array - run once on mount
 
+  /**
+   * Handles text message submission from the input field.
+   * Validates input, manages loading state, and provides user feedback.
+   */
   const handleSubmit = async () => {
+    // Validate input and connection state before proceeding
     if (!inputText.trim() || !isConnected) return;
 
+    // Set loading state to prevent double submission and show feedback
     setIsSubmitting(true);
 
     try {
+      // Send trimmed message to conversation system
       await addUserMessage(inputText.trim());
-      // Clear the input field immediately for better UX
+
+      // Clear the input field immediately for better user experience
       setInputText("");
     } catch (error) {
+      // Log error for debugging but don't show to user (handled by conversation system)
       console.error("Error sending text input:", error);
     } finally {
+      // Always clear loading state regardless of success/failure
       setIsSubmitting(false);
     }
   };
 
+  /**
+   * Handles code submission from the code editor modal.
+   * Formats code with markdown syntax highlighting and sends as message.
+   *
+   * @param {string} code - The code content to submit
+   * @param {string} language - Programming language for syntax highlighting
+   */
   const handleCodeSubmit = async (code: string, language: string) => {
+    // Validate code input and connection state before proceeding
     if (!code.trim() || !isConnected) return;
 
+    // Set loading state to prevent double submission
     setIsSubmitting(true);
 
     try {
+      // Format code with markdown code block syntax for proper rendering
       const messageToSend = `\`\`\`${language}\n${code}\n\`\`\``;
+
+      // Send formatted code message to conversation system
       await addUserMessage(messageToSend);
     } catch (error) {
+      // Log error for debugging but don't show to user
       console.error("Error sending code:", error);
     } finally {
+      // Always clear loading state regardless of success/failure
       setIsSubmitting(false);
     }
   };
 
+  /**
+   * Handles keyboard events for the text input field.
+   * Enables Enter key submission while preserving Shift+Enter for new lines.
+   *
+   * @param {KeyboardEvent<HTMLInputElement>} e - Keyboard event from input field
+   */
   const handleKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
+    // Submit on Enter key, but allow Shift+Enter for multi-line input
     if (e.key === "Enter" && !e.shiftKey) {
-      e.preventDefault();
-      handleSubmit();
+      e.preventDefault(); // Prevent default form submission behavior
+      handleSubmit(); // Submit the message
     }
   };
 
+  /**
+   * Opens the code editor modal for syntax-highlighted code input.
+   */
   const openCodeEditor = () => {
-    setIsCodeEditorOpen(true);
+    setIsCodeEditorOpen(true); // Show code editor modal
   };
 
+  /**
+   * Handles message clearing with user confirmation.
+   * Prompts user before clearing to prevent accidental data loss.
+   */
   const handleClearMessages = () => {
+    // Show confirmation dialog before clearing messages
     if (window.confirm('Are you sure you want to clear all messages?')) {
-      clearMessages();
+      clearMessages(); // Clear all conversation messages
     }
   };
 
+  /**
+   * Toggles microphone state through LiveKit participant.
+   * Directly controls hardware microphone enable/disable.
+   */
   const toggleMicrophone = () => {
+    // Only proceed if localParticipant exists and has microphone control
     if (localParticipant && localParticipant.setMicrophoneEnabled) {
-      const currentState = localParticipant.isMicrophoneEnabled;
-      localParticipant.setMicrophoneEnabled(!currentState);
+      const currentState = localParticipant.isMicrophoneEnabled; // Get current state
+      localParticipant.setMicrophoneEnabled(!currentState); // Toggle state
     }
   };
 
