@@ -17,41 +17,77 @@ logger = logging.getLogger("ai-utils")
 
 def validate_teaching_mode(teaching_mode: str) -> str:
     """
-    Validate and return a valid teaching mode.
+    Validate and normalize a teaching mode string to ensure it's a supported value.
+
+    This function acts as a safety mechanism to prevent invalid teaching modes from
+    being used throughout the application. It checks against the configured list
+    of valid teaching modes and provides a safe fallback for invalid inputs.
 
     Args:
-        teaching_mode: The teaching mode to validate
+        teaching_mode (str): The teaching mode string to validate. Expected values are
+                           'teacher' for structured teaching mode or 'qa' for question-answer
+                           mode. Case-sensitive validation is performed. None, empty strings,
+                           or any other values are considered invalid.
 
     Returns:
-        Valid teaching mode ('teacher' or 'qa')
+        str: A valid teaching mode string. Returns the input teaching_mode if it's valid,
+             otherwise returns the default teaching mode from configuration (typically 'teacher').
+             The returned value is guaranteed to be in config.TEACHING_MODES.
+
     """
+    # Check if the provided teaching mode is in the list of valid modes
     if teaching_mode in config.TEACHING_MODES:
-        return teaching_mode
+        return teaching_mode  # Return the valid teaching mode as-is
+    # Return the default teaching mode for any invalid input
     return config.DEFAULT_TEACHING_MODE
 
 
 def extract_conversation_context(conversation_id) -> Tuple[str, str, bool]:
     """
-    Extract conversation context from the conversation_id parameter.
+    Extract and validate conversation context from a flexible conversation_id parameter.
+
+    This function handles both simple string conversation IDs and complex context dictionaries
+    that contain additional metadata. It provides a unified interface for conversation context
+    extraction throughout the application while ensuring all values are properly validated.
 
     Args:
-        conversation_id: Can be a string ID or a dictionary with context
+        conversation_id (str or dict): Either a simple conversation ID string or a dictionary
+                                     containing conversation context. If a dictionary, it may contain:
+                                     - 'conversation_id': The actual conversation UUID string
+                                     - 'teaching_mode': The teaching mode ('teacher' or 'qa')
+                                     - 'is_hidden': Boolean indicating if this is a hidden instruction
+                                     If a string, it's treated as the conversation ID with default context.
 
     Returns:
-        Tuple of (actual_conversation_id, teaching_mode, is_hidden)
+        Tuple[str, str, bool]: A tuple containing:
+            - actual_conversation_id (str): The extracted conversation ID, or the original value
+                                           if it was already a string
+            - teaching_mode (str): The validated teaching mode ('teacher' or 'qa'), defaults
+                                 to config.DEFAULT_TEACHING_MODE if not specified or invalid
+            - is_hidden (bool): Whether this is a hidden instruction that shouldn't appear
+                              in conversation history, defaults to False
+
+    Example:
+        >>> extract_conversation_context("conv-123")
+        ('conv-123', 'teacher', False)
+        >>> extract_conversation_context({"conversation_id": "conv-123", "teaching_mode": "qa", "is_hidden": True})
+        ('conv-123', 'qa', True)
     """
-    # Default values
-    actual_conversation_id = conversation_id
-    teaching_mode = config.DEFAULT_TEACHING_MODE
-    is_hidden = False
+    # Default values for all context parameters
+    actual_conversation_id = conversation_id  # Use the input as-is initially
+    teaching_mode = config.DEFAULT_TEACHING_MODE  # Default to configured teaching mode
+    is_hidden = False  # Default to visible (not hidden) instructions
 
     # Check if conversation_id is a dictionary with additional context
     if isinstance(conversation_id, dict):
+        # Extract teaching mode from dictionary, using default if not present
         teaching_mode = conversation_id.get("teaching_mode", teaching_mode)
+        # Extract actual conversation ID from dictionary, using original if not present
         actual_conversation_id = conversation_id.get("conversation_id", actual_conversation_id)
+        # Extract hidden flag from dictionary, using default if not present
         is_hidden = conversation_id.get("is_hidden", is_hidden)
 
-    # Validate teaching mode
+    # Validate teaching mode to ensure it's a supported value
     teaching_mode = validate_teaching_mode(teaching_mode)
 
     return actual_conversation_id, teaching_mode, is_hidden
@@ -59,30 +95,57 @@ def extract_conversation_context(conversation_id) -> Tuple[str, str, bool]:
 
 def prepare_conversation_history(messages: List[Dict[str, Any]], teaching_mode: str) -> List[Dict[str, Any]]:
     """
-    Prepare conversation history for the AI model.
+    Prepare and format conversation history for AI model consumption with proper system prompts.
+
+    This function transforms database message objects into the format expected by the Groq API,
+    adds the appropriate system prompt based on teaching mode, and manages conversation length
+    to stay within token limits while preserving the most recent and relevant context.
 
     Args:
-        messages: List of message objects from the database
-        teaching_mode: The teaching mode to use ('teacher' or 'qa')
+        messages (List[Dict[str, Any]]): List of message dictionaries from the database. Each
+                                       message should contain 'type' ('user' or 'ai') and 'content'
+                                       fields. Messages are expected to be in chronological order.
+                                       Empty list is acceptable and will result in system prompt only.
+        teaching_mode (str): The teaching mode that determines which system prompt to use.
+                           Must be 'teacher' for structured teaching or 'qa' for question-answer
+                           mode. Invalid modes will be handled by the get_system_prompt function.
 
     Returns:
-        List of message objects formatted for the Groq API
+        List[Dict[str, Any]]: A list of message dictionaries formatted for the Groq API with:
+                             - First message: System prompt with role 'system'
+                             - Subsequent messages: User/assistant messages with role 'user' or 'assistant'
+                             - Limited to MAX_CONVERSATION_HISTORY + 1 messages total (including system prompt)
+                             - Most recent messages are preserved when truncation is needed
+
+    Example:
+        >>> messages = [{"type": "user", "content": "Hello"}, {"type": "ai", "content": "Hi there!"}]
+        >>> history = prepare_conversation_history(messages, "teacher")
+        >>> len(history)  # System prompt + 2 messages
+        3
     """
     # Get the appropriate system prompt based on the teaching mode
+    # This determines the AI's behavior and response style
     system_prompt = get_system_prompt(teaching_mode)
 
-    # Start with the system message
+    # Start with the system message as the first element
+    # The system prompt must always be the first message in the conversation
     conversation_history = [system_prompt]
 
-    # Add the conversation history
+    # Add the conversation history by transforming database format to API format
+    # Convert message type ('user'/'ai') to API role ('user'/'assistant')
     conversation_history.extend([
-        {"role": "user" if msg["type"] == "user" else "assistant", "content": msg["content"]}
-        for msg in messages
+        {
+            "role": "user" if msg["type"] == "user" else "assistant",  # Map message type to API role
+            "content": msg["content"]  # Use message content as-is
+        }
+        for msg in messages  # Process all messages from the database
     ])
 
     # Keep only the last N messages to avoid token limits, but always keep the system prompt
+    # This ensures we stay within API token limits while preserving recent context
     max_messages = config.MAX_CONVERSATION_HISTORY + 1  # +1 for system prompt
     if len(conversation_history) > max_messages:
+        # Keep system prompt (first message) and the most recent conversation messages
         conversation_history = [conversation_history[0]] + conversation_history[-config.MAX_CONVERSATION_HISTORY:]
 
     return conversation_history

@@ -13,19 +13,37 @@ logger = logging.getLogger("topic_validator")
 
 def api_based_validation(text: str) -> Tuple[bool, str]:
     """
-    Use AI API to validate if question is CS/programming related.
+    Use AI API to validate if a question is related to computer science, programming, or technical topics.
+
+    This function sends the user's question to the Groq API with a specialized prompt designed
+    for binary classification. It uses a fast, lightweight model to quickly determine topic
+    relevance without consuming significant resources.
 
     Args:
-        text: User's question text
+        text (str): The user's question text to validate. Should be a complete question or
+                   statement. Empty strings or very short text may produce inconsistent results.
+                   The function handles various question formats and lengths.
 
     Returns:
-        Tuple of (is_cs_related, reason)
+        Tuple[bool, str]: A tuple containing:
+            - is_cs_related (bool): True if the question is about CS/programming topics,
+                                   False if it's about unrelated subjects
+            - reason (str): A descriptive string explaining the validation result,
+                          useful for logging and debugging purposes
+
+    Example:
+        >>> is_valid, reason = api_based_validation("What is Python programming?")
+        >>> print(f"Valid: {is_valid}, Reason: {reason}")
+        Valid: True, Reason: API confirmed: CS/programming related
     """
+    # Check if API key is available for making validation requests
     if not config.GROQ_API_KEY:
         logger.warning("No API key available for topic validation")
+        # Default to allowing questions when API is unavailable to avoid blocking users
         return True, "API unavailable - allowing question"
-    
-    # Simple validation prompt
+
+    # Simple validation prompt designed for binary classification
+    # Uses clear, specific instructions to get consistent YES/NO responses
     validation_prompt = [
         {
             "role": "system",
@@ -50,49 +68,60 @@ Respond "NO" if the question is about:
 Be strict: only respond "YES" for clearly technical/programming topics."""
         },
         {
-            "role": "user", 
+            "role": "user",
             "content": f"Is this question about computer science, programming, or related technical topics?\n\nQuestion: {text}"
         }
     ]
     
     try:
-        # Make API request with minimal parameters
+        # Make API request with minimal parameters optimized for fast classification
         headers = {
-            "Authorization": f"Bearer {config.GROQ_API_KEY}",
-            "Content-Type": "application/json"
+            "Authorization": f"Bearer {config.GROQ_API_KEY}",  # API authentication
+            "Content-Type": "application/json"                 # Request content type
         }
-        
+
+        # Configure request data for fast, consistent classification
         data = {
-            "model": "llama-3.1-8b-instant",  # Use fastest model for validation
-            "messages": validation_prompt,
-            "max_tokens": 10,  # Very short response
-            "temperature": 0.1  # Low temperature for consistent responses
+            "model": "llama-3.1-8b-instant",  # Use fastest model for validation to minimize latency
+            "messages": validation_prompt,     # The classification prompt and user question
+            "max_tokens": 10,                 # Very short response (just YES/NO needed)
+            "temperature": 0.1                # Low temperature for consistent, deterministic responses
         }
-        
+
+        # Make the API request with a short timeout for responsiveness
         response = requests.post(
-            config.GROQ_API_URL,
-            headers=headers,
-            json=data,
-            timeout=10  # Short timeout for validation
+            config.GROQ_API_URL,  # Groq API endpoint
+            headers=headers,      # Authentication headers
+            json=data,           # Request payload
+            timeout=10           # Short timeout for validation (10 seconds)
         )
-        
+
+        # Process successful API responses
         if response.status_code == 200:
+            # Parse the JSON response from the API
             result = response.json()
+            # Extract the AI's response and normalize to uppercase for comparison
             ai_response = result["choices"][0]["message"]["content"].strip().upper()
-            
+
+            # Check for positive classification (CS/programming related)
             if "YES" in ai_response:
                 return True, "API confirmed: CS/programming related"
+            # Check for negative classification (not CS/programming related)
             elif "NO" in ai_response:
                 return False, "API confirmed: Not CS/programming related"
             else:
+                # Handle unexpected responses by defaulting to allow
                 logger.warning(f"Unexpected API response: {ai_response}")
                 return True, "API response unclear - allowing question"
         else:
+            # Handle API errors by defaulting to allow questions
             logger.warning(f"API validation failed: {response.status_code}")
             return True, "API error - allowing question"
-            
+
     except Exception as e:
+        # Handle any exceptions during API communication
         logger.error(f"Error in API validation: {e}")
+        # Default to allowing questions when validation fails to avoid blocking users
         return True, "API error - allowing question"
 
 def build_context_validation_prompt(current_question: str, conversation_history: List[dict]) -> List[dict]:
@@ -233,39 +262,70 @@ def api_context_validation(current_question: str, conversation_history: List[dic
 
 def validate_question_topic(text: str, conversation_history: List[dict] = None) -> Tuple[bool, str]:
     """
-    Main validation function with conversation context support.
-    Uses API-based validation with conversation context when available.
+    Main validation function that determines if a user's question is appropriate for the AI assistant.
+
+    This function implements a two-tier validation system: first checking conversation context
+    if available (to allow follow-up questions in ongoing CS discussions), then falling back
+    to single-question validation for standalone questions. It's designed to be permissive
+    for legitimate CS discussions while filtering out unrelated topics.
 
     Args:
-        text: User's question text
-        conversation_history: Optional list of recent conversation messages
+        text (str): The user's question text to validate. Should be a complete question or
+                   statement. Very short text (less than 3 characters) is automatically rejected.
+                   The function handles various question formats and lengths.
+        conversation_history (List[dict], optional): List of recent conversation messages for
+                                                   context validation. Each dict should contain
+                                                   'type' and 'content' fields. If provided and
+                                                   contains at least 2 messages, enables context-aware
+                                                   validation. Defaults to None.
 
     Returns:
-        Tuple of (is_allowed, reason)
+        Tuple[bool, str]: A tuple containing:
+            - is_allowed (bool): True if the question should be processed by the AI,
+                               False if it should be rejected as off-topic
+            - reason (str): A descriptive string explaining the validation decision,
+                          includes the validation method used and the specific result
+
+    Example:
+        >>> is_valid, reason = validate_question_topic("What is Python?")
+        >>> print(f"Valid: {is_valid}, Reason: {reason}")
+        Valid: True, Reason: API validation: API confirmed: CS/programming related
+
+        >>> history = [{"type": "user", "content": "What is Python?"}, {"type": "ai", "content": "Python is..."}]
+        >>> is_valid, reason = validate_question_topic("Tell me more", history)
+        >>> print(f"Valid: {is_valid}, Reason: {reason}")
+        Valid: True, Reason: Context validation: AI confirmed: Contextually related to CS discussion
     """
+    # Log the validation attempt with truncated text for debugging
     logger.info(f"Validating question topic: {text[:100]}...")
 
-    # Basic input validation
+    # Basic input validation to filter out empty or very short questions
     if not text or len(text.strip()) < 3:
         logger.info("❌ Question too short")
         return False, "Question too short"
 
-    # Step 1: Check if we have conversation context
+    # Step 1: Check if we have conversation context for context-aware validation
+    # Context validation allows follow-up questions in ongoing CS discussions
     if conversation_history and len(conversation_history) >= 2:
         logger.info("🔍 Using conversation context validation...")
+        # Use context-aware validation that considers the ongoing conversation
         context_result, context_reason = api_context_validation(text, conversation_history)
 
+        # If context validation passes, allow the question
         if context_result:
             logger.info(f"✅ Context validation PASSED: {context_reason}")
             return True, f"Context validation: {context_reason}"
         else:
+            # If context validation fails, reject the question
             logger.info(f"❌ Context validation FAILED: {context_reason}")
             return False, f"Context validation: {context_reason}"
 
     # Step 2: Fall back to single-question API validation
+    # This is used for standalone questions without conversation context
     logger.info("🔍 Using single-question API validation...")
     api_result, api_reason = api_based_validation(text)
 
+    # Return the result of single-question validation
     if api_result:
         logger.info(f"✅ API validation PASSED: {api_reason}")
         return True, f"API validation: {api_reason}"

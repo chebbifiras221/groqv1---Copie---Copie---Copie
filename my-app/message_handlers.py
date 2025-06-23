@@ -49,6 +49,7 @@ async def handle_rename_conversation(message, ctx, safe_publish_data):
     """Handle renaming a conversation."""
     conversation_id = message.get('conversation_id')
     new_title = message.get('title')
+    user_id = message.get('user_id')
 
     if conversation_id and new_title:
         success = database.update_conversation_title(conversation_id, new_title)
@@ -60,6 +61,17 @@ async def handle_rename_conversation(message, ctx, safe_publish_data):
                 "title": new_title
             }
             await safe_publish_data(ctx.room.local_participant, json.dumps(response_message).encode())
+
+            # Send updated conversation list immediately after rename
+            try:
+                conversations = database.list_conversations(limit=config.CONVERSATION_LIST_LIMIT, user_id=user_id)
+                list_response = {
+                    "type": "conversations_list",
+                    "conversations": conversations
+                }
+                await safe_publish_data(ctx.room.local_participant, json.dumps(list_response).encode())
+            except Exception as e:
+                logger.error(f"Error getting conversation list after rename: {e}")
 
 async def handle_delete_conversation(message, ctx, current_conversation_id, safe_publish_data):
     """Handle deleting a conversation."""
@@ -88,6 +100,17 @@ async def handle_delete_conversation(message, ctx, current_conversation_id, safe
                 "new_conversation_id": new_conversation_id
             }
             await safe_publish_data(ctx.room.local_participant, json.dumps(response_message).encode())
+
+            # Send updated conversation list immediately after deletion
+            try:
+                conversations = database.list_conversations(limit=config.CONVERSATION_LIST_LIMIT, user_id=user_id)
+                list_response = {
+                    "type": "conversations_list",
+                    "conversations": conversations
+                }
+                await safe_publish_data(ctx.room.local_participant, json.dumps(list_response).encode())
+            except Exception as e:
+                logger.error(f"Error getting conversation list after deletion: {e}")
 
     return new_conversation_id
 
@@ -173,7 +196,16 @@ async def handle_new_conversation(message, ctx, safe_publish_data, find_or_creat
     # Find or create an empty conversation
     conversation_id = find_or_create_empty_conversation(teaching_mode, user_id=user_id)
 
-    # Get the updated conversation list
+    # Send the new conversation created response first
+    response_message = {
+        "type": "new_conversation_created",
+        "conversation_id": conversation_id,
+        "teaching_mode": teaching_mode,
+        "user_id": user_id
+    }
+    await safe_publish_data(ctx.room.local_participant, json.dumps(response_message).encode())
+
+    # Then send the updated conversation list
     try:
         conversations = database.list_conversations(limit=config.CONVERSATION_LIST_LIMIT, user_id=user_id)
         list_response = {
@@ -184,12 +216,4 @@ async def handle_new_conversation(message, ctx, safe_publish_data, find_or_creat
     except Exception as e:
         logger.error(f"Error getting conversation list: {e}")
 
-    # Send the new conversation created response
-    response_message = {
-        "type": "new_conversation_created",
-        "conversation_id": conversation_id,
-        "teaching_mode": teaching_mode,
-        "user_id": user_id
-    }
-    await safe_publish_data(ctx.room.local_participant, json.dumps(response_message).encode())
     return conversation_id
