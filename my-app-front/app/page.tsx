@@ -13,11 +13,11 @@ import { AuthPage } from "@/components/auth/auth-page";              // Login/re
 
 export default function Home() {                                     // Main homepage component
   return (
-    <ThemeProvider>                                                  {/* Provides theme state to all children */}
-      <SettingsProvider>                                             {/* Provides settings state to all children */}
-        <AuthProvider>                                               {/* Provides authentication state to all children */}
-          <ConnectionProvider>                                       {/* Provides WebRTC connection state to all children */}
-            <AppContent />                                           {/* Main app content with access to all providers */}
+    <ThemeProvider>
+      <SettingsProvider>
+        <AuthProvider>
+          <ConnectionProvider>
+            <AppContent />
           </ConnectionProvider>
         </AuthProvider>
       </SettingsProvider>
@@ -30,28 +30,28 @@ function AppContent() {                                              // Inner co
   const { isAuthenticated, isLoading } = useAuth();                 // Get authentication status and loading state
 
   // Listen for user logout events from other parts of the app
-  useEffect(() => {                                                  // Run effect when component mounts
-    const handleUserLogout = () => {                                // Function to handle logout events
+  useEffect(() => {
+    const handleUserLogout = () => {
       // Disconnect from any active connections when the user logs out
       try {
-        disconnect();                                                // Safely disconnect from WebRTC
+        disconnect();
       } catch (error) {
-        // Silently handle disconnect errors                        // Don't show errors during logout
+        // Silently handle disconnect errors during logout
       }
     };
 
-    window.addEventListener('user-logged-out', handleUserLogout);   // Listen for global logout events
+    window.addEventListener('user-logged-out', handleUserLogout);
 
-    return () => {                                                   // Cleanup function when component unmounts
-      window.removeEventListener('user-logged-out', handleUserLogout); // Remove event listener
+    return () => {
+      window.removeEventListener('user-logged-out', handleUserLogout);
     };
-  }, [disconnect]);                                                  // Re-run if disconnect function changes
+  }, [disconnect]);
 
   // Show loading state while checking authentication
   if (isLoading) {                                                   // If still checking authentication status
     return (
-      <div className="h-screen w-full bg-bg-primary flex items-center justify-center"> {/* Full screen centered container */}
-        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary-DEFAULT"></div> {/* Spinning loading indicator */}
+      <div className="h-screen w-full bg-bg-primary flex items-center justify-center">
+        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary-DEFAULT"></div>
       </div>
     );
   }
@@ -63,8 +63,8 @@ function AppContent() {                                              // Inner co
 
   // If authenticated, show the connection page or room component
   return (
-    <div className="h-screen w-full bg-bg-primary overflow-hidden">  {/* Full screen container with hidden overflow */}
-      {shouldConnect ? <RoomComponent /> : <ConnectionPage />}       {/* Show room if connected, otherwise show connection page */}
+    <div className="h-screen w-full bg-bg-primary overflow-hidden">
+      {shouldConnect ? <RoomComponent /> : <ConnectionPage />}
     </div>
   );
 }

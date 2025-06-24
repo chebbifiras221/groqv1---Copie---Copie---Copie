@@ -76,8 +76,6 @@ export function BotIcon({ connectionState, className = '' }: BotIconProps) {
         />
       </svg>
 
-      {/* No blinking animation */}
-
       {/* Loading animation for connecting states */}
       {isLoading && (
         <motion.div

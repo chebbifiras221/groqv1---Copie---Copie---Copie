@@ -3,7 +3,6 @@
 import React from 'react';
 import { motion } from 'framer-motion';
 
-
 interface SimpleBotFaceProps {
   className?: string;
   size?: number;

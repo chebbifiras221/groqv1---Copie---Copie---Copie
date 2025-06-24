@@ -89,12 +89,7 @@
   --text-code-primary: #e6edf3;
   --primary-button: #007acc;
 
-  /* Light theme code variables */
-  --bg-code-light: #ffffff;
-  --bg-code-header-light: #f3f3f3;
-  --border-code-light: #d4d4d4;
-  --text-code-primary-light: #334155;
-  --primary-button-light: #007acc;
+
 
   /* Language-specific colors */
   --lang-js: #f7df1e;
@@ -137,7 +132,7 @@ body {
   font-family: var(--font-geist-sans), -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
 }
 
-/* Light Theme is now handled by light-theme.css */
+
 
 /* Custom scrollbar for Webkit browsers */
 ::-webkit-scrollbar {
@@ -190,14 +185,7 @@ body {
   }
 }
 
-/* Fix for device selector dropdown */
-.absolute.bg-bg-secondary {
-  transform: none !important;
-}
 
-.absolute.bg-bg-secondary * {
-  transform: none !important;
-}
 
 .animate-gradient-x {
   background-size: 200% 100%;
@@ -255,11 +243,7 @@ body {
   box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
 }
 
-html:not(.dark) .code-block-container {
-  background-color: #ffffff;
-  border: 1px solid #d0d7de;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
-}
+
 
 .code-header {
   display: flex;
@@ -270,24 +254,32 @@ html:not(.dark) .code-block-container {
   border-bottom: 1px solid #2d333b;
 }
 
-html:not(.dark) .code-header {
-  background-color: #f3f3f3;
-  border-bottom: 1px solid #d0d7de;
+
+
+.language-indicator {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.language-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background-color: #2188ff; /* Default blue color */
+  box-shadow: 0 0 8px rgba(33, 136, 255, 0.5);
 }
 
 .language-tag {
-  color: #d4d4d4;
+  color: #e6edf3;
   font-size: 12px;
   text-transform: uppercase;
   font-weight: 500;
-}
-
-html:not(.dark) .language-tag {
-  color: #57606a;
+  letter-spacing: 0.5px;
 }
 
 .copy-button {
-  background-color: #2188ff; /* Match app's primary color */
+  background-color: #2188ff;
   color: white;
   border: none;
   border-radius: 4px;
@@ -301,13 +293,8 @@ html:not(.dark) .language-tag {
   gap: 4px;
 }
 
-html:not(.dark) .copy-button {
-  background-color: #0969da;
-  color: white;
-}
-
 .copy-button:hover {
-  background-color: #1f6feb; /* Match app's hover color */
+  background-color: #1f6feb;
   transform: translateY(-1px);
 }
 
@@ -318,13 +305,8 @@ html:not(.dark) .copy-button {
 .code-content {
   padding: 16px;
   overflow-x: auto;
-  background-color: #1a1f24; /* Match container background */
-  color: #e6edf3; /* Brighter text for better contrast */
-}
-
-html:not(.dark) .code-content {
-  background-color: #ffffff;
-  color: #24292f;
+  background-color: #1a1f24;
+  color: #e6edf3;
 }
 
 .code-container {
@@ -336,17 +318,27 @@ html:not(.dark) .code-content {
   flex-direction: column;
   padding-right: 16px;
   border-right: 1px solid #2d333b;
-  color: #7d8590; /* Slightly brighter for better visibility */
+  color: #7d8590;
   user-select: none;
   text-align: right;
   min-width: 40px;
-  background-color: #1a1f24; /* Match container background */
+  background-color: #1a1f24;
 }
 
-html:not(.dark) .line-numbers {
-  border-right: 1px solid #d0d7de;
-  color: #6e7781;
-  background-color: #ffffff;
+.code-lines {
+  flex: 1;
+  overflow-x: auto;
+}
+
+.code-lines pre {
+  margin: 0;
+  padding: 0;
+  background-color: transparent;
+  color: #e6edf3;
+}
+
+.code-lines code {
+  font-family: inherit;
 }
 
 /* Code editor styling */
@@ -354,7 +346,7 @@ html:not(.dark) .line-numbers {
   margin: 1rem 0;
   border-radius: 6px;
   overflow: hidden;
-  background-color: #1a1f24; /* Match app's dark theme */
+  background-color: #1a1f24;
   border: 1px solid #2d333b;
   font-family: var(--font-geist-mono), 'Consolas', 'Monaco', 'Andale Mono', monospace;
   font-size: 14px;
@@ -362,24 +354,13 @@ html:not(.dark) .line-numbers {
   box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
 }
 
-html:not(.dark) .code-editor-container {
-  background-color: #ffffff;
-  border: 1px solid #d0d7de;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
-}
-
 .code-editor-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
   padding: 8px 16px;
-  background-color: #242a33; /* Match app's dark theme */
+  background-color: #242a33;
   border-bottom: 1px solid #2d333b;
-}
-
-html:not(.dark) .code-editor-header {
-  background-color: #f3f3f3;
-  border-bottom: 1px solid #d0d7de;
 }
 
 .editor-actions {
@@ -409,8 +390,8 @@ html:not(.dark) .code-editor-header {
 
 .code-textarea {
   flex: 1;
-  background-color: #1a1f24; /* Match app's dark theme */
-  color: #e6edf3; /* Brighter text for better contrast */
+  background-color: #1a1f24;
+  color: #e6edf3;
   border: none;
   padding: 8px 16px;
   font-family: inherit;
@@ -423,12 +404,6 @@ html:not(.dark) .code-editor-header {
   tab-size: 2;
   scrollbar-width: thin;
   scrollbar-color: #2d333b transparent;
-}
-
-html:not(.dark) .code-textarea {
-  background-color: #ffffff;
-  color: #24292f;
-  scrollbar-color: #d0d7de transparent;
 }
 
 .code-textarea::-webkit-scrollbar {
@@ -449,102 +424,49 @@ html:not(.dark) .code-textarea {
   background-color: #3a424e;
 }
 
-html:not(.dark) .code-textarea::-webkit-scrollbar-thumb {
-  background-color: #d0d7de;
-}
-
-html:not(.dark) .code-textarea::-webkit-scrollbar-thumb:hover {
-  background-color: #bbc6d0;
-}
-
 .code-textarea::placeholder {
-  color: #7d8590; /* Slightly brighter for better visibility */
+  color: #7d8590;
   opacity: 0.6;
 }
 
-html:not(.dark) .code-textarea::placeholder {
-  color: #6e7781;
-  opacity: 0.7;
-}
-
-/* Syntax highlighting - Dark theme (GitHub Dark theme) */
+/* Syntax highlighting - Dark theme */
 .keyword {
-  color: #ff7b72; /* GitHub syntax theme */
+  color: #ff7b72;
   font-weight: 500;
 }
 
 .string {
-  color: #a5d6ff; /* GitHub syntax theme */
+  color: #a5d6ff;
 }
 
 .boolean {
-  color: #d2a8ff; /* GitHub syntax theme */
+  color: #d2a8ff;
   font-weight: 500;
 }
 
 .number {
-  color: #79c0ff; /* GitHub syntax theme */
+  color: #79c0ff;
 }
 
 .comment {
-  color: #8b949e; /* GitHub syntax theme */
+  color: #8b949e;
   font-style: italic;
 }
 
 .selector {
-  color: #7ee787; /* GitHub syntax theme */
+  color: #7ee787;
 }
 
 .property {
-  color: #d2a8ff; /* GitHub syntax theme */
+  color: #d2a8ff;
 }
 
 .value {
-  color: #a5d6ff; /* GitHub syntax theme */
+  color: #a5d6ff;
 }
 
 .bracket {
-  color: #e6edf3; /* GitHub syntax theme */
-}
-
-/* Syntax highlighting - Light theme (VS Code Light+) */
-html:not(.dark) .keyword {
-  color: #0000ff;
-  font-weight: 500;
-}
-
-html:not(.dark) .string {
-  color: #a31515;
-}
-
-html:not(.dark) .boolean {
-  color: #0000ff;
-  font-weight: 500;
-}
-
-html:not(.dark) .number {
-  color: #098658;
-}
-
-html:not(.dark) .comment {
-  color: #008000;
-  font-style: italic;
-}
-
-html:not(.dark) .selector {
-  color: #800000;
-}
-
-html:not(.dark) .property {
-  color: #795e26;
-}
-
-html:not(.dark) .value {
-  color: #a31515;
-}
-
-html:not(.dark) .bracket {
-  color: #000000;
+  color: #e6edf3;
 }
 
 /* Sidebar toggle button styling */

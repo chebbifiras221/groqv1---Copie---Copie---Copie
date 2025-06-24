@@ -190,12 +190,6 @@ def get_system_prompt(teaching_mode: str) -> dict:
               - "content": The detailed prompt text that defines AI personality and behavior
               This format matches the expected API message structure for conversation history.
 
-    Example:
-        >>> prompt = get_system_prompt("teacher")
-        >>> print(prompt["role"])
-        system
-        >>> print("educational" in prompt["content"].lower())
-        True
     """
     # Return the appropriate prompt based on teaching mode
     # Uses conditional expression for clean, readable code

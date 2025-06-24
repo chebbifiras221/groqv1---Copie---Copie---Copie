@@ -1,35 +1,29 @@
 /* Light Theme Styles */
 .light-theme {
-  /* Shadow colors - much lighter for light theme */
   --shadow-color: rgba(0, 0, 0, 0.02);
   --shadow-sm: 0 1px 1px rgba(0, 0, 0, 0.01);
   --shadow-md: 0 1px 2px rgba(0, 0, 0, 0.015);
   --shadow-lg: 0 2px 4px rgba(0, 0, 0, 0.02);
-  /* Background colors */
+
   --bg-primary: #ffffff;
   --bg-secondary: #f6f8fa;
   --bg-tertiary: #eaeef2;
 
-  /* Text colors */
   --text-primary: #24292f;
   --text-secondary: #57606a;
   --text-tertiary: #6e7781;
   --text-disabled: #a1a1aa;
 
-  /* Border colors */
   --border-default: #d0d7de;
   --border-muted: #eaeef2;
 
-  /* Button colors */
   --button-bg: #f6f8fa;
   --button-hover-bg: #eaeef2;
   --button-text: #24292f;
 
-  /* Primary colors */
   --primary-default: #0969da;
   --primary-hover: #0969da;
 
-  /* Code block colors */
   --code-bg: #f6f8fa;
   --code-border: #d0d7de;
   --code-text: #24292f;
@@ -250,15 +244,7 @@
   color: #d73a49 !important;
 }
 
-/* Fix for shadows in light theme */
-.light-theme [style*="box-shadow"] {
-  box-shadow: none !important;
-}
 
-/* Fix for gradients in light theme */
-.light-theme .bg-\[radial-gradient\(circle_at_top_right\,var\(--bg-tertiary\)_0\%\,transparent_25\%\)\] {
-  background-image: none !important;
-}
 
 /* Fix for ghost buttons in light theme */
 .light-theme button[class*="text-text-tertiary"],

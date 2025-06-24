@@ -111,22 +111,14 @@ def prepare_conversation_history(messages: List[Dict[str, Any]], teaching_mode: 
                              - Limited to MAX_CONVERSATION_HISTORY + 1 messages total (including system prompt)
                              - Most recent messages are preserved when truncation is needed
 
-    Example:
-        >>> messages = [{"type": "user", "content": "Hello"}, {"type": "ai", "content": "Hi there!"}]
-        >>> history = prepare_conversation_history(messages, "teacher")
-        >>> len(history)  # System prompt + 2 messages
-        3
     """
     # Get the appropriate system prompt based on the teaching mode
-    # This determines the AI's behavior and response style
     system_prompt = get_system_prompt(teaching_mode)
 
-    # Start with the system message as the first element
     # The system prompt must always be the first message in the conversation
     conversation_history = [system_prompt]
 
     # Add the conversation history by transforming database format to API format
-    # Convert message type ('user'/'ai') to API role ('user'/'assistant')
     conversation_history.extend([
         {
             "role": "user" if msg["type"] == "user" else "assistant",  # Map message type to API role
@@ -136,7 +128,6 @@ def prepare_conversation_history(messages: List[Dict[str, Any]], teaching_mode: 
     ])
 
     # Keep only the last N messages to avoid token limits, but always keep the system prompt
-    # This ensures we stay within API token limits while preserving recent context
     max_messages = config.MAX_CONVERSATION_HISTORY + 1  # +1 for system prompt
     if len(conversation_history) > max_messages:
         # Keep system prompt (first message) and the most recent conversation messages
@@ -146,12 +137,7 @@ def prepare_conversation_history(messages: List[Dict[str, Any]], teaching_mode: 
 
 def make_ai_request(model_name: str, conversation_history: List[Dict[str, Any]], temperature: float = None, max_retries: int = None) -> Tuple[bool, str]:
     """
-    Make a request to the AI API with comprehensive retry logic and error handling.
-
-    This function handles the low-level communication with the Groq API, including request
-    formatting, response validation, and retry logic for various failure scenarios.
-    It implements exponential backoff for different types of errors.
-
+    Make a request to the AI API .
     Args:
         model_name (str): The specific AI model to use for the request (e.g., "llama-3.3-70b-versatile").
                          Must be a valid model name supported by the Groq API. Different models
@@ -227,7 +213,6 @@ def make_ai_request(model_name: str, conversation_history: List[Dict[str, Any]],
             # Extract the AI message from the first choice
             message = result["choices"][0].get("message", {})  # Get message object or empty dict
             ai_response = message.get("content", "").strip()   # Extract content and remove whitespace
-
             # Validate that we received actual content
             if not ai_response:
                 # API returned success but with empty content
