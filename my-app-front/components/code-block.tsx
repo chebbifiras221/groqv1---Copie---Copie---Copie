@@ -1,56 +1,56 @@
-"use client";
+"use client";                                                    // Run this component on the client side
 
-import React, { useState } from 'react';
-import { motion } from 'framer-motion';
+import React, { useState } from 'react';                        // React hooks for state management
+import { motion } from 'framer-motion';                         // Animation library for smooth transitions
 import {
-  detectLanguage,
-  getLanguageColors,
-  tokenizeCode
-} from '@/utils/code-highlighting';
+  detectLanguage,                                               // Function to auto-detect programming language
+  getLanguageColors,                                            // Function to get color scheme for language
+  tokenizeCode                                                  // Function to break code into syntax tokens
+} from '@/utils/code-highlighting';                             // Code highlighting utilities
 
-interface CodeBlockProps {
-  code: string;
-  language?: string;
+interface CodeBlockProps {                                      // TypeScript interface for component props
+  code: string;                                                 // The code content to display
+  language?: string;                                            // Optional programming language (defaults to 'javascript')
 }
 
-export function CodeBlock({ code, language = 'javascript' }: CodeBlockProps) {
-  const [copied, setCopied] = useState(false);
+export function CodeBlock({ code, language = 'javascript' }: CodeBlockProps) { // Main code block component
+  const [copied, setCopied] = useState(false);                 // State to track if code was copied to clipboard
 
-  const copyToClipboard = () => {
-    navigator.clipboard.writeText(code);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+  const copyToClipboard = () => {                               // Function to copy code to user's clipboard
+    navigator.clipboard.writeText(code);                       // Use browser API to copy text
+    setCopied(true);                                            // Show "copied" feedback to user
+    setTimeout(() => setCopied(false), 2000);                  // Reset feedback after 2 seconds
   };
 
-  const detectedLanguage = language || detectLanguage(code, language);
+  const detectedLanguage = language || detectLanguage(code, language); // Auto-detect language if not provided
 
-  // Function to highlight syntax
-  const highlightSyntax = (code: string, language: string): React.ReactNode => {
-    if (!code) return null;
+  // Function to highlight syntax and add line numbers
+  const highlightSyntax = (code: string, language: string): React.ReactNode => { // Function to process and highlight code
+    if (!code) return null;                                     // Return nothing if no code provided
 
     // Split the code into lines for line numbers
-    const lines = code.split('\n');
+    const lines = code.split('\n');                            // Break code into individual lines
 
     return (
-      <div className="code-container">
-        <div className="line-numbers">
-          {lines.map((_, i) => (
-            <div key={i} className="line-number">{i + 1}</div>
+      <div className="code-container">                          {/* Container for line numbers and code */}
+        <div className="line-numbers">                          {/* Left column showing line numbers */}
+          {lines.map((_, i) => (                                // Create line number for each line
+            <div key={i} className="line-number">{i + 1}</div> // Display line number (starting from 1)
           ))}
         </div>
-        <pre className={`language-${language}`}>
-          <code className={`language-${language}`}>
-            <div className="code-content">
-              {tokenizeCode(code, language).map((token, index) => {
+        <pre className={`language-${language}`}>               {/* Preformatted text container with language class */}
+          <code className={`language-${language}`}>            {/* Code container with language class for styling */}
+            <div className="code-content">                     {/* Wrapper for the actual code content */}
+              {tokenizeCode(code, language).map((token, index) => { // Break code into syntax tokens and render each
                 // For plain text, just render it as is
-                if (token.type === 'plain') {
+                if (token.type === 'plain') {                  // If token is plain text (no special syntax)
                   // Use dangerouslySetInnerHTML to preserve HTML entities
-                  return <span key={index} dangerouslySetInnerHTML={{ __html: token.text }} />;
+                  return <span key={index} dangerouslySetInnerHTML={{ __html: token.text }} />; // Render as plain span
                 }
 
                 // For other token types, apply the appropriate class
                 return (
-                  <span key={index} className={token.type} dangerouslySetInnerHTML={{ __html: token.text }} />
+                  <span key={index} className={token.type} dangerouslySetInnerHTML={{ __html: token.text }} /> // Render with syntax highlighting class
                 );
               })}
             </div>
@@ -60,29 +60,29 @@ export function CodeBlock({ code, language = 'javascript' }: CodeBlockProps) {
     );
   };
 
-  const langColors = getLanguageColors(detectedLanguage);
+  const langColors = getLanguageColors(detectedLanguage);      // Get color scheme for the detected language
 
   return (
-    <motion.div
-      className="code-block-container"
-      initial={{ opacity: 0, y: 10 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.3 }}
+    <motion.div                                                 // Animated container using Framer Motion
+      className="code-block-container"                         // CSS class for styling the entire code block
+      initial={{ opacity: 0, y: 10 }}                         // Start animation: invisible and slightly below
+      animate={{ opacity: 1, y: 0 }}                          // End animation: fully visible and in position
+      transition={{ duration: 0.3 }}                          // Animation duration of 0.3 seconds
     >
-      <div className="code-header">
-        <div className="language-indicator">
-          <div className="language-dot" style={{ backgroundColor: langColors.primary }}></div>
-          <div className="language-tag">{detectedLanguage}</div>
+      <div className="code-header">                            {/* Header section with language info and copy button */}
+        <div className="language-indicator">                   {/* Left side: language information */}
+          <div className="language-dot" style={{ backgroundColor: langColors.primary }}></div> {/* Colored dot indicating language */}
+          <div className="language-tag">{detectedLanguage}</div> {/* Language name display */}
         </div>
-        <button
-          className="copy-button"
-          onClick={copyToClipboard}
+        <button                                                 // Copy to clipboard button
+          className="copy-button"                              // CSS class for button styling
+          onClick={copyToClipboard}                            // Click handler to copy code
         >
-          {copied ? '✓ Copied!' : 'Copy code'}
+          {copied ? '✓ Copied!' : 'Copy code'}                 {/* Button text changes when copied */}
         </button>
       </div>
-      <div className="code-content">
-        {highlightSyntax(code, detectedLanguage)}
+      <div className="code-content">                           {/* Main content area containing the highlighted code */}
+        {highlightSyntax(code, detectedLanguage)}              {/* Render the syntax-highlighted code */}
       </div>
       <style jsx>{`
         .code-block-container {

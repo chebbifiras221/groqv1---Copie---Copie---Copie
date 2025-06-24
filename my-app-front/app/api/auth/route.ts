@@ -1,47 +1,47 @@
-import { NextResponse } from "next/server";
+import { NextResponse } from "next/server";                      // Next.js response utility for API routes
 
-export type AuthRequest = {
-  type: 'register' | 'login' | 'verify' | 'logout';
-  username?: string;
-  password?: string;
-  token?: string;
+export type AuthRequest = {                                     // TypeScript type for incoming authentication requests
+  type: 'register' | 'login' | 'verify' | 'logout';            // Type of authentication operation
+  username?: string;                                            // Username (optional, depends on operation type)
+  password?: string;                                            // Password (optional, depends on operation type)
+  token?: string;                                               // JWT token (optional, for verify/logout operations)
 };
 
-export type AuthResponse = {
-  success: boolean;
-  message: string;
-  errorType?: 'username' | 'password' | 'username_exists' | 'token' | 'validation' | 'server_error' | string;
-  user?: {
-    id: string;
-    username: string;
+export type AuthResponse = {                                    // TypeScript type for authentication API responses
+  success: boolean;                                             // Whether the operation was successful
+  message: string;                                              // Human-readable message about the result
+  errorType?: 'username' | 'password' | 'username_exists' | 'token' | 'validation' | 'server_error' | string; // Specific error type for frontend handling
+  user?: {                                                      // User data (returned on successful login/verify)
+    id: string;                                                 // Unique user identifier
+    username: string;                                           // User's display name
   };
-  token?: string;
+  token?: string;                                               // JWT token (returned on successful login)
 };
 
-export async function POST(request: Request) {
-  try {
-    const body: AuthRequest = await request.json();
+export async function POST(request: Request) {                   // Handle POST requests to the auth API endpoint
+  try {                                                          // Wrap everything in try-catch for error handling
+    const body: AuthRequest = await request.json();             // Parse the JSON request body
 
     // Get the WebSocket URL from environment variables
-    const wsUrl = process.env.NEXT_PUBLIC_LIVEKIT_URL;
-    if (!wsUrl) {
-      throw new Error("LIVEKIT_URL is not defined");
+    const wsUrl = process.env.NEXT_PUBLIC_LIVEKIT_URL;          // Get LiveKit URL from environment
+    if (!wsUrl) {                                               // Check if environment variable is set
+      throw new Error("LIVEKIT_URL is not defined");           // Throw error if missing (will be caught below)
     }
 
-    // Basic validation
-    if (body.type === 'register' && (!body.username || !body.password)) {
-      return NextResponse.json({
-        success: false,
-        message: "Username and password are required",
-        errorType: "validation"
-      }, { status: 400 });
+    // Basic validation for different request types
+    if (body.type === 'register' && (!body.username || !body.password)) { // Validate register request
+      return NextResponse.json({                                // Return error response
+        success: false,                                         // Operation failed
+        message: "Username and password are required",         // Error message for user
+        errorType: "validation"                                 // Error type for frontend handling
+      }, { status: 400 });                                     // HTTP 400 Bad Request
     }
-    else if (body.type === 'login' && (!body.username || !body.password)) {
-      return NextResponse.json({
-        success: false,
-        message: "Username and password are required",
-        errorType: "validation"
-      }, { status: 400 });
+    else if (body.type === 'login' && (!body.username || !body.password)) { // Validate login request
+      return NextResponse.json({                                // Return error response
+        success: false,                                         // Operation failed
+        message: "Username and password are required",         // Error message for user
+        errorType: "validation"                                 // Error type for frontend handling
+      }, { status: 400 });                                     // HTTP 400 Bad Request
     }
     else if (body.type === 'verify' && !body.token) {
       return NextResponse.json({
