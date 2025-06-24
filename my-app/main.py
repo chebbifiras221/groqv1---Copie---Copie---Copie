@@ -567,218 +567,393 @@ def generate_ai_response(text, conversation_id=None):
 async def _forward_transcription(
     stt_stream: stt.SpeechStream, stt_forwarder: transcription.STTSegmentsForwarder, room: rtc.Room
 ):
-    """Forward the transcription to the client and log the transcript in the console"""
+    """
+    Forward speech-to-text transcription events to clients and process final transcripts for AI responses.
+
+    This function handles the real-time speech recognition pipeline, processing both interim and final
+    transcripts, generating AI responses for completed speech, and managing the complete voice interaction flow.
+
+    Args:
+        stt_stream (stt.SpeechStream): The speech-to-text stream that provides transcription events
+                                     including interim transcripts, final transcripts, and usage metrics
+        stt_forwarder (transcription.STTSegmentsForwarder): LiveKit forwarder that sends transcription
+                                                           segments to connected clients for real-time display
+        room (rtc.Room): The LiveKit room object used for publishing AI responses and audio data
+                        to all connected participants
+
+    Returns:
+        None: This is an async generator function that processes events continuously
+    """
+    # Process each transcription event from the speech-to-text stream
     async for ev in stt_stream:
+        # Handle interim transcription results (partial, potentially inaccurate)
         if ev.type == stt.SpeechEventType.INTERIM_TRANSCRIPT:
             # you may not want to log interim transcripts, they are not final and may be incorrect
-            logger.debug(f" -> {ev.alternatives[0].text}")
+            # Extract the most likely transcription alternative from the event
+            interim_text = ev.alternatives[0].text  # Get the best guess transcription
+            logger.debug(f" -> {interim_text}")  # Log interim result with arrow indicator
+
+        # Handle final transcription results (complete, accurate speech recognition)
         elif ev.type == stt.SpeechEventType.FINAL_TRANSCRIPT:
-            transcribed_text = ev.alternatives[0].text
-            logger.debug(f" ~> {transcribed_text}")
+            # Extract the final transcribed text from the best alternative
+            transcribed_text = ev.alternatives[0].text  # Get the final, accurate transcription
+            logger.debug(f" ~> {transcribed_text}")  # Log final result with different indicator
 
             # Get the teaching mode from the database for the current conversation
+            # This determines how the AI will respond (teacher vs qa mode)
             teaching_mode = ai_utils.get_teaching_mode_from_db(current_conversation_id)
             logger.info(f"Using teaching mode for voice input: {teaching_mode}")
 
             # Create a context object with conversation ID, teaching mode, and is_hidden flag
+            # This packages all necessary information for AI response generation
             context = {
-                "conversation_id": current_conversation_id,
-                "teaching_mode": teaching_mode,
-                "is_hidden": False  # Voice inputs are never hidden instructions
+                "conversation_id": current_conversation_id,  # The active conversation to add messages to
+                "teaching_mode": teaching_mode,              # The AI behavior mode (teacher/qa)
+                "is_hidden": False  # Voice inputs are never hidden instructions (always visible in chat)
             }
 
             # Generate AI response using the current conversation and teaching mode
+            # Pass the transcribed speech and context to the AI response generator
             ai_response = generate_ai_response(transcribed_text, context)
 
             # Check if the response is empty or just whitespace
+            # This handles cases where AI generation fails or returns empty content
             if not ai_response or not ai_response.strip():
                 logger.warning("Received empty AI response for voice input, using fallback message")
+                # Use fallback message generator to provide a helpful response
                 ai_response = generate_fallback_message(transcribed_text)
 
+            # Log the AI response for debugging and monitoring
             logger.info(f"AI Response: {ai_response}")
 
             # Send the response as a single message (multi-part processing disabled)
+            # Check if we have a valid conversation ID before sending response
             if current_conversation_id:
                 # Send AI response to all participants as a single message
+                # Create structured message for client consumption
                 data_message = {
-                    "type": "ai_response",
-                    "text": ai_response,
-                    "conversation_id": current_conversation_id
+                    "type": "ai_response",                      # Message type for client routing
+                    "text": ai_response,                        # The generated AI response text
+                    "conversation_id": current_conversation_id  # Associated conversation ID
                 }
-                # Use our safe publish method with retry logic
+                # Use our safe publish method with retry logic for reliable delivery
                 await safe_publish_data(room.local_participant, json.dumps(data_message).encode())
             else:
                 # Log an error if we don't have a valid conversation ID
+                # This indicates a system state issue that needs investigation
                 logger.error(config.ERROR_MESSAGES["no_conversation_id"])
 
-            # Synthesize speech from the AI response
+            # Synthesize speech from the AI response to provide audio feedback
+            # This converts the text response to speech for the user
             await synthesize_speech(ai_response, room)
 
             # Send updated conversation data to ensure UI is in sync
+            # This keeps the client interface updated with the latest conversation state
             await send_conversation_data(current_conversation_id, room.local_participant)
 
+        # Handle speech recognition usage metrics and statistics
         elif ev.type == stt.SpeechEventType.RECOGNITION_USAGE:
+            # Log usage metrics for monitoring and debugging speech recognition performance
             logger.debug(f"metrics: {ev.recognition_usage}")
 
+        # Forward the transcription event to connected clients for real-time display
+        # This updates the client UI with transcription progress and results
         stt_forwarder.update(ev)
 
 
 async def safe_publish_data(participant, data, max_retries=config.DEFAULT_MAX_RETRIES, retry_delay=config.DEFAULT_RETRY_DELAY):
     """
-    Safely publish data with retry logic to handle connection timeouts
+    Safely publish data to a LiveKit participant with comprehensive retry logic and error handling.
+
+    This function implements exponential backoff retry logic to handle network issues, connection
+    timeouts, and temporary service disruptions. It's essential for reliable client communication
+    in the real-time application environment.
 
     Args:
-        participant: The participant to publish data to
-        data: The data to publish (should be bytes)
-        max_retries: Maximum number of retry attempts
-        retry_delay: Delay between retries in seconds
+        participant (rtc.Participant): The LiveKit participant object to send data to. Must have
+                                     an active connection and the ability to receive data messages.
+                                     Typically room.local_participant for server-to-client communication.
+        data (bytes): The data to publish, must be in bytes format. Usually JSON strings that have
+                     been encoded to bytes using .encode(). Contains structured messages for client
+                     consumption including AI responses, status updates, and conversation data.
+        max_retries (int, optional): Maximum number of retry attempts before giving up. Defaults to
+                                   config.DEFAULT_MAX_RETRIES. Higher values increase reliability but
+                                   may delay error detection. Typical values: 3-5 retries.
+        retry_delay (float, optional): Base delay between retries in seconds. Defaults to
+                                     config.DEFAULT_RETRY_DELAY. Used with exponential backoff to
+                                     gradually increase delay between attempts. Typical values: 0.5-2.0 seconds.
 
     Returns:
-        bool: True if successful, False otherwise
+        bool: True if data was successfully published to the participant within the retry limit.
+              False if all retry attempts failed or if an unrecoverable error occurred.
+              Calling code should handle False return values appropriately.
+
+    Example:
+        >>> success = await safe_publish_data(participant, json.dumps(message).encode())
+        >>> if not success:
+        ...     logger.error("Failed to send message to client")
     """
+    # Iterate through retry attempts, starting from 0 up to max_retries-1
     for attempt in range(max_retries):
         try:
+            # Attempt to publish data to the participant through LiveKit data channel
+            # This is the core operation that may fail due to network issues
             await participant.publish_data(data)
-            return True
+            return True  # Success - data was published successfully
         except Exception as e:
-            error_type = type(e).__name__
+            # Extract the exception type name for more informative error messages
+            error_type = type(e).__name__  # Get class name like 'ConnectionError', 'TimeoutError', etc.
+
+            # Check if this is not the last attempt (we have more retries available)
             if attempt < max_retries - 1:
-                # Not the last attempt, so retry
-                logger.warning(f"Publish attempt {attempt+1} failed with {error_type}: {str(e)}. Retrying in {retry_delay}s...")
-                await asyncio.sleep(retry_delay * (2 ** attempt))  # Exponential backoff
+                # Not the last attempt, so retry after a delay
+                # Calculate exponential backoff delay: base_delay * 2^attempt
+                backoff_delay = retry_delay * (2 ** attempt)  # Exponential backoff: 0.5s, 1s, 2s, 4s...
+                logger.warning(f"Publish attempt {attempt+1} failed with {error_type}: {str(e)}. Retrying in {backoff_delay}s...")
+                # Wait for the calculated delay before next attempt
+                await asyncio.sleep(backoff_delay)  # Async sleep to not block other operations
             else:
-                # Last attempt failed
+                # Last attempt failed - log error and give up
                 logger.error(f"Failed to publish data after {max_retries} attempts. Last error: {error_type}: {str(e)}")
-                return False
-    return False
+                return False  # All retries exhausted, return failure
+
+    # This line should never be reached due to the logic above, but included for safety
+    return False  # Fallback return for any unexpected code path
 
 async def entrypoint(ctx: JobContext):
+    """
+    Main entry point for the LiveKit agent that sets up speech-to-text, message handling, and room connections.
+
+    This function initializes all core components of the AI teaching assistant including TTS engine,
+    conversation management, speech recognition, and client message handling. It serves as the
+    orchestrator for the entire real-time communication system.
+
+    Args:
+        ctx (JobContext): LiveKit job context containing room information, participant details,
+                         and connection management utilities. Provides access to the room object
+                         for publishing data and managing real-time communication.
+
+    Returns:
+        None: This function runs continuously until the connection is terminated.
+    """
+    # Log the start of the transcriber service with room identification
     logger.info(f"starting transcriber (speech to text) example, room: {ctx.room.name}")
 
     # Use the global current_conversation_id - it's already initialized as None
+    # This variable tracks the active conversation across all client interactions
     global current_conversation_id
 
-    # Initialize TTS engine
+    # Initialize TTS engine and verify it's working properly
+    # This sets up the text-to-speech system for AI response audio generation
     if initialize_tts():
-        logger.info("TTS engine initialization successful")
+        logger.info("TTS engine initialization successful")  # TTS is ready for use
     else:
+        # Log warning but continue - TTS failure shouldn't stop the service
         logger.warning(config.ERROR_MESSAGES["tts_init_failed"])
 
-    # Check if there are any existing conversations
-    conversations = database.list_conversations(limit=1)
+    # Check if there are any existing conversations in the database
+    # This helps maintain continuity if the service restarts
+    conversations = database.list_conversations(limit=1)  # Get the most recent conversation
     if conversations:
-        # Use the most recent conversation
-        current_conversation_id = conversations[0]["id"]
+        # Use the most recent conversation to maintain context
+        current_conversation_id = conversations[0]["id"]  # Extract conversation UUID
         logger.info(f"Using existing conversation with ID: {current_conversation_id}")
     else:
         # Don't create a new conversation automatically - let the frontend handle this
+        # This prevents unnecessary empty conversations and gives clients control
         logger.info("No existing conversations found. Waiting for frontend to create one.")
 
-    # Check if Groq API key is available
+    # Check if Groq API key is available for cloud-based speech recognition
     if config.GROQ_API_KEY:
-        # uses "whisper-large-v3-turbo" model by default
+        # uses "whisper-large-v3-turbo" model by default for fast, accurate transcription
+        # Groq provides high-quality cloud-based speech-to-text services
         stt_impl = plugin.STT.with_groq()
     else:
-        # Fall back to silero VAD with local transcription
+        # Fall back to silero VAD with local transcription when no API key available
         logger.warning("Groq API key not available, using local transcription")
+        # Create a local speech-to-text implementation with voice activity detection
         stt_impl = stt.StreamAdapter(
-            stt=stt.STT.with_default(),
-            vad=silero.VAD.load(
-                min_silence_duration=config.STT_CONFIG["min_silence_duration"],
-                min_speech_duration=config.STT_CONFIG["min_speech_duration"],
-                prefix_padding_duration=config.STT_CONFIG["prefix_padding_duration"]
+            stt=stt.STT.with_default(),  # Use default local STT implementation
+            vad=silero.VAD.load(         # Load Silero Voice Activity Detection model
+                min_silence_duration=config.STT_CONFIG["min_silence_duration"],      # Minimum silence to end speech
+                min_speech_duration=config.STT_CONFIG["min_speech_duration"],        # Minimum speech duration to process
+                prefix_padding_duration=config.STT_CONFIG["prefix_padding_duration"] # Padding before speech starts
             ),
         )
 
+    # Check if the STT implementation supports streaming and wrap if necessary
     if not stt_impl.capabilities.streaming:
-        # wrap with a stream adapter to use streaming semantics
+        # wrap with a stream adapter to use streaming semantics for real-time transcription
+        # This ensures consistent streaming behavior regardless of the underlying STT implementation
         stt_impl = stt.StreamAdapter(
-            stt=stt_impl,
-            vad=silero.VAD.load(
-                min_silence_duration=config.STT_CONFIG["min_silence_duration"],
-                min_speech_duration=config.STT_CONFIG["min_speech_duration"],
-                prefix_padding_duration=config.STT_CONFIG["prefix_padding_duration"]
+            stt=stt_impl,                # The base STT implementation to wrap
+            vad=silero.VAD.load(         # Voice Activity Detection for stream processing
+                min_silence_duration=config.STT_CONFIG["min_silence_duration"],      # Silence threshold for speech end
+                min_speech_duration=config.STT_CONFIG["min_speech_duration"],        # Minimum speech duration to process
+                prefix_padding_duration=config.STT_CONFIG["prefix_padding_duration"] # Audio padding before speech
             ),
         )
 
-    # Handler for text input messages
-    # Declare global variable at the beginning of the function
+    # Handler for text input messages from clients
+    # This nested function processes all incoming data messages and routes them appropriately
     async def process_text_input(data: rtc.DataPacket):
+        """
+        Process incoming data packets from clients and route them to appropriate message handlers.
+
+        This function serves as the main message router for all client communications including
+        text input, conversation management, authentication, and system commands.
+        """
+        # Declare global variable at the beginning of the function for conversation tracking
         global current_conversation_id
         try:
-            message_str = data.data.decode('utf-8')
-            message = json.loads(message_str)
+            # Decode the incoming data packet from bytes to string
+            message_str = data.data.decode('utf-8')  # Convert bytes to UTF-8 string
+            # Parse the JSON message from the client
+            message = json.loads(message_str)        # Convert JSON string to Python dictionary
 
-            # Route messages to appropriate handlers
-            message_type = message.get('type')
+            # Route messages to appropriate handlers based on message type
+            # Extract the message type to determine which handler to use
+            message_type = message.get('type')       # Get the 'type' field from message dictionary
 
+            # Handle conversation clearing requests (delete all conversations of a specific mode)
             if message_type == 'clear_all_conversations':
+                # Clear conversations and get the new conversation ID
                 current_conversation_id = await handle_clear_conversations(message, ctx, current_conversation_id, safe_publish_data)
+
+            # Handle conversation renaming requests
             elif message_type == 'rename_conversation':
+                # Rename a specific conversation with a new title
                 await handle_rename_conversation(message, ctx, safe_publish_data)
+
+            # Handle conversation deletion requests
             elif message_type == 'delete_conversation':
+                # Delete a conversation and potentially get a new current conversation
                 new_id = await handle_delete_conversation(message, ctx, current_conversation_id, safe_publish_data)
-                if new_id:
+                if new_id:  # Update current conversation if a new one was created
                     current_conversation_id = new_id
+
+            # Handle requests to list all conversations
             elif message_type == 'list_conversations':
+                # Send the list of conversations to the client
                 await handle_list_conversations(message, ctx, safe_publish_data)
+
+            # Handle authentication requests (login, register, verify, logout)
             elif message_type == 'auth_request':
+                # Process authentication and get response data
                 response_data = await handle_auth_request(message, ctx, safe_publish_data)
                 # Update current conversation if login was successful
+                # Check if this was a successful login operation
                 if response_data.get('success') and message.get('data', {}).get('type') == 'login':
+                    # Extract user ID from successful login response
                     user_id = response_data.get('user', {}).get('id')
-                    if user_id:
+                    if user_id:  # If we have a valid user ID, create/find a conversation
+                        # Find or create an empty conversation for the newly logged-in user
                         current_conversation_id = find_or_create_empty_conversation(
-                            teaching_mode='teacher',
-                            check_current=True,
-                            user_id=user_id
+                            teaching_mode='teacher',  # Default to teacher mode for new users
+                            check_current=True,       # Validate current conversation
+                            user_id=user_id          # Associate with the logged-in user
                         )
+
+            # Handle requests to get a specific conversation
             elif message_type == 'get_conversation':
+                # Retrieve and send a specific conversation to the client
                 conversation_id = await handle_get_conversation(message, ctx, safe_publish_data)
-                if conversation_id:
+                if conversation_id:  # Update current conversation if retrieval was successful
                     current_conversation_id = conversation_id
+
+            # Handle requests to create a new conversation
             elif message_type == 'new_conversation':
+                # Create a new conversation and make it the current one
                 current_conversation_id = await handle_new_conversation(message, ctx, safe_publish_data, find_or_create_empty_conversation)
+
+            # Handle text input for AI processing (the main interaction type)
             elif message_type == 'text_input':
+                # Process user text input through the complete AI pipeline
                 current_conversation_id = await handle_text_input(
-                    message, ctx, current_conversation_id, safe_publish_data,
-                    find_or_create_empty_conversation, generate_ai_response,
-                    synthesize_speech, send_conversation_data
+                    message, ctx, current_conversation_id, safe_publish_data,  # Basic parameters
+                    find_or_create_empty_conversation, generate_ai_response,   # Conversation and AI functions
+                    synthesize_speech, send_conversation_data                  # Audio and data sync functions
                 )
         except Exception as e:
+            # Log any errors that occur during message processing
+            # This prevents one bad message from crashing the entire service
             logger.error(f"Error handling data message: {e}")
 
     # Non-async wrapper for the data received event
+    # LiveKit event handlers must be synchronous, so we need a wrapper for our async function
     def handle_data_received(data: rtc.DataPacket):
-        # Create a task to process the data asynchronously
+        """
+        Synchronous wrapper for handling incoming data packets from clients.
+
+        Since LiveKit event handlers must be synchronous but our processing is async,
+        this function creates an async task to handle the data processing.
+        """
+        # Create a task to process the data asynchronously without blocking the event handler
+        # This allows the LiveKit event system to continue processing other events
         asyncio.create_task(process_text_input(data))
 
+    # Async function to handle audio track transcription
     async def transcribe_track(participant: rtc.RemoteParticipant, track: rtc.Track):
-        audio_stream = rtc.AudioStream(track)
+        """
+        Set up and manage speech-to-text transcription for an audio track.
+
+        This function creates the audio processing pipeline that converts speech
+        to text and forwards transcription events to clients and the AI system.
+        """
+        # Create an audio stream from the track for processing
+        audio_stream = rtc.AudioStream(track)  # Converts track to processable audio stream
+
+        # Create a forwarder to send transcription segments to clients in real-time
         stt_forwarder = transcription.STTSegmentsForwarder(
-            room=ctx.room, participant=participant, track=track
+            room=ctx.room,           # The room to send transcription data to
+            participant=participant, # The participant whose audio is being transcribed
+            track=track             # The specific audio track being processed
         )
 
-        stt_stream = stt_impl.stream()
+        # Create a speech-to-text stream for processing audio frames
+        stt_stream = stt_impl.stream()  # Initialize STT stream with configured implementation
+
+        # Start the transcription forwarding task asynchronously
+        # This task will process STT events and generate AI responses
         asyncio.create_task(_forward_transcription(stt_stream, stt_forwarder, ctx.room))
 
+        # Process each audio frame from the stream and send to STT
         async for ev in audio_stream:
-            stt_stream.push_frame(ev.frame)
+            # Push each audio frame to the speech-to-text stream for processing
+            stt_stream.push_frame(ev.frame)  # Send audio data to STT engine
 
     # Register data received handler with a synchronous function
+    # This sets up the event listener for all incoming client messages
     ctx.room.on("data_received", handle_data_received)
 
-    # Register track_subscribed handler
+    # Register track_subscribed handler for audio processing
     # The decorator automatically passes the track, publication, and participant
     # We use _ prefix for unused parameters to indicate they're intentionally not used
     @ctx.room.on("track_subscribed")
     def _(track: rtc.Track, _: rtc.TrackPublication, participant: rtc.RemoteParticipant):
-        # spin up a task to transcribe each track
-        if track.kind == rtc.TrackKind.KIND_AUDIO:
+        """
+        Handle new audio tracks by setting up transcription processing.
+
+        This event handler is called whenever a participant starts sharing audio.
+        It sets up the speech-to-text pipeline for the new audio track.
+        """
+        # spin up a task to transcribe each track, but only for audio tracks
+        if track.kind == rtc.TrackKind.KIND_AUDIO:  # Only process audio tracks, ignore video
+            # Create an async task to handle transcription for this audio track
             asyncio.create_task(transcribe_track(participant, track))
 
-    await ctx.connect(auto_subscribe=AutoSubscribe.AUDIO_ONLY)
+    # Connect to the LiveKit room and start processing
+    # This establishes the connection and begins handling events
+    await ctx.connect(auto_subscribe=AutoSubscribe.AUDIO_ONLY)  # Only subscribe to audio tracks
 
 
 if __name__ == "__main__":
-    cli.run_app(WorkerOptions(entrypoint_fnc=entrypoint))
+    """
+    Main execution block that starts the LiveKit agent application.
+
+    This block only executes when the script is run directly (not imported as a module).
+    It initializes and starts the LiveKit worker with our entrypoint function.
+    """
+    # Start the LiveKit agent application with our entrypoint function
+    # cli.run_app() handles the LiveKit agent lifecycle and connection management
+    cli.run_app(WorkerOptions(entrypoint_fnc=entrypoint))  # Pass our entrypoint function to the LiveKit CLI

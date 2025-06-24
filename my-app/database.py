@@ -127,23 +127,53 @@ def init_db():
         release_connection(conn)
 
 def create_conversation(title: str = "New Conversation", teaching_mode: str = "teacher", user_id: str = None) -> str:
-    """Create a new conversation and return its ID"""
+    """
+    Create a new conversation record in the database with specified parameters.
+
+    This function generates a new conversation with a unique ID, timestamps, and
+    associates it with a user and teaching mode. It's used when users start new
+    conversations or when the system needs to create replacement conversations.
+
+    Args:
+        title (str, optional): The initial title for the conversation. Defaults to "New Conversation".
+                              This title will typically be updated when the first message is added.
+        teaching_mode (str, optional): The AI teaching mode for this conversation ('teacher' or 'qa').
+                                     Defaults to "teacher". Determines how the AI will respond to messages.
+        user_id (str, optional): The unique identifier of the user who owns this conversation.
+                                Defaults to None for legacy conversations without user association.
+
+    Returns:
+        str: The unique UUID string identifier of the newly created conversation.
+             This ID is used for all subsequent operations on the conversation.
+
+    Raises:
+        Exception: If database insertion fails or any other error occurs during creation.
+
+    Example:
+        >>> conversation_id = create_conversation("My Python Questions", "teacher", "user123")
+        >>> print(f"Created conversation: {conversation_id}")
+    """
     try:
-        conversation_id = str(uuid.uuid4())
-        now = datetime.now().isoformat()
+        # Generate a unique UUID for the new conversation
+        conversation_id = str(uuid.uuid4())  # Create unique identifier as string
+        # Get current timestamp in ISO format for created_at and updated_at fields
+        now = datetime.now().isoformat()     # ISO format: "2023-12-07T10:30:45.123456"
 
         # Create conversation with all modern columns (migrations should have run during startup)
+        # Insert the new conversation record into the database
         execute_query(
             "INSERT INTO conversations (id, title, created_at, updated_at, teaching_mode, user_id) VALUES (?, ?, ?, ?, ?, ?)",
-            (conversation_id, title, now, now, teaching_mode, user_id),
-            commit=True
+            (conversation_id, title, now, now, teaching_mode, user_id),  # Parameter values for the query
+            commit=True  # Commit the transaction immediately to persist the data
         )
 
+        # Log successful conversation creation with all relevant details
         logger.info(f"Created new conversation: {conversation_id} with teaching mode: {teaching_mode} for user: {user_id}")
-        return conversation_id
+        return conversation_id  # Return the new conversation ID for use by caller
     except Exception as e:
+        # Log the error with specific details for debugging
         logger.error(f"Error creating conversation: {e}")
-        raise
+        raise  # Re-raise the exception for the caller to handle
 
 def get_conversation(conversation_id: str, user_id: str = None) -> Optional[Dict[str, Any]]:
     """
@@ -240,40 +270,80 @@ def list_conversations(limit: int = 10, offset: int = 0, include_messages: bool 
         raise
 
 def add_message(conversation_id: str, message_type: str, content: str) -> str:
-    """Add a message to a conversation"""
+    """
+    Add a new message to an existing conversation and update the conversation timestamp.
+
+    This function creates a new message record in the database and updates the parent
+    conversation's timestamp to reflect recent activity. It uses a database transaction
+    to ensure both operations succeed or fail together.
+
+    Args:
+        conversation_id (str): The unique identifier of the conversation to add the message to.
+                              Must be a valid UUID of an existing conversation in the database.
+        message_type (str): The type of message being added ('user' for user messages,
+                           'ai' for AI responses). This determines how the message is
+                           displayed and processed in the application.
+        content (str): The actual text content of the message. Can be any length string
+                      including empty strings, though empty messages are generally not useful.
+
+    Returns:
+        str: The unique UUID string identifier of the newly created message.
+             This ID can be used for message-specific operations if needed.
+
+    Raises:
+        ValueError: If the specified conversation_id does not exist in the database.
+        RuntimeError: If the database transaction fails to complete successfully.
+        Exception: For any other database or system errors during message creation.
+
+    Example:
+        >>> message_id = add_message("conv-123", "user", "What is Python?")
+        >>> print(f"Added message: {message_id}")
+    """
     try:
-        # Check if conversation exists
+        # Check if conversation exists before adding message
+        # This prevents orphaned messages and provides clear error messages
         conversation = execute_query(
-            "SELECT id FROM conversations WHERE id = ?",
-            (conversation_id,),
-            fetch_one=True
+            "SELECT id FROM conversations WHERE id = ?",  # Query to check conversation existence
+            (conversation_id,),                           # Parameter tuple with conversation ID
+            fetch_one=True                               # Return single record or None
         )
 
+        # Validate that the conversation exists
         if not conversation:
+            # Raise descriptive error if conversation doesn't exist
             raise ValueError(f"Conversation {conversation_id} does not exist")
 
-        message_id = str(uuid.uuid4())
-        now = datetime.now().isoformat()
+        # Generate unique ID for the new message
+        message_id = str(uuid.uuid4())    # Create unique identifier as string
+        # Get current timestamp for message creation time
+        now = datetime.now().isoformat()  # ISO format timestamp
 
-        # Execute both operations in a transaction
+        # Execute both operations in a transaction to ensure data consistency
+        # If either operation fails, both are rolled back
         queries = [
             {
+                # Insert the new message into the messages table
                 "query": "INSERT INTO messages (id, conversation_id, type, content, timestamp) VALUES (?, ?, ?, ?, ?)",
-                "params": (message_id, conversation_id, message_type, content, now)
+                "params": (message_id, conversation_id, message_type, content, now)  # All message data
             },
             {
+                # Update the conversation's updated_at timestamp to reflect recent activity
                 "query": "UPDATE conversations SET updated_at = ? WHERE id = ?",
-                "params": (now, conversation_id)
+                "params": (now, conversation_id)  # New timestamp and conversation ID
             }
         ]
 
+        # Execute the transaction and check for success
         if not execute_transaction(queries):
+            # Raise error if transaction failed
             raise RuntimeError(f"Failed to add message to conversation {conversation_id}")
 
+        # Return the new message ID for use by caller
         return message_id
     except Exception as e:
+        # Log the error with specific details for debugging
         logger.error(f"Error adding message to conversation {conversation_id}: {e}")
-        raise
+        raise  # Re-raise the exception for the caller to handle
 
 def delete_conversation(conversation_id: str, user_id: str = None) -> bool:
     """

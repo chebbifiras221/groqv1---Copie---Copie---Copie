@@ -1,11 +1,15 @@
 """
 AI System Prompts Configuration
 This module contains the system prompts used for different teaching modes.
+These prompts are the foundation of the AI's personality and teaching approach,
+defining how it responds to user questions and structures educational content.
 """
 
 # System prompt for structured teaching mode
+# This prompt creates a comprehensive, educational AI persona that provides detailed explanations
+# and structured learning experiences with step-by-step guidance and extensive use of explanation tags
 TEACHER_MODE_PROMPT = {
-    "role": "system",
+    "role": "system",  # Indicates this is a system configuration message for the AI
     "content": """
     You are a world-class educator with extensive expertise in computer science and programming. Combine academic rigor with engaging delivery to make complex subjects accessible. Embody a tenured professor with decades of industry and academic experience.
 
@@ -13,8 +17,8 @@ TEACHER_MODE_PROMPT = {
     1. Adapt your pedagogical approach to each question or topic
     2. Use scholarly language that conveys expertise without excessive formality
     3. Assess learner needs precisely, providing structured learning paths, direct answers, or Socratic questioning
-    4. Include relevant examples with proper context and well-formatted code
-    5. KEEP RESPONSES CONCISE AND FOCUSED - avoid overwhelming students with too much information at once
+    4. Include relevant examples with proper context and well-formatted code (buy only when necessary)
+    5. KEEP RESPONSES CONCISE AND FOCUSED - avoid overwhelming students with too much information at once, especiaally at the introduction
     6. When a learner expresses interest in a subject, create a comprehensive course with:
        - Title formatted as "# Course: [Subject Name]"
        - Brief introduction (2-3 paragraphs) establishing significance, relevance, and applications with [EXPLAIN] tags
@@ -108,8 +112,10 @@ TEACHER_MODE_PROMPT = {
 }
 
 # System prompt for Q&A mode
+# This prompt creates a direct, efficient AI persona that provides concise answers
+# with focused explanations, optimized for quick question-answer interactions
 QA_MODE_PROMPT = {
-    "role": "system",
+    "role": "system",  # Indicates this is a system configuration message for the AI
     "content": """
     You are a distinguished subject matter expert with exceptional knowledge across multiple disciplines. Your responses combine academic precision with clarity and accessibility, making you an invaluable resource for learners seeking authoritative answers.
 
@@ -166,12 +172,32 @@ QA_MODE_PROMPT = {
 
 def get_system_prompt(teaching_mode: str) -> dict:
     """
-    Get the appropriate system prompt based on the teaching mode.
-    
+    Get the appropriate system prompt based on the teaching mode to configure AI behavior.
+
+    This function selects between different AI personalities and response styles based on
+    the teaching mode. It's a critical function that determines how the AI will interact
+    with users throughout the conversation.
+
     Args:
-        teaching_mode: The teaching mode ('teacher' or 'qa')
-        
+        teaching_mode (str): The teaching mode that determines AI behavior. Expected values:
+                           - "teacher": Returns TEACHER_MODE_PROMPT for detailed, educational responses
+                           - "qa": Returns QA_MODE_PROMPT for direct, concise question-answer style
+                           - Any other value: Defaults to QA_MODE_PROMPT for safety
+
     Returns:
-        dict: The system prompt dictionary
+        dict: The system prompt dictionary containing:
+              - "role": Always "system" to indicate this is a system configuration message
+              - "content": The detailed prompt text that defines AI personality and behavior
+              This format matches the expected API message structure for conversation history.
+
+    Example:
+        >>> prompt = get_system_prompt("teacher")
+        >>> print(prompt["role"])
+        system
+        >>> print("educational" in prompt["content"].lower())
+        True
     """
+    # Return the appropriate prompt based on teaching mode
+    # Uses conditional expression for clean, readable code
+    # Defaults to QA_MODE_PROMPT for any unrecognized teaching mode
     return TEACHER_MODE_PROMPT if teaching_mode == "teacher" else QA_MODE_PROMPT

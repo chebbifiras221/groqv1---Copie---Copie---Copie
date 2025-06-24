@@ -126,22 +126,44 @@ Be strict: only respond "YES" for clearly technical/programming topics."""
 
 def build_context_validation_prompt(current_question: str, conversation_history: List[dict]) -> List[dict]:
     """
-    Build a prompt for AI to analyze conversation context.
+    Build a structured prompt for AI to analyze conversation context and determine topic relevance.
+
+    This function creates a comprehensive prompt that includes conversation history and specific
+    instructions for the AI to determine if a follow-up question is contextually related to
+    an ongoing computer science discussion.
 
     Args:
-        current_question: The latest user question
-        conversation_history: List of recent messages with 'type' and 'content'
+        current_question (str): The latest user question that needs validation. This is the question
+                              being evaluated for relevance to the ongoing conversation context.
+        conversation_history (List[dict]): List of recent conversation messages providing context.
+                                          Each dict should contain 'type' ('user' or 'ai') and
+                                          'content' fields. Used to understand conversation flow.
 
     Returns:
-        List of messages for API call
+        List[dict]: A list of message dictionaries formatted for API consumption, containing:
+                   - System message with validation instructions and examples
+                   - User message with formatted conversation history and current question
+                   This format matches the expected API message structure.
+
+    Example:
+        >>> history = [{"type": "user", "content": "What is Python?"}, {"type": "ai", "content": "Python is..."}]
+        >>> prompt = build_context_validation_prompt("Tell me more", history)
+        >>> len(prompt)  # System + user message
+        2
     """
     # Format recent conversation (last 4 messages for context)
-    conversation_text = ""
+    # Limit to 4 messages to provide sufficient context without overwhelming the AI
+    conversation_text = ""  # Initialize string to build formatted conversation
+    # Get the last 4 messages or all messages if fewer than 4 exist
     recent_messages = conversation_history[-4:] if len(conversation_history) > 4 else conversation_history
 
+    # Format each message with role and content for the AI to analyze
     for i, msg in enumerate(recent_messages, 1):
+        # Convert message type to readable role name
         role = "User" if msg.get('type') == 'user' else "Assistant"
-        content = msg.get('content', '')[:200]  # Limit message length
+        # Limit message content to 200 characters to prevent prompt bloat
+        content = msg.get('content', '')[:200]  # Limit message length for API efficiency
+        # Add formatted message to conversation text with numbering
         conversation_text += f"{i}. {role}: {content}\n"
 
     prompt = [
@@ -204,60 +226,89 @@ Is the current question contextually related to the computer science/programming
 
 def api_context_validation(current_question: str, conversation_history: List[dict]) -> Tuple[bool, str]:
     """
-    Use AI API to validate if question is contextually related to CS discussion.
+    Use AI API to validate if a question is contextually related to an ongoing CS discussion.
+
+    This function performs context-aware validation by sending the conversation history and
+    current question to the AI API for analysis. It determines if a follow-up question is
+    naturally related to the ongoing computer science discussion.
 
     Args:
-        current_question: The latest user question
-        conversation_history: List of recent conversation messages
+        current_question (str): The latest user question that needs validation in context.
+                              This is analyzed against the conversation history to determine relevance.
+        conversation_history (List[dict]): List of recent conversation messages providing context.
+                                          Each dict should contain 'type' and 'content' fields.
+                                          Used to understand the conversation flow and topic.
 
     Returns:
-        Tuple of (is_cs_related, reason)
+        Tuple[bool, str]: A tuple containing:
+            - is_cs_related (bool): True if the question is contextually related to the CS discussion,
+                                   False if it appears to be off-topic or unrelated
+            - reason (str): A descriptive string explaining the validation decision with context details
+
+    Example:
+        >>> history = [{"type": "user", "content": "What is Python?"}, {"type": "ai", "content": "Python is..."}]
+        >>> is_valid, reason = api_context_validation("Tell me more about it", history)
+        >>> print(f"Valid: {is_valid}, Reason: {reason}")
     """
+    # Check if API key is available for making validation requests
     if not config.GROQ_API_KEY:
         logger.warning("No API key available for context validation")
+        # Default to allowing questions when API is unavailable to avoid blocking users
         return True, "API unavailable - allowing question"
 
     try:
-        # Build context validation prompt
+        # Build context validation prompt with conversation history and current question
+        # This creates a structured prompt for the AI to analyze conversation flow
         prompt = build_context_validation_prompt(current_question, conversation_history)
 
-        # Make API request
+        # Make API request with authentication headers
         headers = {
-            "Authorization": f"Bearer {config.GROQ_API_KEY}",
-            "Content-Type": "application/json"
+            "Authorization": f"Bearer {config.GROQ_API_KEY}",  # API authentication token
+            "Content-Type": "application/json"                 # Request content type
         }
 
+        # Configure request data for fast, consistent context validation
         data = {
-            "model": "llama-3.1-8b-instant",  # Fast model for validation
-            "messages": prompt,
-            "max_tokens": 5,      # Very short response
-            "temperature": 0.1    # Consistent responses
+            "model": "llama-3.1-8b-instant",  # Fast model for validation to minimize latency
+            "messages": prompt,               # The context validation prompt with conversation history
+            "max_tokens": 5,                 # Very short response (just YES/NO needed)
+            "temperature": 0.1               # Low temperature for consistent, deterministic responses
         }
 
+        # Make the API request with a short timeout for responsiveness
         response = requests.post(
-            config.GROQ_API_URL,
-            headers=headers,
-            json=data,
-            timeout=10  # Short timeout for validation
+            config.GROQ_API_URL,  # Groq API endpoint for chat completions
+            headers=headers,      # Authentication and content type headers
+            json=data,           # Request payload with model and validation prompt
+            timeout=10           # Short timeout for validation (10 seconds)
         )
 
+        # Process successful API responses
         if response.status_code == 200:
+            # Parse the JSON response from the API
             result = response.json()
+            # Extract the AI's response and normalize to uppercase for comparison
             ai_response = result["choices"][0]["message"]["content"].strip().upper()
 
+            # Check for positive validation (contextually related)
             if "YES" in ai_response:
                 return True, "AI confirmed: Contextually related to CS discussion"
+            # Check for negative validation (not contextually related)
             elif "NO" in ai_response:
                 return False, "AI confirmed: Not related to CS discussion"
             else:
+                # Handle unexpected responses by defaulting to allow
                 logger.warning(f"Unexpected context API response: {ai_response}")
                 return True, "API response unclear - allowing question"
         else:
+            # Handle API errors by defaulting to allow questions
             logger.warning(f"Context API validation failed: {response.status_code}")
             return True, "API error - allowing question"
 
     except Exception as e:
+        # Handle any exceptions during API communication
         logger.error(f"Error in context API validation: {e}")
+        # Default to allowing questions when validation fails to avoid blocking users
         return True, "API error - allowing question"
 
 def validate_question_topic(text: str, conversation_history: List[dict] = None) -> Tuple[bool, str]:
