@@ -1,9 +1,3 @@
-"""
-Authentication database module for user management.
-This module provides functions for user registration, login, and token management
-using the same SQLite database as the conversations.
-"""
-
 import uuid
 import logging
 import hashlib
@@ -28,7 +22,6 @@ JWT_ALGORITHM = "HS256"
 JWT_EXPIRATION = 24  # hours
 
 # Secret key for JWT token generation - should be stored in environment variables in production
-# We'll store it in a file to persist between server restarts
 JWT_SECRET_FILE = os.path.join(os.path.dirname(__file__), "jwt_secret.key")
 
 # Load or generate JWT secret
@@ -117,16 +110,6 @@ def verify_password(stored_password: str, provided_password: str) -> bool:
 def register_user(username: str, password: str) -> Tuple[bool, str, Optional[Dict[str, Any]]]:
     """
     Register a new user.
-
-    Args:
-        username: Username for the new user
-        password: Password for the new user
-
-    Returns:
-        Tuple containing:
-        - Success flag (True/False)
-        - Message (success or error message)
-        - User data if successful, None otherwise
     """
     try:
         # Check if username already exists
@@ -167,15 +150,6 @@ def login_user(username: str, password: str) -> Tuple[bool, str, Optional[Dict[s
     """
     Authenticate a user and generate a JWT token.
 
-    Args:
-        username: Username to authenticate
-        password: Password to verify
-
-    Returns:
-        Tuple containing:
-        - Success flag (True/False)
-        - Token or error message
-        - User data if successful, None otherwise
     """
     try:
         # Get user by username
@@ -223,14 +197,6 @@ def login_user(username: str, password: str) -> Tuple[bool, str, Optional[Dict[s
 def verify_token(token: str) -> Tuple[bool, Optional[Dict[str, Any]]]:
     """
     Verify a JWT token and return the user data if valid.
-
-    Args:
-        token: JWT token to verify
-
-    Returns:
-        Tuple containing:
-        - Success flag (True/False)
-        - User data if successful, None otherwise
     """
     try:
         # Decode and verify the token
@@ -262,12 +228,6 @@ def verify_token(token: str) -> Tuple[bool, Optional[Dict[str, Any]]]:
 def logout_user(token: str) -> bool:
     """
     Invalidate a user's token by removing it from the database.
-
-    Args:
-        token: JWT token to invalidate
-
-    Returns:
-        True if successful, False otherwise
     """
     try:
         # Remove token from database

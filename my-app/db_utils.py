@@ -1,8 +1,3 @@
-"""
-Database utility functions for managing SQLite connections and common operations.
-This module provides database connection management and utility functions for database operations.
-"""
-
 import os
 import sqlite3
 import logging
@@ -46,16 +41,6 @@ def execute_query(query: str, params: Tuple = (), fetch_all: bool = False,
                   fetch_one: bool = False, commit: bool = False) -> Optional[Union[List[Dict[str, Any]], Dict[str, Any]]]:
     """
     Execute a SQL query with error handling and connection management.
-
-    Args:
-        query: SQL query to execute
-        params: Parameters for the query
-        fetch_all: Whether to fetch all results
-        fetch_one: Whether to fetch one result
-        commit: Whether to commit the transaction
-
-    Returns:
-        Query results if fetch_all or fetch_one is True, None otherwise
     """
     conn = get_db_connection()
     try:
@@ -84,14 +69,6 @@ def execute_query(query: str, params: Tuple = (), fetch_all: bool = False,
 def execute_transaction(queries: List[Dict[str, Any]]) -> bool:
     """
     Execute multiple queries in a single transaction.
-
-    Args:
-        queries: List of dictionaries with keys:
-            - query: SQL query string
-            - params: Parameters for the query (optional)
-
-    Returns:
-        True if transaction was successful, False otherwise
     """
     conn = get_db_connection()
     try:
@@ -120,9 +97,6 @@ def get_record_by_id(table: str, record_id: str, fields: List[str] = None) -> Op
         table: Table name
         record_id: Record ID
         fields: List of fields to retrieve (None for all fields)
-
-    Returns:
-        Record as a dictionary if found, None otherwise
     """
     field_list = "*" if not fields else ", ".join(fields)
     query = f"SELECT {field_list} FROM {table} WHERE id = ?"
@@ -131,7 +105,7 @@ def get_record_by_id(table: str, record_id: str, fields: List[str] = None) -> Op
 def checkpoint_database():
     """
     Force a checkpoint of the database to ensure all changes are written to disk.
-    This is especially important for WAL mode.
+    This is important for WAL mode.
     """
     conn = get_db_connection()
     try:
@@ -146,9 +120,6 @@ def close_all_connections():
     """
     Close all database connections.
     This should be called during application shutdown.
-
-    Note: With the current architecture, connections are closed immediately after use,
-    so this function primarily serves as a cleanup verification step.
     """
     # Verify no connections are left open by attempting a checkpoint
     try:
@@ -163,7 +134,6 @@ def close_all_connections():
 def ensure_db_file_exists():
     """
     Check if the database file exists and create it if it doesn't.
-    This should be called during application startup.
     """
     db_dir = os.path.dirname(DB_FILE)
 

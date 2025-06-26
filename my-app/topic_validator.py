@@ -1,9 +1,3 @@
-"""
-Topic Validator Module
-This module validates if user questions are related to computer science, programming, or coding.
-Uses API-based validation with conversation context support.
-"""
-
 import logging
 import requests
 from typing import Tuple, List
@@ -127,29 +121,6 @@ Be strict: only respond "YES" for clearly technical/programming topics."""
 def build_context_validation_prompt(current_question: str, conversation_history: List[dict]) -> List[dict]:
     """
     Build a structured prompt for AI to analyze conversation context and determine topic relevance.
-
-    This function creates a comprehensive prompt that includes conversation history and specific
-    instructions for the AI to determine if a follow-up question is contextually related to
-    an ongoing computer science discussion.
-
-    Args:
-        current_question (str): The latest user question that needs validation. This is the question
-                              being evaluated for relevance to the ongoing conversation context.
-        conversation_history (List[dict]): List of recent conversation messages providing context.
-                                          Each dict should contain 'type' ('user' or 'ai') and
-                                          'content' fields. Used to understand conversation flow.
-
-    Returns:
-        List[dict]: A list of message dictionaries formatted for API consumption, containing:
-                   - System message with validation instructions and examples
-                   - User message with formatted conversation history and current question
-                   This format matches the expected API message structure.
-
-    Example:
-        >>> history = [{"type": "user", "content": "What is Python?"}, {"type": "ai", "content": "Python is..."}]
-        >>> prompt = build_context_validation_prompt("Tell me more", history)
-        >>> len(prompt)  # System + user message
-        2
     """
     # Format recent conversation (last 4 messages for context)
     # Limit to 4 messages to provide sufficient context without overwhelming the AI
@@ -227,28 +198,6 @@ Is the current question contextually related to the computer science/programming
 def api_context_validation(current_question: str, conversation_history: List[dict]) -> Tuple[bool, str]:
     """
     Use AI API to validate if a question is contextually related to an ongoing CS discussion.
-
-    This function performs context-aware validation by sending the conversation history and
-    current question to the AI API for analysis. It determines if a follow-up question is
-    naturally related to the ongoing computer science discussion.
-
-    Args:
-        current_question (str): The latest user question that needs validation in context.
-                              This is analyzed against the conversation history to determine relevance.
-        conversation_history (List[dict]): List of recent conversation messages providing context.
-                                          Each dict should contain 'type' and 'content' fields.
-                                          Used to understand the conversation flow and topic.
-
-    Returns:
-        Tuple[bool, str]: A tuple containing:
-            - is_cs_related (bool): True if the question is contextually related to the CS discussion,
-                                   False if it appears to be off-topic or unrelated
-            - reason (str): A descriptive string explaining the validation decision with context details
-
-    Example:
-        >>> history = [{"type": "user", "content": "What is Python?"}, {"type": "ai", "content": "Python is..."}]
-        >>> is_valid, reason = api_context_validation("Tell me more about it", history)
-        >>> print(f"Valid: {is_valid}, Reason: {reason}")
     """
     # Check if API key is available for making validation requests
     if not config.GROQ_API_KEY:
@@ -258,7 +207,6 @@ def api_context_validation(current_question: str, conversation_history: List[dic
 
     try:
         # Build context validation prompt with conversation history and current question
-        # This creates a structured prompt for the AI to analyze conversation flow
         prompt = build_context_validation_prompt(current_question, conversation_history)
 
         # Make API request with authentication headers
@@ -314,38 +262,6 @@ def api_context_validation(current_question: str, conversation_history: List[dic
 def validate_question_topic(text: str, conversation_history: List[dict] = None) -> Tuple[bool, str]:
     """
     Main validation function that determines if a user's question is appropriate for the AI assistant.
-
-    This function implements a two-tier validation system: first checking conversation context
-    if available (to allow follow-up questions in ongoing CS discussions), then falling back
-    to single-question validation for standalone questions. It's designed to be permissive
-    for legitimate CS discussions while filtering out unrelated topics.
-
-    Args:
-        text (str): The user's question text to validate. Should be a complete question or
-                   statement. Very short text (less than 3 characters) is automatically rejected.
-                   The function handles various question formats and lengths.
-        conversation_history (List[dict], optional): List of recent conversation messages for
-                                                   context validation. Each dict should contain
-                                                   'type' and 'content' fields. If provided and
-                                                   contains at least 2 messages, enables context-aware
-                                                   validation. Defaults to None.
-
-    Returns:
-        Tuple[bool, str]: A tuple containing:
-            - is_allowed (bool): True if the question should be processed by the AI,
-                               False if it should be rejected as off-topic
-            - reason (str): A descriptive string explaining the validation decision,
-                          includes the validation method used and the specific result
-
-    Example:
-        >>> is_valid, reason = validate_question_topic("What is Python?")
-        >>> print(f"Valid: {is_valid}, Reason: {reason}")
-        Valid: True, Reason: API validation: API confirmed: CS/programming related
-
-        >>> history = [{"type": "user", "content": "What is Python?"}, {"type": "ai", "content": "Python is..."}]
-        >>> is_valid, reason = validate_question_topic("Tell me more", history)
-        >>> print(f"Valid: {is_valid}, Reason: {reason}")
-        Valid: True, Reason: Context validation: AI confirmed: Contextually related to CS discussion
     """
     # Log the validation attempt with truncated text for debugging
     logger.info(f"Validating question topic: {text[:100]}...")
@@ -355,8 +271,7 @@ def validate_question_topic(text: str, conversation_history: List[dict] = None) 
         logger.info("❌ Question too short")
         return False, "Question too short"
 
-    # Step 1: Check if we have conversation context for context-aware validation
-    # Context validation allows follow-up questions in ongoing CS discussions
+    #  Check if we have conversation context for context-aware validation
     if conversation_history and len(conversation_history) >= 2:
         logger.info("🔍 Using conversation context validation...")
         # Use context-aware validation that considers the ongoing conversation
@@ -371,8 +286,7 @@ def validate_question_topic(text: str, conversation_history: List[dict] = None) 
             logger.info(f"❌ Context validation FAILED: {context_reason}")
             return False, f"Context validation: {context_reason}"
 
-    # Step 2: Fall back to single-question API validation
-    # This is used for standalone questions without conversation context
+    # Fall back to single-question API validation
     logger.info("🔍 Using single-question API validation...")
     api_result, api_reason = api_based_validation(text)
 

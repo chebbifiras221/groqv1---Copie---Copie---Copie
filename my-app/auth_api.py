@@ -1,9 +1,3 @@
-"""
-Authentication API endpoints for handling user registration, login, and token validation.
-This module provides functions that can be called from the main application to handle
-authentication-related requests.
-"""
-
 import json
 import logging
 from typing import Dict, Any, Tuple
@@ -15,14 +9,6 @@ logger = logging.getLogger("auth-api")
 def handle_auth_request(data: bytes) -> Tuple[Dict[str, Any], int]:
     """
     Handle authentication requests from the client.
-
-    Args:
-        data: JSON data from the client
-
-    Returns:
-        Tuple containing:
-        - Response data as a dictionary
-        - HTTP status code
     """
     try:
         # Parse the request data
@@ -58,14 +44,6 @@ def handle_auth_request(data: bytes) -> Tuple[Dict[str, Any], int]:
 def handle_register(request: Dict[str, Any]) -> Tuple[Dict[str, Any], int]:
     """
     Handle user registration requests.
-
-    Args:
-        request: Registration request data
-
-    Returns:
-        Tuple containing:
-        - Response data as a dictionary
-        - HTTP status code
     """
     username = request.get('username')
     password = request.get('password')
@@ -102,14 +80,6 @@ def handle_register(request: Dict[str, Any]) -> Tuple[Dict[str, Any], int]:
 def handle_login(request: Dict[str, Any]) -> Tuple[Dict[str, Any], int]:
     """
     Handle user login requests.
-
-    Args:
-        request: Login request data
-
-    Returns:
-        Tuple containing:
-        - Response data as a dictionary
-        - HTTP status code
     """
     username = request.get('username')
     password = request.get('password')
@@ -155,14 +125,6 @@ def handle_login(request: Dict[str, Any]) -> Tuple[Dict[str, Any], int]:
 def handle_verify(request: Dict[str, Any]) -> Tuple[Dict[str, Any], int]:
     """
     Handle token verification requests.
-
-    Args:
-        request: Verification request data
-
-    Returns:
-        Tuple containing:
-        - Response data as a dictionary
-        - HTTP status code
     """
     token = request.get('token')
 
@@ -196,14 +158,6 @@ def handle_verify(request: Dict[str, Any]) -> Tuple[Dict[str, Any], int]:
 def handle_logout(request: Dict[str, Any]) -> Tuple[Dict[str, Any], int]:
     """
     Handle user logout requests.
-
-    Args:
-        request: Logout request data
-
-    Returns:
-        Tuple containing:
-        - Response data as a dictionary
-        - HTTP status code
     """
     token = request.get('token')
 

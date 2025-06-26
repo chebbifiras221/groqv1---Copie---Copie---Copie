@@ -24,7 +24,11 @@
   "reg": {
     "id": "user-1750802285203",
     "username": "reg",
-    "password": "15e2b0d3c33891ebb0f1ef609ec419420c20e320ce94c65fbc8c3312448eb225",
-    "token": "token-1750802289413-d8f7nozftpe"
+    "password": "15e2b0d3c33891ebb0f1ef609ec419420c20e320ce94c65fbc8c3312448eb225"
+  },
+  "moomen": {
+    "id": "user-1750842089361",
+    "username": "moomen",
+    "password": "15e2b0d3c33891ebb0f1ef609ec419420c20e320ce94c65fbc8c3312448eb225"
   }
 }

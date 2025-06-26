@@ -1,6 +1,5 @@
 """
 Message handlers for processing different types of client messages.
-This module contains handlers for various message types to improve code organization.
 """
 
 import json
@@ -14,19 +13,11 @@ logger = logging.getLogger("message-handlers")
 async def handle_clear_conversations(message, ctx, current_conversation_id, safe_publish_data):
     """
     Handle clearing all conversations for a specific teaching mode and user.
-
-    This function deletes all conversations that match the specified teaching mode for a user,
-    creates a new empty conversation to replace them, and updates the client with the results.
-    It's used when users want to start fresh with a clean conversation history.
-
     Args:
         message (dict): Client message containing 'teaching_mode' and 'user_id' fields
         ctx (JobContext): LiveKit job context for room communication
         current_conversation_id (str): The currently active conversation ID (may be deleted)
         safe_publish_data (callable): Function for reliable data transmission to client
-
-    Returns:
-        str: The ID of the newly created conversation that replaces the cleared ones
     """
     # Extract teaching mode from message, defaulting to configured default
     teaching_mode = message.get('teaching_mode', config.DEFAULT_TEACHING_MODE)
@@ -76,18 +67,6 @@ async def handle_clear_conversations(message, ctx, current_conversation_id, safe
 async def handle_rename_conversation(message, ctx, safe_publish_data):
     """
     Handle renaming a conversation with a new user-provided title.
-
-    This function updates the title of an existing conversation in the database and
-    notifies the client of the successful rename operation. It also refreshes the
-    conversation list to ensure the UI shows the updated title immediately.
-
-    Args:
-        message (dict): Client message containing 'conversation_id', 'title', and 'user_id' fields
-        ctx (JobContext): LiveKit job context for room communication
-        safe_publish_data (callable): Function for reliable data transmission to client
-
-    Returns:
-        None: This function doesn't return a value, it only sends responses to the client
     """
     # Extract the conversation ID to be renamed
     conversation_id = message.get('conversation_id')
@@ -113,7 +92,6 @@ async def handle_rename_conversation(message, ctx, safe_publish_data):
             await safe_publish_data(ctx.room.local_participant, json.dumps(response_message).encode())
 
             # Send updated conversation list immediately after rename
-            # This ensures the client UI shows the new title right away
             try:
                 # Retrieve the updated conversation list for this user
                 conversations = database.list_conversations(limit=config.CONVERSATION_LIST_LIMIT, user_id=user_id)
@@ -131,20 +109,6 @@ async def handle_rename_conversation(message, ctx, safe_publish_data):
 async def handle_delete_conversation(message, ctx, current_conversation_id, safe_publish_data):
     """
     Handle deleting a specific conversation and managing the current conversation state.
-
-    This function deletes a conversation from the database and handles the special case
-    where the deleted conversation is the currently active one. In that case, it creates
-    a new conversation to maintain application state and user experience.
-
-    Args:
-        message (dict): Client message containing 'conversation_id' and 'user_id' fields
-        ctx (JobContext): LiveKit job context for room communication
-        current_conversation_id (str): The currently active conversation ID
-        safe_publish_data (callable): Function for reliable data transmission to client
-
-    Returns:
-        str or None: The ID of a newly created conversation if the current conversation was deleted,
-                    None if no new conversation was created
     """
     # Extract the conversation ID to be deleted
     conversation_id = message.get('conversation_id')
@@ -161,7 +125,6 @@ async def handle_delete_conversation(message, ctx, current_conversation_id, safe
         # Check if the deletion was successful
         if success:
             # If we deleted the current conversation, create a new one
-            # This prevents the application from being in a state with no active conversation
             if current_conversation_id == conversation_id:
                 # Create a new conversation with default settings to replace the deleted one
                 new_conversation_id = database.create_conversation(
@@ -182,7 +145,6 @@ async def handle_delete_conversation(message, ctx, current_conversation_id, safe
             await safe_publish_data(ctx.room.local_participant, json.dumps(response_message).encode())
 
             # Send updated conversation list immediately after deletion
-            # This ensures the client UI reflects the current state without the deleted conversation
             try:
                 # Retrieve the updated conversation list for this user
                 conversations = database.list_conversations(limit=config.CONVERSATION_LIST_LIMIT, user_id=user_id)
@@ -203,18 +165,6 @@ async def handle_delete_conversation(message, ctx, current_conversation_id, safe
 async def handle_list_conversations(message, ctx, safe_publish_data):
     """
     Handle listing conversations for a specific user with proper data isolation.
-
-    This function retrieves and sends the list of conversations belonging to a user.
-    It supports both authenticated users (with user_id) and legacy mode for backward
-    compatibility with older clients that don't provide user identification.
-
-    Args:
-        message (dict): Client message containing optional 'user_id' field
-        ctx (JobContext): LiveKit job context for room communication
-        safe_publish_data (callable): Function for reliable data transmission to client
-
-    Returns:
-        None: This function doesn't return a value, it only sends responses to the client
     """
     # Extract user ID for conversation filtering and data isolation
     user_id = message.get('user_id')
@@ -224,7 +174,7 @@ async def handle_list_conversations(message, ctx, safe_publish_data):
         logger.warning("List conversations request without user_id - using legacy mode")
 
     # Retrieve conversations from database with user filtering
-    # If user_id is None, this will return conversations without user association (legacy mode)
+    # If user_id is None, this will return conversations without user association 
     conversations = database.list_conversations(limit=config.CONVERSATION_LIST_LIMIT, user_id=user_id)
 
     # Create response message with the conversation list
@@ -238,18 +188,6 @@ async def handle_list_conversations(message, ctx, safe_publish_data):
 async def handle_auth_request(message, ctx, safe_publish_data):
     """
     Handle authentication requests including register, login, verify, and logout operations.
-
-    This function processes authentication requests by delegating to the auth_api module
-    and handles the special case of successful login by automatically sending the user's
-    conversation list to initialize their session.
-
-    Args:
-        message (dict): Client message containing 'data' field with authentication details
-        ctx (JobContext): LiveKit job context for room communication
-        safe_publish_data (callable): Function for reliable data transmission to client
-
-    Returns:
-        dict: The authentication response data for use by calling functions
     """
     # Extract authentication data from the message
     auth_data = message.get('data', {})
@@ -269,7 +207,6 @@ async def handle_auth_request(message, ctx, safe_publish_data):
     await safe_publish_data(ctx.room.local_participant, json.dumps(response_message).encode())
 
     # If this was a successful login, send the conversation list to initialize the session
-    # Check multiple conditions: login type, success status, and valid user ID
     if (auth_data.get('type') == 'login' and response_data.get('success') and
         response_data.get('user', {}).get('id')):
         # Extract the user ID from the successful login response
@@ -294,19 +231,6 @@ async def handle_auth_request(message, ctx, safe_publish_data):
 async def handle_get_conversation(message, ctx, safe_publish_data):
     """
     Handle retrieving and sending a specific conversation to the client.
-
-    This function fetches a conversation by ID with proper access control to ensure
-    users can only access their own conversations. It sends either the conversation
-    data or an appropriate error message to the client.
-
-    Args:
-        message (dict): Client message containing 'conversation_id' and 'user_id' fields
-        ctx (JobContext): LiveKit job context for room communication
-        safe_publish_data (callable): Function for reliable data transmission to client
-
-    Returns:
-        str or None: The conversation ID if successfully retrieved and sent,
-                    None if the conversation was not found or not accessible
     """
     # Extract the conversation ID to retrieve
     conversation_id = message.get('conversation_id')
@@ -315,8 +239,7 @@ async def handle_get_conversation(message, ctx, safe_publish_data):
 
     # Validate that we have a conversation ID to look up
     if conversation_id:
-        # Get the conversation with user_id check for data isolation
-        # This ensures users can only access conversations they own
+        # Get the conversation with user_id check for data isolation. can only access conversations they own
         conversation = database.get_conversation(conversation_id, user_id)
 
         # Check if the conversation was found and is accessible
@@ -332,7 +255,6 @@ async def handle_get_conversation(message, ctx, safe_publish_data):
             return conversation_id
         else:
             # Send error response if conversation not found or not accessible
-            # This handles both non-existent conversations and access control violations
             error_message = {
                 "type": "error",                           # Message type for client error handling
                 "error": "conversation_not_found",        # Error code for client logic
@@ -347,19 +269,6 @@ async def handle_get_conversation(message, ctx, safe_publish_data):
 async def handle_new_conversation(message, ctx, safe_publish_data, find_or_create_empty_conversation):
     """
     Handle creating a new conversation with specified teaching mode and user association.
-
-    This function creates or finds an empty conversation for the user with the specified
-    teaching mode, then notifies the client and updates the conversation list to reflect
-    the new conversation state.
-
-    Args:
-        message (dict): Client message containing 'teaching_mode' and 'user_id' fields
-        ctx (JobContext): LiveKit job context for room communication
-        safe_publish_data (callable): Function for reliable data transmission to client
-        find_or_create_empty_conversation (callable): Function to find or create conversations
-
-    Returns:
-        str: The ID of the conversation that was created or found
     """
     # Extract teaching mode from message, defaulting to configured default
     teaching_mode = message.get('teaching_mode', config.DEFAULT_TEACHING_MODE)
@@ -367,11 +276,9 @@ async def handle_new_conversation(message, ctx, safe_publish_data, find_or_creat
     user_id = message.get('user_id')
 
     # Find or create an empty conversation using the conversation management function
-    # This implements the conversation reuse logic to avoid creating unnecessary empty conversations
     conversation_id = find_or_create_empty_conversation(teaching_mode, user_id=user_id)
 
     # Send the new conversation created response first
-    # This confirms to the client that the conversation is ready for use
     response_message = {
         "type": "new_conversation_created",  # Message type for client new conversation handling
         "conversation_id": conversation_id,  # ID of the conversation that was created/found
@@ -381,8 +288,7 @@ async def handle_new_conversation(message, ctx, safe_publish_data, find_or_creat
     # Send the new conversation confirmation to the client
     await safe_publish_data(ctx.room.local_participant, json.dumps(response_message).encode())
 
-    # Then send the updated conversation list to refresh the client UI
-    # This ensures the conversation appears in the sidebar immediately
+    #  send the updated conversation list to refresh the client UI
     try:
         # Retrieve the updated conversation list for this user
         conversations = database.list_conversations(limit=config.CONVERSATION_LIST_LIMIT, user_id=user_id)

@@ -1,7 +1,5 @@
 """
-Graceful shutdown handling for the application.
-This module provides functions to handle termination signals and ensure
-database connections are properly closed before the application exits.
+Graceful shutdown handling for the application
 """
 
 import logging
@@ -20,9 +18,6 @@ shutdown_handlers: List[Callable] = []
 def register_shutdown_handler(handler: Callable) -> None:
     """
     Register a function to be called during shutdown.
-
-    Args:
-        handler: Function to call during shutdown
     """
     if handler not in shutdown_handlers:
         shutdown_handlers.append(handler)
@@ -31,10 +26,6 @@ def register_shutdown_handler(handler: Callable) -> None:
 def signal_handler(sig: int, _=None) -> None:
     """
     Handle termination signals by gracefully shutting down the application.
-
-    Args:
-        sig: Signal number
-        _: Unused parameter (frame in signal handlers)
     """
     global shutdown_in_progress
 
@@ -70,7 +61,6 @@ def setup_signal_handlers() -> None:
 def close_db_connections() -> None:
     """
     Close all database connections.
-    This function should be registered as a shutdown handler.
     """
     from db_utils import close_all_connections
 

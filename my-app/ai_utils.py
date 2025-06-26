@@ -1,7 +1,3 @@
-"""
-AI utility functions for response processing and conversation management.
-This module contains utilities for AI response generation and processing.
-"""
 
 import logging
 import time
@@ -19,21 +15,6 @@ def validate_teaching_mode(teaching_mode: str) -> str:
     """
     Validate and normalize a teaching mode string to ensure it's a supported value.
 
-    This function acts as a safety mechanism to prevent invalid teaching modes from
-    being used throughout the application. It checks against the configured list
-    of valid teaching modes and provides a safe fallback for invalid inputs.
-
-    Args:
-        teaching_mode (str): The teaching mode string to validate. Expected values are
-                           'teacher' for structured teaching mode or 'qa' for question-answer
-                           mode. Case-sensitive validation is performed. None, empty strings,
-                           or any other values are considered invalid.
-
-    Returns:
-        str: A valid teaching mode string. Returns the input teaching_mode if it's valid,
-             otherwise returns the default teaching mode from configuration (typically 'teacher').
-             The returned value is guaranteed to be in config.TEACHING_MODES.
-
     """
     # Check if the provided teaching mode is in the list of valid modes
     if teaching_mode in config.TEACHING_MODES:
@@ -44,28 +25,7 @@ def validate_teaching_mode(teaching_mode: str) -> str:
 
 def extract_conversation_context(conversation_id) -> Tuple[str, str, bool]:
     """
-    Extract and validate conversation context from a flexible conversation_id parameter.
-
-    This function handles both simple string conversation IDs and complex context dictionaries
-    that contain additional metadata. It provides a unified interface for conversation context
-    extraction throughout the application while ensuring all values are properly validated.
-
-    Args:
-        conversation_id (str or dict): Either a simple conversation ID string or a dictionary
-                                     containing conversation context. If a dictionary, it may contain:
-                                     - 'conversation_id': The actual conversation UUID string
-                                     - 'teaching_mode': The teaching mode ('teacher' or 'qa')
-                                     - 'is_hidden': Boolean indicating if this is a hidden instruction
-                                     If a string, it's treated as the conversation ID with default context.
-
-    Returns:
-        Tuple[str, str, bool]: A tuple containing:
-            - actual_conversation_id (str): The extracted conversation ID, or the original value
-                                           if it was already a string
-            - teaching_mode (str): The validated teaching mode ('teacher' or 'qa'), defaults
-                                 to config.DEFAULT_TEACHING_MODE if not specified or invalid
-            - is_hidden (bool): Whether this is a hidden instruction that shouldn't appear
-                              in conversation history, defaults to False
+    Extract and validate conversation context from a conversation_id parameter.
     """
     # Default values for all context parameters
     actual_conversation_id = conversation_id  # Use the input as-is initially
@@ -78,7 +38,7 @@ def extract_conversation_context(conversation_id) -> Tuple[str, str, bool]:
         teaching_mode = conversation_id.get("teaching_mode", teaching_mode)
         # Extract actual conversation ID from dictionary, using original if not present
         actual_conversation_id = conversation_id.get("conversation_id", actual_conversation_id)
-        # Extract hidden flag from dictionary, using default if not present
+        # Extract hidden boolean from dictionary, using default if not present
         is_hidden = conversation_id.get("is_hidden", is_hidden)
 
     # Validate teaching mode to ensure it's a supported value
@@ -89,27 +49,7 @@ def extract_conversation_context(conversation_id) -> Tuple[str, str, bool]:
 
 def prepare_conversation_history(messages: List[Dict[str, Any]], teaching_mode: str) -> List[Dict[str, Any]]:
     """
-    Prepare and format conversation history for AI model consumption with proper system prompts.
-
-    This function transforms database message objects into the format expected by the Groq API,
-    adds the appropriate system prompt based on teaching mode, and manages conversation length
-    to stay within token limits while preserving the most recent and relevant context.
-
-    Args:
-        messages (List[Dict[str, Any]]): List of message dictionaries from the database. Each
-                                       message should contain 'type' ('user' or 'ai') and 'content'
-                                       fields. Messages are expected to be in chronological order.
-                                       Empty list is acceptable and will result in system prompt only.
-        teaching_mode (str): The teaching mode that determines which system prompt to use.
-                           Must be 'teacher' for structured teaching or 'qa' for question-answer
-                           mode. Invalid modes will be handled by the get_system_prompt function.
-
-    Returns:
-        List[Dict[str, Any]]: A list of message dictionaries formatted for the Groq API with:
-                             - First message: System prompt with role 'system'
-                             - Subsequent messages: User/assistant messages with role 'user' or 'assistant'
-                             - Limited to MAX_CONVERSATION_HISTORY + 1 messages total (including system prompt)
-                             - Most recent messages are preserved when truncation is needed
+    Prepare and format conversation history for AI model.
 
     """
     # Get the appropriate system prompt based on the teaching mode
@@ -138,35 +78,6 @@ def prepare_conversation_history(messages: List[Dict[str, Any]], teaching_mode: 
 def make_ai_request(model_name: str, conversation_history: List[Dict[str, Any]], temperature: float = None, max_retries: int = None) -> Tuple[bool, str]:
     """
     Make a request to the AI API .
-    Args:
-        model_name (str): The specific AI model to use for the request (e.g., "llama-3.3-70b-versatile").
-                         Must be a valid model name supported by the Groq API. Different models
-                         have different capabilities, speeds, and quality characteristics.
-        conversation_history (List[Dict[str, Any]]): Formatted conversation messages for the API.
-                                                   Each dict contains 'role' and 'content' fields.
-                                                   First message should be system prompt, followed by
-                                                   alternating user/assistant messages.
-        temperature (float, optional): Controls randomness in AI responses (0.0-2.0). Lower values
-                                     produce more deterministic responses, higher values more creative.
-                                     If None, uses the model's configured default temperature.
-        max_retries (int, optional): Maximum retry attempts for this specific model. If None,
-                                   uses config.AI_MODEL_RETRY_COUNT. Higher values increase
-                                   reliability but may delay fallback to other models.
-
-    Returns:
-        Tuple[bool, str]: A tuple containing:
-            - success (bool): True if the API request succeeded and returned valid content,
-                            False if all retry attempts failed or response was invalid
-            - response_or_error (str): On success, contains the AI-generated response text.
-                                     On failure, contains a descriptive error message explaining
-                                     what went wrong (timeout, rate limit, invalid response, etc.)
-
-    Example:
-        >>> success, response = make_ai_request("llama-3.1-8b-instant", history, 0.7, 3)
-        >>> if success:
-        ...     print(f"AI Response: {response}")
-        ... else:
-        ...     print(f"Request failed: {response}")
     """
     # Validate that the Groq API key is configured before making any requests
     if not config.GROQ_API_KEY:
@@ -183,7 +94,6 @@ def make_ai_request(model_name: str, conversation_history: List[Dict[str, Any]],
     }
 
     # Build the request data using the configuration helper function
-    # This includes model name, messages, temperature, and other parameters
     data = config.get_ai_request_data(model_name, conversation_history, temperature)
 
     # Retry loop with exponential backoff for different error types
@@ -309,32 +219,11 @@ def make_ai_request(model_name: str, conversation_history: List[Dict[str, Any]],
 def generate_ai_response_with_models(conversation_history: List[Dict[str, Any]]) -> str:
     """
     Try multiple AI models in sequence to generate a response with comprehensive fallback logic.
-
-    This function implements a robust multi-model approach where if one AI model fails,
-    the system automatically tries the next model in the configured list. This ensures
-    high availability and reliability even when individual models are experiencing issues.
-
-    Args:
-        conversation_history (List[Dict[str, Any]]): Formatted conversation messages ready for API consumption.
-                                                   Should include system prompt as first message followed by
-                                                   alternating user/assistant messages. Each dict contains
-                                                   'role' and 'content' fields as expected by the Groq API.
-
-    Returns:
-        str: Either a successful AI-generated response from one of the models, or a comprehensive
-             error message if all models failed. The error message includes details about what
-             went wrong with each model attempt for debugging purposes.
-
-    Example:
-        >>> history = [{"role": "system", "content": "You are a teacher"}, {"role": "user", "content": "Hello"}]
-        >>> response = generate_ai_response_with_models(history)
-        >>> print(response)  # Either AI response or detailed error message
     """
     # Initialize list to collect error messages from failed model attempts
     model_errors = []
 
     # Try each model in sequence until one works
-    # Models are ordered by preference: best quality first, fastest fallback last
     for i, model_info in enumerate(config.AI_MODELS):
         # Extract model configuration from the model info dictionary
         model_name = model_info["name"]          # The specific model identifier (e.g., "llama-3.3-70b-versatile")
@@ -375,56 +264,14 @@ def generate_ai_response_with_models(conversation_history: List[Dict[str, Any]])
 def should_split_response(response: str) -> bool:
     """
     Check if an AI response should be split based on its length to prevent UI and TTS issues.
-
-    This function determines whether a response is too long for optimal user experience.
-    Very long responses can cause problems with text-to-speech synthesis, UI rendering,
-    and user attention span. Currently used for monitoring and logging purposes.
-
-    Args:
-        response (str): The AI-generated response text to evaluate. Can be any length string
-                       including empty strings. The function checks the character count
-                       against the configured maximum message length.
-
-    Returns:
-        bool: True if the response exceeds the maximum configured message length and should
-              potentially be split into smaller parts. False if the response is within
-              acceptable length limits for optimal user experience.
-
-    Example:
-        >>> long_response = "A" * 60000  # Very long response
-        >>> should_split_response(long_response)
-        True
-        >>> short_response = "Hello, how can I help?"
-        >>> should_split_response(short_response)
-        False
     """
     # Compare response length against configured maximum message length
-    # Returns True if response exceeds the limit, False otherwise
     return len(response) > config.MAX_MESSAGE_LENGTH
 
 
 def get_teaching_mode_from_db(conversation_id: str) -> str:
     """
-    Retrieve the teaching mode for a specific conversation from the database with fallback handling.
-
-    This function looks up the teaching mode associated with a conversation to ensure
-    the AI responds in the appropriate style (teacher vs qa mode). It includes comprehensive
-    error handling and fallback logic to ensure the system always has a valid teaching mode.
-
-    Args:
-        conversation_id (str): The unique identifier (UUID) of the conversation to look up.
-                              Should be a valid conversation ID that exists in the database.
-                              If None, empty, or invalid, the function returns the default mode.
-
-    Returns:
-        str: The teaching mode for the conversation ('teacher' or 'qa'). Always returns a valid
-             teaching mode even if the conversation doesn't exist or has no mode set.
-             Defaults to config.DEFAULT_TEACHING_MODE if any issues occur during lookup.
-
-    Example:
-        >>> mode = get_teaching_mode_from_db("550e8400-e29b-41d4-a716-446655440000")
-        >>> print(f"Teaching mode: {mode}")
-        Teaching mode: teacher
+    Retrieve the teaching mode for a specific conversation from the database .
     """
     # Validate that we have a conversation ID to look up
     if not conversation_id:
@@ -433,11 +280,9 @@ def get_teaching_mode_from_db(conversation_id: str) -> str:
 
     try:
         # Get the conversation from the database using the provided ID
-        # This retrieves the complete conversation record including metadata
         conversation = database.get_conversation(conversation_id)
 
         # If the conversation exists and has a teaching_mode, use it
-        # Check both that conversation exists and has the teaching_mode field
         if conversation and conversation.get("teaching_mode"):
             # Extract the teaching mode from the conversation record
             teaching_mode = conversation["teaching_mode"]
@@ -453,46 +298,4 @@ def get_teaching_mode_from_db(conversation_id: str) -> str:
         logger.error(f"Error getting teaching mode from database: {e}")
 
     # Return default teaching mode for any error condition or missing data
-    return config.DEFAULT_TEACHING_MODE
-
-def should_split_response(response: str) -> bool:
-    """
-    Check if response should be split based on length.
-
-    Args:
-        response: The response to check
-
-    Returns:
-        True if response is too long, False otherwise
-    """
-    return len(response) > config.MAX_MESSAGE_LENGTH
-
-
-def get_teaching_mode_from_db(conversation_id: str) -> str:
-    """
-    Get the teaching mode for a conversation from the database.
-
-    Args:
-        conversation_id: The ID of the conversation
-
-    Returns:
-        The teaching mode ('teacher' or 'qa'), defaults to 'teacher' if not found
-    """
-    if not conversation_id:
-        return config.DEFAULT_TEACHING_MODE
-
-    try:
-        # Get the conversation from the database
-        conversation = database.get_conversation(conversation_id)
-
-        # If the conversation exists and has a teaching_mode, use it
-        if conversation and conversation.get("teaching_mode"):
-            teaching_mode = conversation["teaching_mode"]
-            logger.info(f"Retrieved teaching mode from database: {teaching_mode}")
-            return validate_teaching_mode(teaching_mode)
-        else:
-            logger.warning(f"No teaching mode found for conversation {conversation_id}, using default mode")
-    except Exception as e:
-        logger.error(f"Error getting teaching mode from database: {e}")
-
     return config.DEFAULT_TEACHING_MODE

@@ -1,13 +1,5 @@
-"""
-AI System Prompts Configuration
-This module contains the system prompts used for different teaching modes.
-These prompts are the foundation of the AI's personality and teaching approach,
-defining how it responds to user questions and structures educational content.
-"""
 
 # System prompt for structured teaching mode
-# This prompt creates a comprehensive, educational AI persona that provides detailed explanations
-# and structured learning experiences with step-by-step guidance and extensive use of explanation tags
 TEACHER_MODE_PROMPT = {
     "role": "system",  # Indicates this is a system configuration message for the AI
     "content": """
@@ -112,8 +104,6 @@ TEACHER_MODE_PROMPT = {
 }
 
 # System prompt for Q&A mode
-# This prompt creates a direct, efficient AI persona that provides concise answers
-# with focused explanations, optimized for quick question-answer interactions
 QA_MODE_PROMPT = {
     "role": "system",  # Indicates this is a system configuration message for the AI
     "content": """
@@ -122,7 +112,7 @@ QA_MODE_PROMPT = {
     In Q&A MODE:
     1. Provide precise, authoritative answers with optimal clarity and concision
     2. Deliver methodical, step-by-step explanations for complex problems
-    3. Incorporate relevant examples with proper context (including well-formatted code)
+    3. Incorporate relevant examples with proper context (including well-formatted code when necessary)
     4. Address specific inquiries with focused expertise while providing sufficient context
     5. Maintain a direct Q&A approach rather than creating structured courses
     6. Deliver comprehensive answers that demonstrate depth of knowledge
@@ -171,27 +161,5 @@ QA_MODE_PROMPT = {
 }
 
 def get_system_prompt(teaching_mode: str) -> dict:
-    """
-    Get the appropriate system prompt based on the teaching mode to configure AI behavior.
-
-    This function selects between different AI personalities and response styles based on
-    the teaching mode. It's a critical function that determines how the AI will interact
-    with users throughout the conversation.
-
-    Args:
-        teaching_mode (str): The teaching mode that determines AI behavior. Expected values:
-                           - "teacher": Returns TEACHER_MODE_PROMPT for detailed, educational responses
-                           - "qa": Returns QA_MODE_PROMPT for direct, concise question-answer style
-                           - Any other value: Defaults to QA_MODE_PROMPT for safety
-
-    Returns:
-        dict: The system prompt dictionary containing:
-              - "role": Always "system" to indicate this is a system configuration message
-              - "content": The detailed prompt text that defines AI personality and behavior
-              This format matches the expected API message structure for conversation history.
-
-    """
     # Return the appropriate prompt based on teaching mode
-    # Uses conditional expression for clean, readable code
-    # Defaults to QA_MODE_PROMPT for any unrecognized teaching mode
     return TEACHER_MODE_PROMPT if teaching_mode == "teacher" else QA_MODE_PROMPT

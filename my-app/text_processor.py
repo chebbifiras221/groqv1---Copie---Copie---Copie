@@ -1,6 +1,5 @@
 """
 Text input processing module.
-This module handles text input processing and AI response generation.
 """
 
 import json
@@ -39,11 +38,6 @@ async def handle_text_input(message, ctx, current_conversation_id, safe_publish_
                            synthesize_speech, send_conversation_data):
     """
     Handle text input messages from clients and orchestrate the complete AI response pipeline.
-
-    This function processes user text input, manages conversation creation, validates topics,
-    generates AI responses, and coordinates speech synthesis. It serves as the main entry
-    point for text-based interactions in the application.
-
     Args:
         message (dict): The message dictionary from the client containing:
                        - 'text': The user's input text
@@ -58,25 +52,12 @@ async def handle_text_input(message, ctx, current_conversation_id, safe_publish_
         generate_ai_response (callable): Function to generate AI responses
         synthesize_speech (callable): Async function for text-to-speech synthesis
         send_conversation_data (callable): Async function to send conversation data to clients
-
-    Returns:
-        str: The conversation ID that was used for this interaction. May be the same as
-             the input current_conversation_id or a new one if a conversation was created.
-
-    Raises:
-        Exception: Database and network errors are caught and logged but may be re-raised
-                  depending on the specific operation that failed.
-
-    Example:
-        >>> message = {"text": "What is Python?", "user_id": "user123"}
-        >>> conversation_id = await handle_text_input(message, ctx, None, safe_publish_data, ...)
     """
     # Extract the user's text input from the message
     text_input = message.get('text')
     logger.info(f"Received text input: {text_input}")
 
     # Check if we need to create a new conversation
-    # This happens when the client explicitly requests a new conversation
     if message.get('new_conversation'):
         # Get the teaching mode for the new conversation, defaulting to configured default
         teaching_mode = message.get('teaching_mode', config.DEFAULT_TEACHING_MODE)
@@ -84,11 +65,9 @@ async def handle_text_input(message, ctx, current_conversation_id, safe_publish_
         user_id = message.get('user_id')
 
         # Find an existing empty conversation or create a new one
-        # This implements conversation reuse logic to avoid UI clutter
         current_conversation_id = find_or_create_empty_conversation(teaching_mode, check_current=True, user_id=user_id)
 
         # Get the updated conversation list asynchronously to send to client
-        # This ensures the UI shows the most current conversation list
         try:
             # Run the database query in a thread executor to avoid blocking the event loop
             conversations = await asyncio.get_event_loop().run_in_executor(
@@ -155,7 +134,7 @@ async def handle_text_input(message, ctx, current_conversation_id, safe_publish_
     # Handle topic rejection if the question is not CS/programming related
     if not is_topic_valid:
         # Create a polite but clear rejection message
-        rejection_response = "I'm sorry, but I can only help with computer science, programming, and software development related questions. Please ask me about coding, algorithms, programming languages, software engineering, or other technical topics."
+        rejection_response = "I'm sorry, but I can only help with computer science related questions."
 
         # Create a structured rejection message for the client
         rejection_message = {
@@ -173,6 +152,7 @@ async def handle_text_input(message, ctx, current_conversation_id, safe_publish_
         return current_conversation_id  # Return early since topic was rejected
 
     # Generate AI response using the configured AI models
+
     # Get the teaching mode from the message, defaulting to configured default
     teaching_mode = message.get('teaching_mode', config.DEFAULT_TEACHING_MODE)
     # Create context object with all necessary information for AI response generation
@@ -201,7 +181,6 @@ async def handle_text_input(message, ctx, current_conversation_id, safe_publish_
         await safe_publish_data(ctx.room.local_participant, json.dumps(response_message).encode())
 
         # Send updated conversation list after AI response to ensure immediate history update
-        # This keeps the UI synchronized with the latest conversation state
         try:
             # Get the user ID from the original message for proper conversation filtering
             user_id = message.get('user_id')

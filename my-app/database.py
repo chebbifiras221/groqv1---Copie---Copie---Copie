@@ -129,29 +129,6 @@ def init_db():
 def create_conversation(title: str = "New Conversation", teaching_mode: str = "teacher", user_id: str = None) -> str:
     """
     Create a new conversation record in the database with specified parameters.
-
-    This function generates a new conversation with a unique ID, timestamps, and
-    associates it with a user and teaching mode. It's used when users start new
-    conversations or when the system needs to create replacement conversations.
-
-    Args:
-        title (str, optional): The initial title for the conversation. Defaults to "New Conversation".
-                              This title will typically be updated when the first message is added.
-        teaching_mode (str, optional): The AI teaching mode for this conversation ('teacher' or 'qa').
-                                     Defaults to "teacher". Determines how the AI will respond to messages.
-        user_id (str, optional): The unique identifier of the user who owns this conversation.
-                                Defaults to None for legacy conversations without user association.
-
-    Returns:
-        str: The unique UUID string identifier of the newly created conversation.
-             This ID is used for all subsequent operations on the conversation.
-
-    Raises:
-        Exception: If database insertion fails or any other error occurs during creation.
-
-    Example:
-        >>> conversation_id = create_conversation("My Python Questions", "teacher", "user123")
-        >>> print(f"Created conversation: {conversation_id}")
     """
     try:
         # Generate a unique UUID for the new conversation
@@ -178,13 +155,6 @@ def create_conversation(title: str = "New Conversation", teaching_mode: str = "t
 def get_conversation(conversation_id: str, user_id: str = None) -> Optional[Dict[str, Any]]:
     """
     Get a conversation by ID with optional user_id check for data isolation
-
-    Args:
-        conversation_id: The ID of the conversation to retrieve
-        user_id: Optional user ID to verify ownership (for data isolation)
-
-    Returns:
-        The conversation data if found and accessible, None otherwise
     """
     try:
         # Get the conversation using the utility function
@@ -272,36 +242,9 @@ def list_conversations(limit: int = 10, offset: int = 0, include_messages: bool 
 def add_message(conversation_id: str, message_type: str, content: str) -> str:
     """
     Add a new message to an existing conversation and update the conversation timestamp.
-
-    This function creates a new message record in the database and updates the parent
-    conversation's timestamp to reflect recent activity. It uses a database transaction
-    to ensure both operations succeed or fail together.
-
-    Args:
-        conversation_id (str): The unique identifier of the conversation to add the message to.
-                              Must be a valid UUID of an existing conversation in the database.
-        message_type (str): The type of message being added ('user' for user messages,
-                           'ai' for AI responses). This determines how the message is
-                           displayed and processed in the application.
-        content (str): The actual text content of the message. Can be any length string
-                      including empty strings, though empty messages are generally not useful.
-
-    Returns:
-        str: The unique UUID string identifier of the newly created message.
-             This ID can be used for message-specific operations if needed.
-
-    Raises:
-        ValueError: If the specified conversation_id does not exist in the database.
-        RuntimeError: If the database transaction fails to complete successfully.
-        Exception: For any other database or system errors during message creation.
-
-    Example:
-        >>> message_id = add_message("conv-123", "user", "What is Python?")
-        >>> print(f"Added message: {message_id}")
     """
     try:
         # Check if conversation exists before adding message
-        # This prevents orphaned messages and provides clear error messages
         conversation = execute_query(
             "SELECT id FROM conversations WHERE id = ?",  # Query to check conversation existence
             (conversation_id,),                           # Parameter tuple with conversation ID
@@ -319,7 +262,6 @@ def add_message(conversation_id: str, message_type: str, content: str) -> str:
         now = datetime.now().isoformat()  # ISO format timestamp
 
         # Execute both operations in a transaction to ensure data consistency
-        # If either operation fails, both are rolled back
         queries = [
             {
                 # Insert the new message into the messages table
@@ -348,13 +290,6 @@ def add_message(conversation_id: str, message_type: str, content: str) -> str:
 def delete_conversation(conversation_id: str, user_id: str = None) -> bool:
     """
     Delete a conversation and all its messages with optional user_id check
-
-    Args:
-        conversation_id: The ID of the conversation to delete
-        user_id: Optional user ID to verify ownership (for data isolation)
-
-    Returns:
-        True if the conversation was deleted, False otherwise
     """
     try:
         # Check if the conversation exists and belongs to the user (if user_id provided)
@@ -463,14 +398,6 @@ def generate_conversation_title(conversation_id: str) -> str:
 def reuse_empty_conversation(conversation_id: str, teaching_mode: str = None, limit: int = 20) -> Dict[str, Any]:
     """
     Reuse an empty conversation by updating its timestamp and teaching mode.
-
-    Args:
-        conversation_id: The ID of the empty conversation to reuse
-        teaching_mode: The teaching mode to set for this conversation (if None, keeps existing mode)
-        limit: Maximum number of conversations to return in the list
-
-    Returns:
-        A dictionary with the updated conversation list and the reused conversation ID
     """
     try:
         # Check if conversation exists
@@ -512,13 +439,6 @@ def reuse_empty_conversation(conversation_id: str, teaching_mode: str = None, li
 def clear_conversations_by_mode(teaching_mode: str, user_id: str = None) -> Dict[str, Any]:
     """
     Delete all conversations and their messages for a specific teaching mode.
-
-    Args:
-        teaching_mode: The teaching mode to filter by ('teacher' or 'qa')
-        user_id: The user ID to filter by (for data isolation)
-
-    Returns:
-        Dict with deleted_count and new_conversation_id
     """
     try:
         # First, get the IDs of conversations with the specified teaching mode and user
