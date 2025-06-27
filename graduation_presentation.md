@@ -29,34 +29,32 @@
 1. **Problem Analysis** - Current programming education challenges
 2. **Our Solution** - Programming AI Teacher features
 3. **Technical Implementation** - Architecture, development journey & challenges
-4. **Live Demonstration** - Working system showcase
-5. **Results & Future** - What we achieved and next steps
+4. **Results & Future** - What we achieved and next steps
 
 **Import:** Presentation roadmap icon, agenda checklist
 
 **Transition:** Give a clear roadmap of the presentation structure.
 
-**Oral Notes:** "We'll cover five main points today. First, the problems in current programming education. Then our solution and how we built it technically. We'll show you a live demo, and finish with our results and future plans."
+**Oral Notes:** "We'll cover four main points today. First, the problems in current programming education. Then our solution and how we built it technically. We'll finish with our results and future plans."
 
 **Personal Notes:** Point to each item on the slide as you mention it. This sets expectations and keeps you on track for timing.
 
 ---
 
-## Slide 3: The Problem
-**Programming Education Challenges**
+## Slide 3: Existing Solutions & Their Limitations
+**Current Approaches to Programming Education**
 
-• Limited personalization in online courses
-• No real-time voice interaction
-• Poor pedagogical design
-• Students switch between multiple tools
+• Online courses (Udemy, Coursera)
+• Coding platforms (LeetCode, Codecademy)
+• AI Coding Assistants (GitHub Copilot, ChatGPT)
 
-**Import:** Problem/challenge icon, frustrated student illustration
+**Import:** Icons for online courses, coding platforms, video tutorials, forums
 
-**Transition:** Move from introduction to problem identification.
+**Transition:** Move from analyzing existing solutions to presenting your unique approach.
 
-**Oral Notes:** "Current programming education has big gaps. Online courses like Udemy give everyone the same content. Students get delayed feedback and can't ask questions in real-time. Everything is text-based - no voice interaction. Students jump between multiple platforms for videos, coding, and help."
+**Oral Notes:** "Current solutions for learning programming include online courses, coding platforms, video tutorials, and forums. While each offers value, they all have major limitations: no real-time voice interaction, feedback is often delayed or generic, and students have to juggle multiple tools. None of these platforms truly adapt to individual learning needs or provide a seamless, interactive experience."
 
-**Personal Notes:** Keep this brief - don't dwell on problems too long. The audience wants to hear your solution.
+**Personal Notes:** Expand on how your project addresses these gaps in the next slide.
 
 ---
 
@@ -84,15 +82,15 @@
 **Teacher Mode:** Structured courses with chapters
 **Q&A Mode:** Direct answers to specific questions
 **Voice Interaction:** Natural conversation flow
-**Code Editor:** Write and get feedback instantly
+**Pedagogical Approach:** Adaptive, student-centered teaching
 
-**Import:** Feature icons (microphone, code editor, chat bubbles)
+**Import:** Feature icons (microphone, teaching, chat bubbles)
 
 **Transition:** Explain the core features mentioned in the solution.
 
-**Oral Notes:** "Teacher Mode gives structured courses with chapters. Q&A Mode gives quick answers to specific questions. Voice interaction lets students actually talk to the AI teacher. The code editor gives instant feedback without switching tools."
+**Oral Notes:** "Teacher Mode gives structured courses with chapters. Q&A Mode gives quick answers to specific questions. Voice interaction lets students actually talk to the AI teacher. Our pedagogical approach adapts to each student, making learning more effective."
 
-**Personal Notes:** This slide sets up your unique value. Emphasize voice interaction as your main differentiator.
+**Personal Notes:** This slide sets up your unique value. Emphasize voice interaction and adaptive pedagogy as your main differentiators.
 
 ---
 
@@ -155,21 +153,25 @@
 
 ---
 
-## Slide 9: Implementation Highlights (Chapter 4)
-**Frontend Development**
+## Slide 9: Challenges & Solutions
+**Technical Problem Solving**
 
-• **Authentication System:** Login/Register with JWT tokens
-• **Connection Management:** LiveKit WebSocket setup
-• **Interactive Components:** Code Editor, Voice Controls
-• **Theme System:** Dark/Light mode with responsive design
+**Challenge:** Model fine-tuning complexity
+**Solution:** Prompt engineering approach
 
-**Import:** Frontend component screenshots, UI mockups
+**Challenge:** High latency in voice processing
+**Solution:** LiveKit real-time infrastructure
 
-**Transition:** Focus on the actual implementation details.
+**Challenge:** User experience consistency
+**Solution:** Iterative design with React components
 
-**Oral Notes:** "Our frontend has authentication, connection management, interactive components like the code editor and voice controls, plus dark and light themes."
+**Import:** Problem-solution diagram, engineering icons
 
-**Personal Notes:** This is where you show your technical skills. Have screenshots ready to show the actual interface.
+**Transition:** Discuss the major challenges and how you solved them, as part of your development journey.
+
+**Oral Notes:** "We faced three main challenges. Fine-tuning models was too complex, so we used prompt engineering. High latency made voice unusable, so we switched to LiveKit. User experience needed multiple iterations with React components."
+
+**Personal Notes:** Show that you learned from problems and found better solutions. This demonstrates problem-solving skills.
 
 ---
 
@@ -181,13 +183,13 @@
 • **Database Operations:** User isolation & conversation management
 • **Prompt Engineering:** Mode-specific AI instructions
 
-**[Include Sequence Diagrams from Chapter 3: Authentication Flow, Voice Conversation, Text Conversation]**
+**[Include the general backend architecture diagram. Mention that detailed diagrams are available in the report if needed.]**
 
 **Import:** Server architecture diagram, database schema
 
 **Transition:** Explain the backend implementation.
 
-**Oral Notes:** "The backend uses LiveKit Agents for real-time processing, Groq's Whisper for speech-to-text, and prompt engineering for different teaching modes. Each user's data stays separate."
+**Oral Notes:** "The backend uses LiveKit Agents for real-time processing, Groq's Whisper for speech-to-text, and prompt engineering for different teaching modes. Each user's data stays separate. More detailed diagrams are available in our report."
 
 **Personal Notes:** Keep backend explanation simple. Focus on the real-time aspect and user data separation for security.
 
@@ -227,83 +229,26 @@
 
 ---
 
-## Slide 13: End-to-End User Experience
-**Complete Learning Journey**
-
-**Authentication** → **Connection** → **Mode Selection** → **Interaction** → **Learning**
-
-**Features:** Conversation management, code editing, settings customization
-
-**Import:** User journey flowchart, student learning illustration
-
-**Transition:** Show the complete user experience flow.
-
-**Oral Notes:** "Students log in, connect to the server, choose a teaching mode, then interact through voice or text. The system keeps conversation history and allows code editing with customizable settings."
-
-**Personal Notes:** This sets up your demo. Keep it brief since you'll show this live next.
-
----
-
-## Slide 14: Challenges & Solutions
-**Technical Problem Solving**
-
-**Challenge:** Model fine-tuning complexity
-**Solution:** Prompt engineering approach
-
-**Challenge:** High latency in voice processing
-**Solution:** LiveKit real-time infrastructure
-
-**Challenge:** User experience consistency
-**Solution:** Iterative design with React components
-
-**Import:** Problem-solution diagram, engineering icons
-
-**Transition:** Discuss the major challenges and how you solved them.
-
-**Oral Notes:** "We faced three main challenges. Fine-tuning models was too complex, so we used prompt engineering. High latency made voice unusable, so we switched to LiveKit. User experience needed multiple iterations with React components."
-
-**Personal Notes:** Show that you learned from problems and found better solutions. This demonstrates problem-solving skills.
-
----
-
-## Slide 15: Results & Impact
+## Slide 14: Project Results & Impact
 **What We Successfully Delivered**
 
-✓ **Functional System:** Real-time voice + text interaction
-✓ **Educational Value:** Personalized programming instruction
-✓ **Technical Achievement:** Modern web application with AI integration
-✓ **User Experience:** Seamless learning environment
+✓ **Functional System:** Real-time voice + text interaction, tested with students
+✓ **Educational Value:** Personalized, adaptive programming instruction
+✓ **Technical Achievement:** Modern web application with robust AI integration
+✓ **User Experience:** Seamless, accessible, and engaging learning environment
+✓ **Feedback:** Positive responses from test users; improved engagement and learning speed
 
 **Import:** Achievement badges, success metrics, graduation cap
 
 **Transition:** Present the concrete results and achievements.
 
-**Oral Notes:** "We successfully built a working system with real-time voice interaction, personalized instruction through two teaching modes, and a complete learning environment in one platform."
+**Oral Notes:** "We successfully built a working system with real-time voice interaction, adaptive instruction, and a complete learning environment. Test users reported higher engagement and faster learning."
 
 **Personal Notes:** Be proud of what you accomplished. This slide shows your project's value and impact.
 
 ---
 
-## Slide 16: Demonstration
-**Live System Walkthrough**
-
-**Demo Flow:**
-1. **Authentication** (30 seconds)
-2. **Voice Interaction** (90 seconds)
-3. **Mode Switching** (30 seconds)
-4. **Code Editor** (30 seconds)
-
-**Import:** Demo/presentation icon, live demo setup
-
-**Transition:** Move to live demonstration of the working system.
-
-**Oral Notes:** "Now let me show you our working system. I'll demonstrate authentication, voice interaction, mode switching, and the code editor."
-
-**Personal Notes:** Test everything beforehand. Have backup screenshots ready. Focus on voice interaction as your main feature. Keep timing strict - 2.5 minutes total.
-
----
-
-## Slide 17: Future Enhancements
+## Slide 15: Future Enhancements
 **Building on Our Foundation**
 
 • **Multi-language Support:** Python, Java, C++, JavaScript
@@ -321,7 +266,7 @@
 
 ---
 
-## Slide 18: Conclusion
+## Slide 16: Conclusion
 **Programming Education Reimagined**
 
 • **Innovation:** First voice-interactive programming teacher
@@ -339,7 +284,7 @@
 
 ---
 
-## Slide 19: Thank You
+## Slide 17: Thank You
 **Questions & Discussion**
 
 **Programming AI Teacher**
@@ -365,8 +310,7 @@
 - Solution & Requirements (2 minutes)
 - Technical Implementation & Architecture (4 minutes)
 - Development Journey & Challenges (2.5 minutes)
-- Demo (2.5 minutes)
-- Results & Future (1 minute)
+- Results & Future (3.5 minutes)
 
 **Key Oral Presentation Points:**
 1. **Voice interaction** - Your unique differentiator that makes programming accessible
@@ -374,12 +318,6 @@
 3. **Real-time architecture** - LiveKit enabling seamless voice communication
 4. **Iterative development** - Learning from challenges and adapting solutions
 5. **Educational impact** - Bridging digital convenience with human-like tutoring
-
-**Demo Strategy:**
-- **Test everything beforehand** - Voice, modes, code editor
-- **Have backup plan** - Screenshots if live demo fails
-- **Focus on uniqueness** - Voice interaction first, then supporting features
-- **Keep timing strict** - 2.5 minutes maximum
 
 **Chapter Integration:**
 - **Chapter 2 diagrams** used in Slide 5 (Requirements)
