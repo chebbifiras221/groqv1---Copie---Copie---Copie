@@ -26,22 +26,41 @@
 ## Slide 2: Presentation Overview
 **What We'll Cover Today**
 
-1. **Problem Analysis** - Current programming education challenges
-2. **Our Solution** - Programming AI Teacher features
-3. **Technical Implementation** - Architecture, development journey & challenges
-4. **Results & Future** - What we achieved and next steps
+1. **The Evolution of AI-Enhanced Education** - How AI and pedagogy combine for better learning
+2. **Problem Analysis** - Current solutions and their limitations
+3. **Our Solution** - Programming AI Teacher features
+4. **Technical Implementation** - Architecture, development journey & challenges
+5. **Results & Future** - What we achieved and next steps
 
 **Import:** Presentation roadmap icon, agenda checklist
 
 **Transition:** Give a clear roadmap of the presentation structure.
 
-**Oral Notes:** "We'll cover four main points today. First, the problems in current programming education. Then our solution and how we built it technically. We'll finish with our results and future plans."
+**Oral Notes:** "We'll cover five main points today. First, how AI and educational principles are coming together to transform learning. Then, the limitations of current solutions, our own approach, the technical journey, and finally our results and future plans."
 
 **Personal Notes:** Point to each item on the slide as you mention it. This sets expectations and keeps you on track for timing.
 
 ---
 
-## Slide 3: Existing Solutions & Their Limitations
+## Slide 3: The Evolution of AI-Enhanced Education
+**How AI and Pedagogy Combine for Better Learning**
+
+- **Generative AI**
+- **Large Language Models (LLMs)** 
+- **Educational Methodology** 
+- **AI-Enhanced Teaching** 
+
+**Import:** AI, LLM, and education icons/illustrations
+
+**Transition:** Now that we've seen how AI and pedagogy are evolving, let's look at the current solutions and their limitations.
+
+**Oral Notes:** "Recent advances in AI, especially generative models and large language models, are transforming education. When combined with proven teaching methods, they enable more personalized and effective learning. Our project builds on these trends."
+
+**Personal Notes:** Emphasize the synergy between technology and pedagogy.
+
+---
+
+## Slide 4: Existing Solutions & Their Limitations
 **Current Approaches to Programming Education**
 
 • Online courses (Udemy, Coursera)
@@ -52,13 +71,13 @@
 
 **Transition:** Move from analyzing existing solutions to presenting your unique approach.
 
-**Oral Notes:** "Current solutions for learning programming include online courses, coding platforms, video tutorials, and forums. While each offers value, they all have major limitations: no real-time voice interaction, feedback is often delayed or generic, and students have to juggle multiple tools. None of these platforms truly adapt to individual learning needs or provide a seamless, interactive experience."
+**Oral Notes:** "Current solutions for learning programming include online courses, coding platforms, and forums. While each offers value, they all have major limitations: no real-time voice interaction, feedback is often delayed or generic, and students have to juggle multiple tools. None of these platforms truly adapt to individual learning needs or provide a seamless, interactive experience."
 
 **Personal Notes:** Expand on how your project addresses these gaps in the next slide.
 
 ---
 
-## Slide 4: Our Solution
+## Slide 5: Our Solution
 **Programming AI Teacher**
 
 • Voice + Text interaction
@@ -76,7 +95,7 @@
 
 ---
 
-## Slide 5: Key Features
+## Slide 6: Key Features
 **What Makes It Special**
 
 **Teacher Mode:** Structured courses with chapters
@@ -94,7 +113,7 @@
 
 ---
 
-## Slide 6: Requirements & Use Cases
+## Slide 7: Requirements & Use Cases
 **System Analysis**
 
 • User Authentication & Management
@@ -114,7 +133,7 @@
 
 ---
 
-## Slide 7: System Architecture
+## Slide 8: System Architecture
 **Technical Foundation**
 
 **Frontend:** React + Next.js + TypeScript
@@ -134,7 +153,7 @@
 
 ---
 
-## Slide 8: Development Journey
+## Slide 9: Development Journey
 **From Concept to Reality**
 
 **Phase 1:** Streamlit + Gemini (Basic prototype)
@@ -153,7 +172,7 @@
 
 ---
 
-## Slide 9: Challenges & Solutions
+## Slide 10: OUR Challenges & Solutions
 **Technical Problem Solving**
 
 **Challenge:** Model fine-tuning complexity
@@ -175,7 +194,7 @@
 
 ---
 
-## Slide 10: Backend Architecture (Chapter 4)
+## Slide 11: Backend Architecture (Chapter 4)
 **Server-Side Implementation**
 
 • **LiveKit Agents:** Real-time message processing
@@ -195,7 +214,7 @@
 
 ---
 
-## Slide 11: Voice Interaction System
+## Slide 12: Voice Interaction System
 **Real-Time Communication Flow**
 
 **Process:** Audio Capture → STT → AI Processing → TTS → Playback
@@ -211,7 +230,7 @@
 
 ---
 
-## Slide 12: Teaching Modes Implementation
+## Slide 13: Teaching Modes Implementation
 **Learning Through Prompt Engineering**
 
 **Teacher Mode:** Structured courses, learning objectives, chapter organization
@@ -234,9 +253,8 @@
 
 ✓ **Functional System:** Real-time voice + text interaction, tested with students
 ✓ **Educational Value:** Personalized, adaptive programming instruction
-✓ **Technical Achievement:** Modern web application with robust AI integration
 ✓ **User Experience:** Seamless, accessible, and engaging learning environment
-✓ **Feedback:** Positive responses from test users; improved engagement and learning speed
+✓ **Feedback:**  responses from test users; after deployment
 
 **Import:** Achievement badges, success metrics, graduation cap
 
@@ -269,7 +287,7 @@
 ## Slide 16: Conclusion
 **Programming Education Reimagined**
 
-• **Innovation:** First voice-interactive programming teacher
+• **Innovation:** voice-interactive programming teacher
 • **Impact:** 24/7 personalized programming instruction
 • **Technology:** Modern AI integrated with educational principles
 • **Future:** Shows AI's potential to enhance education
